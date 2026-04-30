@@ -2,7 +2,7 @@
 
 import { useEffect, useState, ReactNode } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { getSession, clearSession, isAdmin } from '@/lib/auth';
+import { getSession, clearSession, isAdmin, setSession } from '@/lib/auth';
 import type { User } from '@/lib/supabase';
 import {
   LayoutDashboard,
@@ -13,6 +13,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Menu,
+  Globe,
+  ChevronDown,
 } from 'lucide-react';
 
 interface NavItem {
@@ -29,11 +31,17 @@ const navItems: NavItem[] = [
   { label: 'Staff', href: '/dashboard/staff', icon: <Users size={20} />, adminOnly: true },
 ];
 
+const countries = [
+  { code: 'NZ', name: 'New Zealand', flag: '🇳🇿' },
+  { code: 'BH', name: 'Bahrain', flag: '🇧🇭' },
+];
+
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [country, setCountry] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [showCountryPicker, setShowCountryPicker] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
 
@@ -51,6 +59,19 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     clearSession();
     router.push('/');
   };
+
+  const handleCountrySwitch = (countryName: string) => {
+    if (!user) return;
+    setSession(user, countryName);
+    setCountry(countryName);
+    setShowCountryPicker(false);
+    // Force reload to refresh all data with new country filter
+    window.location.reload();
+  };
+
+  const currentCountryData = countries.find(c =>
+    c.name === country || c.code === country
+  );
 
   if (!user) return null;
 
@@ -73,6 +94,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           className="mobile-overlay"
         />
       )}
+
 
       {/* Sidebar */}
       <aside
@@ -132,6 +154,133 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             </div>
           )}
         </div>
+
+        {/* Country Switcher (Admin only) */}
+        {isAdmin(user) && (
+          <div style={{
+            padding: collapsed ? '8px' : '8px 12px',
+            borderBottom: '1px solid var(--border-light)',
+            position: 'relative',
+          }}>
+            <button
+              onClick={() => setShowCountryPicker(!showCountryPicker)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                width: '100%',
+                padding: collapsed ? '8px' : '8px 12px',
+                borderRadius: '10px',
+                border: '1px solid var(--border-light)',
+                background: showCountryPicker ? 'var(--accent-light)' : 'var(--bg-tertiary)',
+                cursor: 'pointer',
+                transition: 'var(--transition)',
+                justifyContent: collapsed ? 'center' : 'flex-start',
+                fontFamily: 'inherit',
+              }}
+              title={collapsed ? `${country || 'Switch Country'}` : undefined}
+            >
+              <span style={{ fontSize: '16px', flexShrink: 0 }}>
+                {currentCountryData?.flag || '🌍'}
+              </span>
+              {!collapsed && (
+                <>
+                  <span style={{
+                    fontSize: '13px',
+                    fontWeight: 500,
+                    color: 'var(--text-primary)',
+                    flex: 1,
+                    textAlign: 'left',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}>
+                    {currentCountryData?.name || country || 'Select Country'}
+                  </span>
+                  <ChevronDown
+                    size={14}
+                    color="var(--text-tertiary)"
+                    style={{
+                      flexShrink: 0,
+                      transition: 'transform 0.2s',
+                      transform: showCountryPicker ? 'rotate(180deg)' : 'rotate(0deg)',
+                    }}
+                  />
+                </>
+              )}
+            </button>
+
+            {/* Dropdown */}
+            {showCountryPicker && (
+              <div
+                className="animate-fadeIn"
+                style={{
+                  position: 'absolute',
+                  top: '100%',
+                  left: collapsed ? '8px' : '12px',
+                  right: collapsed ? '-100px' : '12px',
+                  minWidth: collapsed ? '180px' : undefined,
+                  background: 'var(--bg-secondary)',
+                  border: '1px solid var(--border-light)',
+                  borderRadius: '12px',
+                  boxShadow: '0 8px 24px rgba(0,0,0,0.1)',
+                  zIndex: 999,
+                  overflow: 'hidden',
+                  marginTop: '4px',
+                }}
+              >
+                {/* Close overlay inside dropdown context */}
+                <div
+                  onClick={() => setShowCountryPicker(false)}
+                  style={{ position: 'fixed', inset: 0, zIndex: -1 }}
+                />
+                {countries.map(c => {
+                  const isSelected = c.name === country || c.code === country;
+                  return (
+                    <button
+                      key={c.code}
+                      onClick={() => handleCountrySwitch(c.name)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '10px',
+                        width: '100%',
+                        padding: '10px 14px',
+                        border: 'none',
+                        background: isSelected ? 'var(--accent-light)' : 'transparent',
+                        cursor: 'pointer',
+                        fontSize: '13px',
+                        fontWeight: isSelected ? 600 : 400,
+                        color: isSelected ? 'var(--accent)' : 'var(--text-primary)',
+                        transition: 'var(--transition)',
+                        textAlign: 'left',
+                        fontFamily: 'inherit',
+                        borderBottom: '1px solid var(--border-light)',
+                      }}
+                    >
+                      <span style={{ fontSize: '18px' }}>{c.flag}</span>
+                      <div>
+                        <div>{c.name}</div>
+                        <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', fontWeight: 400 }}>
+                          {c.code}
+                        </div>
+                      </div>
+                      {isSelected && (
+                        <span style={{
+                          marginLeft: 'auto',
+                          width: '8px', height: '8px',
+                          borderRadius: '50%',
+                          background: 'var(--accent)',
+                          flexShrink: 0,
+                        }} />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Navigation */}
         <nav style={{
@@ -292,6 +441,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           alignItems: 'center',
           padding: '0 16px',
           zIndex: 30,
+          justifyContent: 'space-between',
         }}
       >
         <button
@@ -306,7 +456,81 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         >
           <Menu size={22} />
         </button>
+
+        {/* Mobile Country Switcher (Admin only) */}
+        {isAdmin(user) && (
+          <button
+            onClick={() => setShowCountryPicker(!showCountryPicker)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '6px 12px',
+              borderRadius: '8px',
+              border: '1px solid var(--border-light)',
+              background: 'var(--bg-secondary)',
+              cursor: 'pointer',
+              fontSize: '13px',
+              fontWeight: 500,
+              color: 'var(--text-primary)',
+              fontFamily: 'inherit',
+            }}
+          >
+            <span>{currentCountryData?.flag || '🌍'}</span>
+            {currentCountryData?.code || 'All'}
+            <ChevronDown size={12} />
+          </button>
+        )}
       </div>
+
+      {/* Mobile Country Dropdown */}
+      {showCountryPicker && (
+        <div
+          className="animate-fadeIn"
+          style={{
+            position: 'fixed',
+            top: '60px',
+            right: '16px',
+            width: '200px',
+            background: 'var(--bg-secondary)',
+            border: '1px solid var(--border-light)',
+            borderRadius: '12px',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.1)',
+            zIndex: 60,
+            overflow: 'hidden',
+            display: 'none',
+          }}
+          >
+
+          {countries.map(c => {
+            const isSelected = c.name === country;
+            return (
+              <button
+                key={c.code}
+                onClick={() => handleCountrySwitch(c.name)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  width: '100%',
+                  padding: '10px 14px',
+                  border: 'none',
+                  background: isSelected ? 'var(--accent-light)' : 'transparent',
+                  cursor: 'pointer',
+                  fontSize: '13px',
+                  fontWeight: isSelected ? 600 : 400,
+                  color: isSelected ? 'var(--accent)' : 'var(--text-primary)',
+                  fontFamily: 'inherit',
+                  borderBottom: '1px solid var(--border-light)',
+                }}
+              >
+                <span style={{ fontSize: '18px' }}>{c.flag}</span>
+                {c.name}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* Main Content */}
       <main style={{

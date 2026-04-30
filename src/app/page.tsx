@@ -21,11 +21,17 @@ export default function LoginPage() {
       const user = await loginUser(username, password);
       if (user) {
         if (user.country) {
+          // User has a country set (staff always have one, admin may have one)
           setSession(user, user.country);
           router.push('/dashboard');
-        } else {
+        } else if (user.role === 'admin') {
+          // Admin without country — let them pick
           setSession(user, '');
           router.push('/select-country');
+        } else {
+          // Staff without country (edge case) — still go to dashboard
+          setSession(user, '');
+          router.push('/dashboard');
         }
       } else {
         setError('Invalid username or password');

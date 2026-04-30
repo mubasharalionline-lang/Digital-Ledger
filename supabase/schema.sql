@@ -20,6 +20,9 @@ CREATE TABLE IF NOT EXISTS companies (
   company_name TEXT NOT NULL,
   notes TEXT DEFAULT '',
   job TEXT,
+  start_date DATE,
+  due_date DATE,
+  status TEXT DEFAULT 'Yet to Start',
   country TEXT DEFAULT '',
   created_at TIMESTAMPTZ DEFAULT NOW()
 );

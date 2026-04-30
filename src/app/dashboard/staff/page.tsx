@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { getSession, isAdmin } from '@/lib/auth';
+import { getSession, isAdmin, getDataCountry } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
 import type { User } from '@/lib/supabase';
 import {
@@ -14,6 +14,7 @@ import {
   UserCheck,
   Trash2,
   AlertCircle,
+  Edit2,
 } from 'lucide-react';
 
 export default function StaffPage() {
@@ -24,9 +25,10 @@ export default function StaffPage() {
 
   // Modal state
   const [showModal, setShowModal] = useState(false);
+  const [editUserId, setEditUserId] = useState<string | null>(null);
   const [formUsername, setFormUsername] = useState('');
   const [formPassword, setFormPassword] = useState('');
-  const [formRole, setFormRole] = useState<'admin' | 'staff'>('staff');
+  const [formRole, setFormRole] = useState('Accountant');
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
 
@@ -42,8 +44,12 @@ export default function StaffPage() {
 
   async function loadStaff() {
     setLoading(true);
+    const dataCountry = getDataCountry();
+    let usersQuery = supabase.from('users').select('*').order('created_at', { ascending: false });
+    if (dataCountry) usersQuery = usersQuery.eq('country', dataCountry);
+
     const [usersRes, tasksRes] = await Promise.all([
-      supabase.from('users').select('*').order('created_at', { ascending: false }),
+      usersQuery,
       supabase.from('tasks').select('*, company:companies(company_name)'),
     ]);
 
@@ -59,18 +65,23 @@ export default function StaffPage() {
     setLoading(false);
   }
 
-  async function createUser(e: React.FormEvent) {
+  async function saveUser(e: React.FormEvent) {
     e.preventDefault();
     setFormError('');
-    if (!formUsername.trim() || !formPassword.trim()) return;
+    if (!formUsername.trim() || (!formPassword.trim() && !editUserId)) return;
     setSaving(true);
 
-    // Check if username already exists
-    const { data: existing } = await supabase
+    // Check if username already exists for a different user
+    let existingQuery = supabase
       .from('users')
       .select('id')
-      .eq('username', formUsername.trim())
-      .single();
+      .eq('username', formUsername.trim());
+
+    if (editUserId) {
+      existingQuery = existingQuery.neq('id', editUserId);
+    }
+
+    const { data: existing } = await existingQuery.single();
 
     if (existing) {
       setFormError('Username already exists');
@@ -78,18 +89,61 @@ export default function StaffPage() {
       return;
     }
 
-    await supabase.from('users').insert({
-      username: formUsername.trim(),
-      password: formPassword.trim(),
-      role: formRole,
-    });
+    const { country } = getSession();
+    
+    if (editUserId) {
+      const updates: any = {
+        username: formUsername.trim(),
+        role: formRole,
+      };
+      if (formPassword.trim()) {
+        updates.password = formPassword.trim();
+      }
+      const { error } = await supabase.from('users').update(updates).eq('id', editUserId);
+      if (error) {
+        setFormError(error.message || 'Error updating user');
+        setSaving(false);
+        return;
+      }
+    } else {
+      const { error } = await supabase.from('users').insert({
+        username: formUsername.trim(),
+        password: formPassword.trim(),
+        role: formRole,
+        country: country || null,
+      });
+      if (error) {
+        setFormError(error.message || 'Error creating user');
+        setSaving(false);
+        return;
+      }
+    }
 
     setFormUsername('');
     setFormPassword('');
-    setFormRole('staff');
+    setFormRole('Accountant');
+    setEditUserId(null);
     setShowModal(false);
     setSaving(false);
     loadStaff();
+  }
+
+  function openCreateModal() {
+    setEditUserId(null);
+    setFormUsername('');
+    setFormPassword('');
+    setFormRole('Accountant');
+    setFormError('');
+    setShowModal(true);
+  }
+
+  function openEditModal(member: User) {
+    setEditUserId(member.id);
+    setFormUsername(member.username);
+    setFormPassword(''); // Don't show existing password
+    setFormRole(member.role);
+    setFormError('');
+    setShowModal(true);
   }
 
   async function deleteUser(userId: string) {
@@ -124,7 +178,7 @@ export default function StaffPage() {
             {staffList.length} team members
           </p>
         </div>
-        <button className="btn btn-primary" onClick={() => setShowModal(true)}>
+        <button className="btn btn-primary" onClick={openCreateModal}>
           <Plus size={16} /> Add User
         </button>
       </div>
@@ -146,7 +200,7 @@ export default function StaffPage() {
           <p style={{ fontSize: '16px', fontWeight: 500, color: 'var(--text-secondary)' }}>
             No users yet
           </p>
-          <button className="btn btn-primary" style={{ marginTop: '16px' }} onClick={() => setShowModal(true)}>
+          <button className="btn btn-primary" style={{ marginTop: '16px' }} onClick={openCreateModal}>
             <Plus size={16} /> Add First User
           </button>
         </div>
@@ -222,7 +276,7 @@ export default function StaffPage() {
                         padding: '2px 8px',
                         borderRadius: '6px',
                       }}>
-                        <UserCheck size={11} /> Staff
+                        <UserCheck size={11} /> {member.role.charAt(0).toUpperCase() + member.role.slice(1)}
                       </span>
                     )}
                   </div>
@@ -243,14 +297,24 @@ export default function StaffPage() {
                   <strong>{member.tasks.length}</strong> tasks assigned
                 </div>
                 {member.id !== user?.id && (
-                  <button
-                    onClick={() => deleteUser(member.id)}
-                    className="btn btn-danger"
-                    style={{ padding: '4px 10px', fontSize: '12px' }}
-                  >
-                    <Trash2 size={12} />
-                    Remove
-                  </button>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                      onClick={() => openEditModal(member)}
+                      className="btn btn-secondary"
+                      style={{ padding: '4px 10px', fontSize: '12px' }}
+                    >
+                      <Edit2 size={12} />
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => deleteUser(member.id)}
+                      className="btn btn-danger"
+                      style={{ padding: '4px 10px', fontSize: '12px' }}
+                    >
+                      <Trash2 size={12} />
+                      Remove
+                    </button>
+                  </div>
                 )}
               </div>
 
@@ -275,11 +339,10 @@ export default function StaffPage() {
                           <span style={{ color: 'var(--text-secondary)' }}>
                             {(task.company as any)?.company_name || 'No Company'}
                           </span>
-                          <span className={`badge ${
-                            task.status.toLowerCase().includes('completed') ? 'badge-completed' :
-                            task.status.toLowerCase().match(/progress|review|sent|waiting|required/) ? 'badge-in-progress' :
-                            'badge-pending'
-                          }`} style={{ fontSize: '11px', padding: '2px 6px' }}>
+                          <span className={`badge ${task.status.toLowerCase().includes('completed') ? 'badge-completed' :
+                              task.status.toLowerCase().match(/progress|review|sent|waiting|required/) ? 'badge-in-progress' :
+                                'badge-pending'
+                            }`} style={{ fontSize: '11px', padding: '2px 6px' }}>
                             {task.status}
                           </span>
                         </div>
@@ -298,7 +361,7 @@ export default function StaffPage() {
         <div className="modal-overlay" onClick={() => setShowModal(false)}>
           <div className="modal-content" onClick={e => e.stopPropagation()}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '24px 24px 0' }}>
-              <h2 style={{ fontSize: '20px', fontWeight: 600 }}>Add User</h2>
+              <h2 style={{ fontSize: '20px', fontWeight: 600 }}>{editUserId ? 'Edit User' : 'Add User'}</h2>
               <button onClick={() => setShowModal(false)} style={{
                 background: 'var(--bg-tertiary)', border: 'none', borderRadius: '50%',
                 width: '32px', height: '32px', display: 'flex', alignItems: 'center',
@@ -307,22 +370,24 @@ export default function StaffPage() {
                 <X size={16} />
               </button>
             </div>
-            <form onSubmit={createUser} style={{ padding: '24px' }}>
+            <form onSubmit={saveUser} style={{ padding: '24px' }}>
               <div style={{ marginBottom: '14px' }}>
                 <label className="label">Username *</label>
                 <input className="input" type="text" placeholder="Enter username"
                   value={formUsername} onChange={e => setFormUsername(e.target.value)} required autoFocus />
               </div>
               <div style={{ marginBottom: '14px' }}>
-                <label className="label">Password *</label>
-                <input className="input" type="password" placeholder="Enter password"
-                  value={formPassword} onChange={e => setFormPassword(e.target.value)} required />
+                <label className="label">Password {editUserId ? '(Leave blank to keep current)' : '*'}</label>
+                <input className="input" type="password" placeholder={editUserId ? "Enter new password" : "Enter password"}
+                  value={formPassword} onChange={e => setFormPassword(e.target.value)} required={!editUserId} />
               </div>
               <div style={{ marginBottom: '24px' }}>
                 <label className="label">Role</label>
-                <select className="select" value={formRole} onChange={e => setFormRole(e.target.value as 'admin' | 'staff')}>
-                  <option value="staff">Staff</option>
-                  <option value="admin">Admin</option>
+                <select className="select" value={formRole} onChange={e => setFormRole(e.target.value)}>
+                  <option value="Accountant">Accountant</option>
+                  <option value="Secretary">Secretary</option>
+                  <option value="Admin">Admin</option>
+                  <option value="CA">CA</option>
                 </select>
               </div>
 
@@ -339,7 +404,7 @@ export default function StaffPage() {
                 <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>Cancel</button>
                 <button type="submit" className="btn btn-primary" disabled={saving}>
                   {saving ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : <Plus size={16} />}
-                  Create User
+                  {editUserId ? 'Save Changes' : 'Create User'}
                 </button>
               </div>
             </form>

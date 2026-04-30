@@ -5,7 +5,7 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-export type UserRole = 'admin' | 'staff';
+export type UserRole = string;
 export type TaskStatus = string;
 export type TaskPriority = 'high' | 'medium' | 'low';
 
@@ -30,6 +30,9 @@ export interface Company {
   company_name: string;
   notes: string;
   job?: string;
+  start_date?: string;
+  due_date?: string;
+  status?: string;
   country: string;
   created_at: string;
 }

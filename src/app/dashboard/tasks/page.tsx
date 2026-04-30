@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { getSession, isAdmin } from '@/lib/auth';
+import { getSession, isAdmin, getDataCountry } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
 import type { User, Task, Company } from '@/lib/supabase';
 import {
@@ -49,22 +49,36 @@ export default function TasksPage() {
 
   async function loadData(currentUser: User) {
     setLoading(true);
+    const dataCountry = getDataCountry();
+
     let taskQuery = supabase
       .from('tasks')
-      .select('*, company:companies(company_name), assignee:users!tasks_assigned_to_fkey(username)')
+      .select('*, company:companies(company_name, country, job), assignee:users!tasks_assigned_to_fkey(username)')
       .order('created_at', { ascending: false });
 
     if (!isAdmin(currentUser)) {
       taskQuery = taskQuery.eq('assigned_to', currentUser.id);
     }
 
+    let companiesQuery = supabase.from('companies').select('*').order('company_name');
+    if (dataCountry) companiesQuery = companiesQuery.eq('country', dataCountry);
+
+    let staffQuery = supabase.from('users').select('*').neq('role', 'admin');
+    if (dataCountry) staffQuery = staffQuery.eq('country', dataCountry);
+
     const [tasksRes, companiesRes, staffRes] = await Promise.all([
       taskQuery,
-      supabase.from('companies').select('*').order('company_name'),
-      supabase.from('users').select('*').eq('role', 'staff'),
+      companiesQuery,
+      staffQuery,
     ]);
 
-    setTasks(tasksRes.data || []);
+    let allTasks = tasksRes.data || [];
+    // Filter tasks by country
+    if (dataCountry) {
+      allTasks = allTasks.filter(t => (t.company as any)?.country === dataCountry);
+    }
+
+    setTasks(allTasks);
     setCompanies(companiesRes.data || []);
     setStaff(staffRes.data || []);
     setLoading(false);
@@ -274,12 +288,37 @@ export default function TasksPage() {
                       ) : '—'}
                     </td>
                     <td>
-                      {!isAdmin(user) && task.assigned_to === user?.id ? (
-                        <input className="input" type="text" value={task.status} onChange={e => updateStatus(task.id, e.target.value)}
-                          list="status-options" style={{ width: '130px', fontSize: '12px', padding: '4px 8px' }} />
-                      ) : (
-                        getStatusBadge(task.status)
-                      )}
+                      <select
+                        className="select"
+                        value={task.status}
+                        onChange={(e) => updateStatus(task.id, e.target.value)}
+                        onClick={(e) => e.stopPropagation()}
+                        disabled={!isAdmin(user) && task.assigned_to !== user?.id}
+                        style={{
+                          padding: '4px 28px 4px 8px',
+                          fontSize: '12px',
+                          width: 'auto',
+                          minWidth: '140px',
+                          borderRadius: '8px',
+                          fontWeight: 500,
+                        }}
+                      >
+                        <option value="Yet to Start">Yet to Start</option>
+                        <option value="In Progress">In Progress</option>
+                        <option value="Waiting for Documents">Waiting for Documents</option>
+                        <option value="Xero Access Required">Xero Access Required</option>
+                        <option value="IRD Number Required">IRD Number Required</option>
+                        <option value="Queries Sent">Queries Sent</option>
+                        <option value="Sent for Review 1">Sent for Review 1</option>
+                        <option value="Sent for Review 2">Sent for Review 2</option>
+                        <option value="Sent for Review 3">Sent for Review 3</option>
+                        <option value="Completed">Completed</option>
+                        {!['Yet to Start', 'In Progress', 'Waiting for Documents', 'Xero Access Required',
+                          'IRD Number Required', 'Queries Sent', 'Sent for Review 1', 'Sent for Review 2',
+                          'Sent for Review 3', 'Completed'].includes(task.status) && (
+                          <option value={task.status}>{task.status}</option>
+                        )}
+                      </select>
                     </td>
                     <td>
                       {isAdmin(user) && (

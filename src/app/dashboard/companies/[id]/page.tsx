@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import { getSession, isAdmin } from '@/lib/auth';
+import { getSession, isAdmin, getDataCountry } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
 import type { User, Company, Task } from '@/lib/supabase';
 import {
@@ -21,6 +21,8 @@ import {
   Pencil,
   Trash2,
   Calendar,
+  Clock,
+  Briefcase,
 } from 'lucide-react';
 
 export default function CompanyDetailPage() {
@@ -51,6 +53,9 @@ export default function CompanyDetailPage() {
   const [editName, setEditName] = useState('');
   const [editJob, setEditJob] = useState('');
   const [editNotes, setEditNotes] = useState('');
+  const [editStartDate, setEditStartDate] = useState('');
+  const [editDueDate, setEditDueDate] = useState('');
+  const [editStatus, setEditStatus] = useState('Yet to Start');
   const [editStaffList, setEditStaffList] = useState<{ id: string; role: string; username: string }[]>([]);
   const [savingCompany, setSavingCompany] = useState(false);
 
@@ -63,6 +68,11 @@ export default function CompanyDetailPage() {
 
   async function loadData() {
     setLoading(true);
+    const dataCountry = getDataCountry();
+
+    let staffQuery = supabase.from('users').select('*').neq('role', 'admin');
+    if (dataCountry) staffQuery = staffQuery.eq('country', dataCountry);
+
     const [companyRes, tasksRes, staffRes, allStaffRes] = await Promise.all([
       supabase.from('companies').select('*').eq('id', id).single(),
       supabase.from('tasks')
@@ -70,8 +80,15 @@ export default function CompanyDetailPage() {
         .eq('company_id', id)
         .order('created_at', { ascending: false }),
       supabase.from('company_staff').select('*, user:users(id, username)').eq('company_id', id),
-      supabase.from('users').select('*').eq('role', 'staff'),
+      staffQuery,
     ]);
+
+    // Enforce country isolation: if the company belongs to another country, redirect.
+    if (companyRes.data && dataCountry && companyRes.data.country !== dataCountry) {
+      router.push('/dashboard/companies');
+      return;
+    }
+
     setCompany(companyRes.data);
     setNotes(companyRes.data?.notes || '');
     setTasks(tasksRes.data || []);
@@ -98,6 +115,9 @@ export default function CompanyDetailPage() {
     setEditName(company.company_name);
     setEditJob(company.job || '');
     setEditNotes(company.notes || '');
+    setEditStartDate(company.start_date || '');
+    setEditDueDate(company.due_date || '');
+    setEditStatus(company.status || 'Yet to Start');
     setEditStaffList(companyStaff.map(cs => ({
       id: cs.user_id,
       role: cs.role,
@@ -113,8 +133,11 @@ export default function CompanyDetailPage() {
 
     await supabase.from('companies').update({
       company_name: editName.trim(),
-      job: editJob.trim(),
+      job: editJob.trim() || null,
       notes: editNotes.trim(),
+      start_date: editStartDate || null,
+      due_date: editDueDate || null,
+      status: editStatus,
     }).eq('id', id);
 
     // Delete old staff links
@@ -209,6 +232,13 @@ export default function CompanyDetailPage() {
     loadData();
   }
 
+  async function updateCompanyStatusDirectly(newStatus: string) {
+    if (!company) return;
+    setCompany({ ...company, status: newStatus });
+    await supabase.from('companies').update({ status: newStatus }).eq('id', company.id);
+    loadData();
+  }
+
   const getStatusBadge = (status: string) => {
     let badgeClass = 'badge-pending';
     const s = status.toLowerCase();
@@ -275,65 +305,94 @@ export default function CompanyDetailPage() {
       </button>
 
       {/* Company Header */}
-      <div className="card animate-fadeIn" style={{
-        padding: '28px',
-        marginBottom: '24px',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '20px',
-      }}>
-        <div style={{
-          width: '56px',
-          height: '56px',
-          borderRadius: '16px',
-          background: 'linear-gradient(135deg, #0071e3, #0077ed)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          flexShrink: 0,
-        }}>
-          <Building2 size={24} color="white" />
-        </div>
-        <div>
-          <h1 style={{
-            fontSize: '24px',
-            fontWeight: 700,
-            color: 'var(--text-primary)',
-            letterSpacing: '-0.02em',
+      <div className="card animate-fadeIn" style={{ padding: '20px', marginBottom: '24px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap', marginBottom: '14px' }}>
+          <div style={{
+            width: '48px', height: '48px', borderRadius: '14px',
+            background: 'linear-gradient(135deg, #0071e3, #0077ed)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
           }}>
-            {company.company_name}
-          </h1>
-          <p style={{ fontSize: '13px', color: 'var(--text-tertiary)', marginTop: '2px' }}>
-            Created {new Date(company.created_at).toLocaleDateString()}
-          </p>
-        </div>
-        {isAdmin(user) && (
-          <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px' }}>
-            <button
-              onClick={openEditModal}
-              className="btn btn-secondary"
-              style={{ padding: '8px 16px', fontSize: '14px', gap: '8px' }}
-            >
-              <Pencil size={14} />
-              Edit
-            </button>
-            <button
-              onClick={deleteCompany}
-              className="btn btn-danger"
-              style={{ padding: '8px 16px', fontSize: '14px', gap: '8px', background: '#fff0f0', color: 'var(--danger)', border: 'none' }}
-            >
-              <Trash2 size={14} />
-              Delete
-            </button>
+            <Building2 size={22} color="white" />
           </div>
-        )}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <h1 style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
+              {company.company_name}
+            </h1>
+          </div>
+          {company.status && (() => {
+            const isAuthorized = isAdmin(user) || tasks.some(t => t.assigned_to === user?.id);
+            if (!isAuthorized) {
+              const s = company.status.toLowerCase();
+              let cls = 'badge-pending';
+              if (s.includes('completed') || s.includes('done')) cls = 'badge-completed';
+              else if (s.includes('progress') || s.includes('review') || s.includes('working') || s.includes('active')) cls = 'badge-in-progress';
+              return <span className={`badge ${cls}`}>{company.status}</span>;
+            }
+
+            return (
+              <select
+                className="select"
+                value={company.status || 'Yet to Start'}
+                onChange={(e) => updateCompanyStatusDirectly(e.target.value)}
+                style={{
+                  padding: '6px 30px 6px 12px',
+                  fontSize: '13px',
+                  width: 'auto',
+                  borderRadius: '8px',
+                  fontWeight: 600,
+                  backgroundColor: 'var(--bg-secondary)',
+                  border: '1px solid var(--border-light)'
+                }}
+              >
+                <option value="Yet to Start">Yet to Start</option>
+                <option value="In Progress">In Progress</option>
+                <option value="Working">Working</option>
+                <option value="Review">Review</option>
+                <option value="Completed">Completed</option>
+                {!['Yet to Start', 'In Progress', 'Working', 'Review', 'Completed'].includes(company.status || '') && (
+                  <option value={company.status}>{company.status}</option>
+                )}
+              </select>
+            );
+          })()}
+          {isAdmin(user) && (
+            <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
+              <button onClick={openEditModal} className="btn btn-secondary" style={{ padding: '8px 14px', fontSize: '13px' }}>
+                <Pencil size={14} /> Edit
+              </button>
+              <button onClick={deleteCompany} className="btn btn-danger" style={{ padding: '8px 14px', fontSize: '13px' }}>
+                <Trash2 size={14} /> Delete
+              </button>
+            </div>
+          )}
+        </div>
+        {/* Detail meta row */}
+        <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', alignItems: 'center', paddingLeft: '62px' }}>
+          {company.job && (
+            <span className="job-tag"><Briefcase size={10} />{company.job}</span>
+          )}
+          {company.start_date && (
+            <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 500 }}>
+              <Calendar size={12} color="var(--success)" /> Start: {new Date(company.start_date).toLocaleDateString()}
+            </span>
+          )}
+          {company.due_date && (
+            <span style={{
+              display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', fontWeight: 500,
+              color: (new Date(company.due_date) < new Date() && !company.status?.toLowerCase().includes('completed')) ? 'var(--danger)' : 'var(--text-secondary)',
+            }}>
+              <Clock size={12} color={(new Date(company.due_date) < new Date() && !company.status?.toLowerCase().includes('completed')) ? 'var(--danger)' : 'var(--warning)'} />
+              Due: {new Date(company.due_date).toLocaleDateString()}
+              {(new Date(company.due_date) < new Date() && !company.status?.toLowerCase().includes('completed')) && ' (Overdue)'}
+            </span>
+          )}
+          <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>
+            Created {new Date(company.created_at).toLocaleDateString()}
+          </span>
+        </div>
       </div>
 
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: '1fr 340px',
-        gap: '24px',
-      }}>
+      <div className="detail-grid">
         {/* Left column */}
         <div>
           {/* Tasks */}
@@ -388,7 +447,37 @@ export default function CompanyDetailPage() {
                       </div>
                       <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
                         {getPriorityBadge(task.priority)}
-                        {getStatusBadge(task.status)}
+                        <select
+                          className="select"
+                          value={task.status}
+                          onChange={(e) => updateTaskStatus(task.id, e.target.value)}
+                          disabled={!isAdmin(user) && task.assigned_to !== user?.id}
+                          onClick={(e) => e.stopPropagation()}
+                          style={{
+                            padding: '3px 26px 3px 8px',
+                            fontSize: '12px',
+                            width: 'auto',
+                            minWidth: '130px',
+                            borderRadius: '8px',
+                            fontWeight: 500,
+                          }}
+                        >
+                          <option value="Yet to Start">Yet to Start</option>
+                          <option value="In Progress">In Progress</option>
+                          <option value="Waiting for Documents">Waiting for Documents</option>
+                          <option value="Xero Access Required">Xero Access Required</option>
+                          <option value="IRD Number Required">IRD Number Required</option>
+                          <option value="Queries Sent">Queries Sent</option>
+                          <option value="Sent for Review 1">Sent for Review 1</option>
+                          <option value="Sent for Review 2">Sent for Review 2</option>
+                          <option value="Sent for Review 3">Sent for Review 3</option>
+                          <option value="Completed">Completed</option>
+                          {!['Yet to Start', 'In Progress', 'Waiting for Documents', 'Xero Access Required',
+                            'IRD Number Required', 'Queries Sent', 'Sent for Review 1', 'Sent for Review 2',
+                            'Sent for Review 3', 'Completed'].includes(task.status) && (
+                            <option value={task.status}>{task.status}</option>
+                          )}
+                        </select>
                         {task.deadline && (
                           <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: 'var(--text-tertiary)' }}>
                             <Calendar size={12} /> {new Date(task.deadline).toLocaleDateString()}
@@ -401,18 +490,6 @@ export default function CompanyDetailPage() {
                         )}
                       </div>
                     </div>
-
-                    {/* Staff can update status */}
-                    {!isAdmin(user) && task.assigned_to === user?.id && (
-                      <input
-                        className="input"
-                        type="text"
-                        value={task.status}
-                        onChange={e => updateTaskStatus(task.id, e.target.value)}
-                        list="status-options"
-                        style={{ width: '140px', fontSize: '13px', padding: '6px 10px' }}
-                      />
-                    )}
 
                     {/* Admin actions */}
                     {isAdmin(user) && (
@@ -669,12 +746,12 @@ export default function CompanyDetailPage() {
               </button>
             </div>
             <form onSubmit={saveCompanyEdit} style={{ padding: '24px' }}>
-              <div style={{ marginBottom: '16px' }}>
+              <div style={{ marginBottom: '14px' }}>
                 <label className="label">Company Name *</label>
                 <input className="input" type="text" placeholder="Enter company name"
                   value={editName} onChange={e => setEditName(e.target.value)} required autoFocus />
               </div>
-              <div style={{ marginBottom: '16px' }}>
+              <div style={{ marginBottom: '14px' }}>
                 <label className="label">Job</label>
                 <input className="input" type="text" placeholder="Enter or select job type"
                   value={editJob} onChange={e => setEditJob(e.target.value)} list="edit-job-suggestions" />
@@ -690,8 +767,30 @@ export default function CompanyDetailPage() {
                   <option value="Tax Return" />
                 </datalist>
               </div>
-              <div style={{ marginBottom: '16px' }}>
-                <label className="label">Quick Notes</label>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
+                <div>
+                  <label className="label">Start Date</label>
+                  <input className="input" type="date" value={editStartDate} onChange={e => setEditStartDate(e.target.value)} />
+                </div>
+                <div>
+                  <label className="label">Due Date</label>
+                  <input className="input" type="date" value={editDueDate} onChange={e => setEditDueDate(e.target.value)} />
+                </div>
+              </div>
+              <div style={{ marginBottom: '14px' }}>
+                <label className="label">Status</label>
+                <input className="input" type="text" value={editStatus} onChange={e => setEditStatus(e.target.value)} list="edit-company-status" />
+                <datalist id="edit-company-status">
+                  <option value="Yet to Start" />
+                  <option value="In Progress" />
+                  <option value="Working" />
+                  <option value="Waiting for Documents" />
+                  <option value="Under Review" />
+                  <option value="Completed" />
+                </datalist>
+              </div>
+              <div style={{ marginBottom: '14px' }}>
+                <label className="label">Notes</label>
                 <textarea className="input" placeholder="Optional notes"
                   value={editNotes} onChange={e => setEditNotes(e.target.value)} rows={2} style={{ resize: 'vertical' }} />
               </div>
@@ -705,7 +804,7 @@ export default function CompanyDetailPage() {
                 </select>
 
                 {editStaffList.length > 0 && (
-                  <div style={{ 
+                  <div style={{
                     border: '1px solid var(--border-light)', borderRadius: '8px', padding: '12px',
                     display: 'flex', flexDirection: 'column', gap: '10px', background: 'var(--bg-secondary)'
                   }}>
@@ -749,6 +848,16 @@ export default function CompanyDetailPage() {
         @keyframes spin {
           from { transform: rotate(0deg); }
           to { transform: rotate(360deg); }
+        }
+        .detail-grid {
+          display: grid;
+          grid-template-columns: 1fr 340px;
+          gap: 24px;
+        }
+        @media (max-width: 900px) {
+          .detail-grid {
+            grid-template-columns: 1fr;
+          }
         }
       `}</style>
     </div>
