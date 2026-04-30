@@ -40,7 +40,7 @@ export default function CompaniesPage() {
     setLoading(true);
     const [companiesRes, staffRes] = await Promise.all([
       supabase.from('companies').select('*').order('created_at', { ascending: false }),
-      supabase.from('users').select('id, username, role').eq('role', 'staff')
+      supabase.from('users').select('*').eq('role', 'staff')
     ]);
     setCompanies(companiesRes.data || []);
     setStaffList(staffRes.data || []);

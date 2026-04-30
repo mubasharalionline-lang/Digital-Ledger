@@ -69,7 +69,7 @@ export default function CompanyDetailPage() {
         .eq('company_id', id)
         .order('created_at', { ascending: false }),
       supabase.from('company_staff').select('*, user:users(id, username)').eq('company_id', id),
-      supabase.from('users').select('id, username').eq('role', 'staff'),
+      supabase.from('users').select('*').eq('role', 'staff'),
     ]);
     setCompany(companyRes.data);
     setNotes(companyRes.data?.notes || '');
