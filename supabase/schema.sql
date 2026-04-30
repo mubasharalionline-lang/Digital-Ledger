@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS users (
   username TEXT UNIQUE NOT NULL,
   password TEXT NOT NULL,
   role TEXT NOT NULL DEFAULT 'staff' CHECK (role IN ('admin', 'staff')),
+  country TEXT CHECK (country IN ('New Zealand', 'Bahrain') OR country IS NULL),
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -20,6 +21,15 @@ CREATE TABLE IF NOT EXISTS companies (
   notes TEXT DEFAULT '',
   country TEXT DEFAULT '',
   created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Company Staff Mapping Table
+CREATE TABLE IF NOT EXISTS company_staff (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  company_id UUID REFERENCES companies(id) ON DELETE CASCADE,
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  role TEXT NOT NULL CHECK (role IN ('Accountant', 'Secretary')),
+  UNIQUE(company_id, user_id)
 );
 
 -- Tasks table
@@ -42,11 +52,13 @@ CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
 -- Disable RLS for MVP (simple auth via app layer)
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE companies ENABLE ROW LEVEL SECURITY;
+ALTER TABLE company_staff ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tasks ENABLE ROW LEVEL SECURITY;
 
 -- Allow public access (since we handle auth in the app layer for MVP)
 CREATE POLICY "Allow all access to users" ON users FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all access to companies" ON companies FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all access to company_staff" ON company_staff FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all access to tasks" ON tasks FOR ALL USING (true) WITH CHECK (true);
 
 -- Seed admin user (password: admin123)

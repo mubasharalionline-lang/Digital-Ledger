@@ -20,8 +20,13 @@ export default function LoginPage() {
     try {
       const user = await loginUser(username, password);
       if (user) {
-        setSession(user, '');
-        router.push('/select-country');
+        if (user.country) {
+          setSession(user, user.country);
+          router.push('/dashboard');
+        } else {
+          setSession(user, '');
+          router.push('/select-country');
+        }
       } else {
         setError('Invalid username or password');
       }

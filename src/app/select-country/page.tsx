@@ -4,18 +4,11 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { getSession, setSession } from '@/lib/auth';
 import { Globe, ArrowRight, MapPin, Check } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
 
 const countries = [
-  { code: 'AE', name: 'United Arab Emirates', flag: '🇦🇪' },
-  { code: 'IN', name: 'India', flag: '🇮🇳' },
-  { code: 'US', name: 'United States', flag: '🇺🇸' },
-  { code: 'GB', name: 'United Kingdom', flag: '🇬🇧' },
-  { code: 'SA', name: 'Saudi Arabia', flag: '🇸🇦' },
-  { code: 'OM', name: 'Oman', flag: '🇴🇲' },
-  { code: 'QA', name: 'Qatar', flag: '🇶🇦' },
+  { code: 'NZ', name: 'New Zealand', flag: '🇳🇿' },
   { code: 'BH', name: 'Bahrain', flag: '🇧🇭' },
-  { code: 'KW', name: 'Kuwait', flag: '🇰🇼' },
-  { code: 'PK', name: 'Pakistan', flag: '🇵🇰' },
 ];
 
 export default function SelectCountryPage() {
@@ -29,11 +22,18 @@ export default function SelectCountryPage() {
     }
   }, [router]);
 
-  const handleContinue = () => {
+  const handleContinue = async () => {
     if (!selected) return;
     const { user } = getSession();
     if (user) {
-      setSession(user, selected);
+      const countryName = countries.find(c => c.code === selected)?.name || selected;
+      
+      // Update the user's country in Supabase
+      await supabase.from('users').update({ country: countryName }).eq('id', user.id);
+      
+      // Update session locally
+      user.country = countryName;
+      setSession(user, countryName);
       router.push('/dashboard');
     }
   };

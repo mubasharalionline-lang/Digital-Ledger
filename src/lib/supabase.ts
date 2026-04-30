@@ -13,7 +13,16 @@ export interface User {
   id: string;
   username: string;
   role: UserRole;
+  country?: string;
   created_at: string;
+}
+
+export interface CompanyStaff {
+  id: string;
+  company_id: string;
+  user_id: string;
+  role: string;
+  user?: User;
 }
 
 export interface Company {

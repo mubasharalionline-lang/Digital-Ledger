@@ -18,7 +18,7 @@ import {
 
 export default function StaffPage() {
   const [user, setUser] = useState<User | null>(null);
-  const [staffList, setStaffList] = useState<(User & { taskCount: number })[]>([]);
+  const [staffList, setStaffList] = useState<(User & { tasks: any[] })[]>([]);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
@@ -44,18 +44,18 @@ export default function StaffPage() {
     setLoading(true);
     const [usersRes, tasksRes] = await Promise.all([
       supabase.from('users').select('*').order('created_at', { ascending: false }),
-      supabase.from('tasks').select('assigned_to'),
+      supabase.from('tasks').select('*, company:companies(company_name)'),
     ]);
 
     const users = usersRes.data || [];
     const tasks = tasksRes.data || [];
 
-    const withCounts = users.map(u => ({
+    const withTasks = users.map(u => ({
       ...u,
-      taskCount: tasks.filter(t => t.assigned_to === u.id).length,
+      tasks: tasks.filter(t => t.assigned_to === u.id),
     }));
 
-    setStaffList(withCounts);
+    setStaffList(withTasks);
     setLoading(false);
   }
 
@@ -240,7 +240,7 @@ export default function StaffPage() {
                   fontSize: '13px',
                   color: 'var(--text-secondary)',
                 }}>
-                  <strong>{member.taskCount}</strong> tasks assigned
+                  <strong>{member.tasks.length}</strong> tasks assigned
                 </div>
                 {member.id !== user?.id && (
                   <button
@@ -253,6 +253,37 @@ export default function StaffPage() {
                   </button>
                 )}
               </div>
+
+              {member.tasks.length > 0 && (
+                <div style={{ marginTop: '16px', borderTop: '1px solid var(--border-light)', paddingTop: '16px' }}>
+                  <h4 style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '10px' }}>
+                    Assigned Tasks
+                  </h4>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {member.tasks.map((task) => (
+                      <div key={task.id} style={{
+                        background: 'var(--bg-tertiary)',
+                        padding: '10px 12px',
+                        borderRadius: '8px',
+                        fontSize: '13px',
+                        border: '1px solid var(--border-light)',
+                      }}>
+                        <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: '4px' }}>
+                          {task.title}
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <span style={{ color: 'var(--text-secondary)' }}>
+                            {(task.company as any)?.company_name || 'No Company'}
+                          </span>
+                          <span className={`badge badge-${task.status.replace('_', '-')}`} style={{ fontSize: '11px', padding: '2px 6px', textTransform: 'capitalize' }}>
+                            {task.status.replace('_', ' ')}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           ))}
         </div>

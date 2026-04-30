@@ -19,6 +19,8 @@ import {
 export default function CompaniesPage() {
   const [user, setUser] = useState<User | null>(null);
   const [companies, setCompanies] = useState<Company[]>([]);
+  const [staffList, setStaffList] = useState<User[]>([]);
+  const [selectedStaff, setSelectedStaff] = useState<{ id: string; role: string; username: string }[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -31,16 +33,17 @@ export default function CompaniesPage() {
     const { user: u } = getSession();
     if (!u) { router.push('/'); return; }
     setUser(u);
-    loadCompanies();
+    loadData();
   }, [router]);
 
-  async function loadCompanies() {
+  async function loadData() {
     setLoading(true);
-    const { data } = await supabase
-      .from('companies')
-      .select('*')
-      .order('created_at', { ascending: false });
-    setCompanies(data || []);
+    const [companiesRes, staffRes] = await Promise.all([
+      supabase.from('companies').select('*').order('created_at', { ascending: false }),
+      supabase.from('users').select('id, username, role').eq('role', 'staff')
+    ]);
+    setCompanies(companiesRes.data || []);
+    setStaffList(staffRes.data || []);
     setLoading(false);
   }
 
@@ -49,16 +52,47 @@ export default function CompaniesPage() {
     if (!formName.trim()) return;
     setSaving(true);
     const { country } = getSession();
-    await supabase.from('companies').insert({
+    
+    // Insert company
+    const { data: newCompany, error } = await supabase.from('companies').insert({
       company_name: formName.trim(),
       notes: formNotes.trim(),
       country: country || '',
-    });
+    }).select().single();
+
+    if (newCompany && selectedStaff.length > 0) {
+      const staffInserts = selectedStaff.map(s => ({
+        company_id: newCompany.id,
+        user_id: s.id,
+        role: s.role
+      }));
+      await supabase.from('company_staff').insert(staffInserts);
+    }
+
     setFormName('');
     setFormNotes('');
+    setSelectedStaff([]);
     setShowModal(false);
     setSaving(false);
-    loadCompanies();
+    loadData();
+  }
+
+  function handleStaffSelect(e: React.ChangeEvent<HTMLSelectElement>) {
+    const staffId = e.target.value;
+    if (!staffId) return;
+    const staffMember = staffList.find(s => s.id === staffId);
+    if (staffMember && !selectedStaff.some(s => s.id === staffId)) {
+      setSelectedStaff([...selectedStaff, { id: staffId, username: staffMember.username, role: 'Accountant' }]);
+    }
+    e.target.value = ''; // reset select
+  }
+
+  function updateStaffRole(id: string, role: string) {
+    setSelectedStaff(selectedStaff.map(s => s.id === id ? { ...s, role } : s));
+  }
+
+  function removeStaff(id: string) {
+    setSelectedStaff(selectedStaff.filter(s => s.id !== id));
   }
 
   const filtered = companies.filter(c =>
@@ -280,16 +314,73 @@ export default function CompaniesPage() {
                   autoFocus
                 />
               </div>
-              <div style={{ marginBottom: '24px' }}>
+              <div style={{ marginBottom: '16px' }}>
                 <label className="label">Quick Notes</label>
                 <textarea
                   className="input"
                   placeholder="Optional notes about this company"
                   value={formNotes}
                   onChange={e => setFormNotes(e.target.value)}
-                  rows={3}
+                  rows={2}
                   style={{ resize: 'vertical' }}
                 />
+              </div>
+              <div style={{ marginBottom: '24px' }}>
+                <label className="label">Assign Staff</label>
+                <select className="select" onChange={handleStaffSelect} defaultValue="" style={{ marginBottom: '12px' }}>
+                  <option value="" disabled>Select a staff member...</option>
+                  {staffList.filter(s => !selectedStaff.some(sel => sel.id === s.id)).map(s => (
+                    <option key={s.id} value={s.id}>{s.username}</option>
+                  ))}
+                </select>
+
+                {selectedStaff.length > 0 && (
+                  <div style={{ 
+                    border: '1px solid var(--border-light)', 
+                    borderRadius: '8px', 
+                    padding: '12px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '10px',
+                    background: 'var(--bg-secondary)'
+                  }}>
+                    {selectedStaff.map(staff => (
+                      <div key={staff.id} style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '10px',
+                        background: 'var(--bg-primary)',
+                        padding: '8px 12px',
+                        borderRadius: '6px',
+                        border: '1px solid var(--border-light)'
+                      }}>
+                        <span style={{ fontSize: '14px', fontWeight: 500 }}>{staff.username}</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <select 
+                            className="select" 
+                            value={staff.role} 
+                            onChange={(e) => updateStaffRole(staff.id, e.target.value)}
+                            style={{ padding: '4px 8px', fontSize: '13px', width: 'auto' }}
+                          >
+                            <option value="Accountant">Accountant</option>
+                            <option value="Secretary">Secretary</option>
+                          </select>
+                          <button
+                            type="button"
+                            onClick={() => removeStaff(staff.id)}
+                            style={{
+                              background: 'none', border: 'none', color: 'var(--danger)',
+                              cursor: 'pointer', padding: '4px', display: 'flex'
+                            }}
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
               <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
                 <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>

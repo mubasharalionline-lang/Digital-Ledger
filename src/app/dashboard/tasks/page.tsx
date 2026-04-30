@@ -61,7 +61,7 @@ export default function TasksPage() {
     const [tasksRes, companiesRes, staffRes] = await Promise.all([
       taskQuery,
       supabase.from('companies').select('*').order('company_name'),
-      supabase.from('users').select('id, username, role'),
+      supabase.from('users').select('id, username, role').eq('role', 'staff'),
     ]);
 
     setTasks(tasksRes.data || []);

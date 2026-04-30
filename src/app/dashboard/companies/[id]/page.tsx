@@ -29,7 +29,8 @@ export default function CompanyDetailPage() {
   const [user, setUser] = useState<User | null>(null);
   const [company, setCompany] = useState<Company | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [staff, setStaff] = useState<User[]>([]);
+  const [companyStaff, setCompanyStaff] = useState<any[]>([]);
+  const [allStaff, setAllStaff] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingNotes, setEditingNotes] = useState(false);
   const [notes, setNotes] = useState('');
@@ -45,6 +46,13 @@ export default function CompanyDetailPage() {
   const [savingTask, setSavingTask] = useState(false);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
 
+  // Edit Company modal
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editNotes, setEditNotes] = useState('');
+  const [editStaffList, setEditStaffList] = useState<{ id: string; role: string; username: string }[]>([]);
+  const [savingCompany, setSavingCompany] = useState(false);
+
   useEffect(() => {
     const { user: u } = getSession();
     if (!u) { router.push('/'); return; }
@@ -54,18 +62,20 @@ export default function CompanyDetailPage() {
 
   async function loadData() {
     setLoading(true);
-    const [companyRes, tasksRes, staffRes] = await Promise.all([
+    const [companyRes, tasksRes, staffRes, allStaffRes] = await Promise.all([
       supabase.from('companies').select('*').eq('id', id).single(),
       supabase.from('tasks')
         .select('*, assignee:users!tasks_assigned_to_fkey(username)')
         .eq('company_id', id)
         .order('created_at', { ascending: false }),
-      supabase.from('users').select('id, username, role'),
+      supabase.from('company_staff').select('*, user:users(id, username)').eq('company_id', id),
+      supabase.from('users').select('id, username').eq('role', 'staff'),
     ]);
     setCompany(companyRes.data);
     setNotes(companyRes.data?.notes || '');
     setTasks(tasksRes.data || []);
-    setStaff(staffRes.data || []);
+    setCompanyStaff(staffRes.data || []);
+    setAllStaff(allStaffRes.data || []);
     setLoading(false);
   }
 
@@ -74,6 +84,70 @@ export default function CompanyDetailPage() {
     await supabase.from('companies').update({ notes }).eq('id', id);
     setEditingNotes(false);
     setSavingNotes(false);
+  }
+
+  async function deleteCompany() {
+    if (!confirm('Are you sure you want to delete this company? All associated tasks and staff assignments will be deleted.')) return;
+    await supabase.from('companies').delete().eq('id', id);
+    router.push('/dashboard/companies');
+  }
+
+  function openEditModal() {
+    if (!company) return;
+    setEditName(company.company_name);
+    setEditNotes(company.notes || '');
+    setEditStaffList(companyStaff.map(cs => ({
+      id: cs.user_id,
+      role: cs.role,
+      username: cs.user?.username || ''
+    })));
+    setShowEditModal(true);
+  }
+
+  async function saveCompanyEdit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editName.trim()) return;
+    setSavingCompany(true);
+
+    await supabase.from('companies').update({
+      company_name: editName.trim(),
+      notes: editNotes.trim(),
+    }).eq('id', id);
+
+    // Delete old staff links
+    await supabase.from('company_staff').delete().eq('company_id', id);
+
+    // Insert new staff links
+    if (editStaffList.length > 0) {
+      const staffInserts = editStaffList.map(s => ({
+        company_id: id as string,
+        user_id: s.id,
+        role: s.role
+      }));
+      await supabase.from('company_staff').insert(staffInserts);
+    }
+
+    setSavingCompany(false);
+    setShowEditModal(false);
+    loadData();
+  }
+
+  function handleStaffSelect(e: React.ChangeEvent<HTMLSelectElement>) {
+    const staffId = e.target.value;
+    if (!staffId) return;
+    const staffMember = allStaff.find(s => s.id === staffId);
+    if (staffMember && !editStaffList.some(s => s.id === staffId)) {
+      setEditStaffList([...editStaffList, { id: staffId, username: staffMember.username, role: 'Accountant' }]);
+    }
+    e.target.value = '';
+  }
+
+  function updateStaffRole(staffId: string, role: string) {
+    setEditStaffList(editStaffList.map(s => s.id === staffId ? { ...s, role } : s));
+  }
+
+  function removeStaff(staffId: string) {
+    setEditStaffList(editStaffList.filter(s => s.id !== staffId));
   }
 
   async function saveTask(e: React.FormEvent) {
@@ -228,6 +302,26 @@ export default function CompanyDetailPage() {
             Created {new Date(company.created_at).toLocaleDateString()}
           </p>
         </div>
+        {isAdmin(user) && (
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px' }}>
+            <button
+              onClick={openEditModal}
+              className="btn btn-secondary"
+              style={{ padding: '8px 16px', fontSize: '14px', gap: '8px' }}
+            >
+              <Pencil size={14} />
+              Edit
+            </button>
+            <button
+              onClick={deleteCompany}
+              className="btn btn-danger"
+              style={{ padding: '8px 16px', fontSize: '14px', gap: '8px', background: '#fff0f0', color: 'var(--danger)', border: 'none' }}
+            >
+              <Trash2 size={14} />
+              Delete
+            </button>
+          </div>
+        )}
       </div>
 
       <div style={{
@@ -508,8 +602,10 @@ export default function CompanyDetailPage() {
                 <label className="label">Assign To</label>
                 <select className="select" value={taskAssignee} onChange={e => setTaskAssignee(e.target.value)}>
                   <option value="">Unassigned</option>
-                  {staff.map(s => (
-                    <option key={s.id} value={s.id}>{s.username} ({s.role})</option>
+                  {companyStaff.map(s => (
+                    <option key={s.user_id} value={s.user_id}>
+                      {s.user?.username} ({s.role})
+                    </option>
                   ))}
                 </select>
               </div>
@@ -540,6 +636,81 @@ export default function CompanyDetailPage() {
                 <button type="submit" className="btn btn-primary" disabled={savingTask}>
                   {savingTask ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : <Plus size={16} />}
                   {editingTaskId ? 'Update Task' : 'Create Task'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Company Modal */}
+      {showEditModal && (
+        <div className="modal-overlay" onClick={() => setShowEditModal(false)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '24px 24px 0' }}>
+              <h2 style={{ fontSize: '20px', fontWeight: 600 }}>Edit Company</h2>
+              <button onClick={() => setShowEditModal(false)} style={{
+                background: 'var(--bg-tertiary)', border: 'none', borderRadius: '50%',
+                width: '32px', height: '32px', display: 'flex', alignItems: 'center',
+                justifyContent: 'center', cursor: 'pointer',
+              }}>
+                <X size={16} />
+              </button>
+            </div>
+            <form onSubmit={saveCompanyEdit} style={{ padding: '24px' }}>
+              <div style={{ marginBottom: '16px' }}>
+                <label className="label">Company Name *</label>
+                <input className="input" type="text" placeholder="Enter company name"
+                  value={editName} onChange={e => setEditName(e.target.value)} required autoFocus />
+              </div>
+              <div style={{ marginBottom: '16px' }}>
+                <label className="label">Quick Notes</label>
+                <textarea className="input" placeholder="Optional notes"
+                  value={editNotes} onChange={e => setEditNotes(e.target.value)} rows={2} style={{ resize: 'vertical' }} />
+              </div>
+              <div style={{ marginBottom: '24px' }}>
+                <label className="label">Assign Staff</label>
+                <select className="select" onChange={handleStaffSelect} defaultValue="" style={{ marginBottom: '12px' }}>
+                  <option value="" disabled>Select a staff member...</option>
+                  {allStaff.filter(s => !editStaffList.some(sel => sel.id === s.id)).map(s => (
+                    <option key={s.id} value={s.id}>{s.username}</option>
+                  ))}
+                </select>
+
+                {editStaffList.length > 0 && (
+                  <div style={{ 
+                    border: '1px solid var(--border-light)', borderRadius: '8px', padding: '12px',
+                    display: 'flex', flexDirection: 'column', gap: '10px', background: 'var(--bg-secondary)'
+                  }}>
+                    {editStaffList.map(staff => (
+                      <div key={staff.id} style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px',
+                        background: 'var(--bg-primary)', padding: '8px 12px', borderRadius: '6px',
+                        border: '1px solid var(--border-light)'
+                      }}>
+                        <span style={{ fontSize: '14px', fontWeight: 500 }}>{staff.username}</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <select className="select" value={staff.role} onChange={(e) => updateStaffRole(staff.id, e.target.value)}
+                            style={{ padding: '4px 8px', fontSize: '13px', width: 'auto' }}>
+                            <option value="Accountant">Accountant</option>
+                            <option value="Secretary">Secretary</option>
+                          </select>
+                          <button type="button" onClick={() => removeStaff(staff.id)} style={{
+                            background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', padding: '4px'
+                          }}>
+                            <X size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                <button type="button" className="btn btn-secondary" onClick={() => setShowEditModal(false)}>Cancel</button>
+                <button type="submit" className="btn btn-primary" disabled={savingCompany}>
+                  {savingCompany ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : <Save size={16} />}
+                  Save Changes
                 </button>
               </div>
             </form>
