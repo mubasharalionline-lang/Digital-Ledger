@@ -98,7 +98,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
       {/* Sidebar */}
       <aside
-        className="glass"
+        className={`glass sidebar ${mobileOpen ? 'mobile-open' : ''}`}
         style={{
           width: collapsed ? '72px' : '260px',
           minHeight: '100vh',
@@ -109,7 +109,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           display: 'flex',
           flexDirection: 'column',
           borderRight: '1px solid var(--border-light)',
-          transition: 'width 0.3s cubic-bezier(0.25, 0.1, 0.25, 1)',
+          transition: 'transform 0.3s cubic-bezier(0.25, 0.1, 0.25, 1), width 0.3s cubic-bezier(0.25, 0.1, 0.25, 1)',
           zIndex: 50,
           overflow: 'hidden',
         }}
@@ -533,23 +533,53 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       )}
 
       {/* Main Content */}
-      <main style={{
+      <main className="main-content" style={{
         flex: 1,
         marginLeft: collapsed ? '72px' : '260px',
         transition: 'margin-left 0.3s cubic-bezier(0.25, 0.1, 0.25, 1)',
         padding: '32px',
         maxWidth: '1400px',
+        width: '100%',
+        boxSizing: 'border-box'
       }}>
         {children}
       </main>
 
-      <style jsx>{`
+      <style jsx global>{`
         @media (max-width: 768px) {
           .mobile-overlay {
             display: block !important;
           }
           .mobile-header {
             display: flex !important;
+          }
+          .sidebar {
+            transform: translateX(-100%);
+            width: 260px !important;
+          }
+          .sidebar.mobile-open {
+            transform: translateX(0);
+          }
+          .main-content {
+            margin-left: 0 !important;
+            padding: 72px 16px 24px 16px !important;
+          }
+          .card {
+            padding: 16px !important;
+          }
+          .table-container {
+            width: 100%;
+            overflow-x: auto;
+          }
+          /* Fix dashboard summary cards layout */
+          .dashboard-summary-grid {
+            grid-template-columns: 1fr !important;
+          }
+          /* Ensure modal behaves correctly */
+          .modal-content {
+            max-height: 95vh !important;
+            margin: 16px;
+            width: auto !important;
           }
         }
       `}</style>

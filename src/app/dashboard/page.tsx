@@ -189,7 +189,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Stat Cards */}
-      <div className="stagger-children" style={{
+      <div className="stagger-children dashboard-summary-grid" style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
         gap: '16px',
