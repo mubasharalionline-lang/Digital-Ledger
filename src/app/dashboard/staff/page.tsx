@@ -275,8 +275,12 @@ export default function StaffPage() {
                           <span style={{ color: 'var(--text-secondary)' }}>
                             {(task.company as any)?.company_name || 'No Company'}
                           </span>
-                          <span className={`badge badge-${task.status.replace('_', '-')}`} style={{ fontSize: '11px', padding: '2px 6px', textTransform: 'capitalize' }}>
-                            {task.status.replace('_', ' ')}
+                          <span className={`badge ${
+                            task.status.toLowerCase().includes('completed') ? 'badge-completed' :
+                            task.status.toLowerCase().match(/progress|review|sent|waiting|required/) ? 'badge-in-progress' :
+                            'badge-pending'
+                          }`} style={{ fontSize: '11px', padding: '2px 6px' }}>
+                            {task.status}
                           </span>
                         </div>
                       </div>

@@ -105,17 +105,11 @@ export default function DashboardPage() {
   }
 
   const getStatusBadge = (status: string) => {
-    const map: Record<string, string> = {
-      pending: 'badge-pending',
-      in_progress: 'badge-in-progress',
-      completed: 'badge-completed',
-    };
-    const labels: Record<string, string> = {
-      pending: 'Pending',
-      in_progress: 'In Progress',
-      completed: 'Completed',
-    };
-    return <span className={`badge ${map[status] || ''}`}>{labels[status] || status}</span>;
+    let badgeClass = 'badge-pending';
+    const s = status.toLowerCase();
+    if (s.includes('completed')) badgeClass = 'badge-completed';
+    else if (s.includes('progress') || s.includes('review') || s.includes('sent') || s.includes('waiting') || s.includes('required')) badgeClass = 'badge-in-progress';
+    return <span className={`badge ${badgeClass}`}>{status}</span>;
   };
 
   const getPriorityBadge = (priority: string) => {

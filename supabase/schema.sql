@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS companies (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   company_name TEXT NOT NULL,
   notes TEXT DEFAULT '',
+  job TEXT,
   country TEXT DEFAULT '',
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -38,7 +39,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   title TEXT NOT NULL,
   company_id UUID REFERENCES companies(id) ON DELETE CASCADE,
   assigned_to UUID REFERENCES users(id) ON DELETE SET NULL,
-  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'in_progress', 'completed')),
+  status TEXT NOT NULL DEFAULT 'Yet to Start',
   priority TEXT NOT NULL DEFAULT 'medium' CHECK (priority IN ('high', 'medium', 'low')),
   deadline DATE,
   created_at TIMESTAMPTZ DEFAULT NOW()

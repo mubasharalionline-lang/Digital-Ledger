@@ -34,7 +34,7 @@ export default function TasksPage() {
   const [taskTitle, setTaskTitle] = useState('');
   const [taskCompany, setTaskCompany] = useState('');
   const [taskAssignee, setTaskAssignee] = useState('');
-  const [taskStatus, setTaskStatus] = useState('pending');
+  const [taskStatus, setTaskStatus] = useState('Yet to Start');
   const [taskPriority, setTaskPriority] = useState('medium');
   const [taskDeadline, setTaskDeadline] = useState('');
   const [savingTask, setSavingTask] = useState(false);
@@ -74,7 +74,7 @@ export default function TasksPage() {
     setTaskTitle('');
     setTaskCompany('');
     setTaskAssignee('');
-    setTaskStatus('pending');
+    setTaskStatus('Yet to Start');
     setTaskPriority('medium');
     setTaskDeadline('');
     setEditingTaskId(null);
@@ -129,9 +129,11 @@ export default function TasksPage() {
   }
 
   const getStatusBadge = (status: string) => {
-    const map: Record<string, string> = { pending: 'badge-pending', in_progress: 'badge-in-progress', completed: 'badge-completed' };
-    const labels: Record<string, string> = { pending: 'Pending', in_progress: 'In Progress', completed: 'Completed' };
-    return <span className={`badge ${map[status]}`}>{labels[status]}</span>;
+    let badgeClass = 'badge-pending';
+    const s = status.toLowerCase();
+    if (s.includes('completed')) badgeClass = 'badge-completed';
+    else if (s.includes('progress') || s.includes('review') || s.includes('sent') || s.includes('waiting') || s.includes('required')) badgeClass = 'badge-in-progress';
+    return <span className={`badge ${badgeClass}`}>{status}</span>;
   };
 
   const getPriorityBadge = (priority: string) => {
@@ -200,11 +202,18 @@ export default function TasksPage() {
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
           <Filter size={16} color="var(--text-tertiary)" />
           <select className="select" value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
-            style={{ width: '140px', padding: '8px 12px', fontSize: '13px' }}>
+            style={{ width: '150px', padding: '8px 12px', fontSize: '13px' }}>
             <option value="all">All Status</option>
-            <option value="pending">Pending</option>
-            <option value="in_progress">In Progress</option>
-            <option value="completed">Completed</option>
+            <option value="Yet to Start">Yet to Start</option>
+            <option value="In Progress">In Progress</option>
+            <option value="Waiting for Documents">Waiting for Documents</option>
+            <option value="Xero Access Required">Xero Access Required</option>
+            <option value="IRD Number Required">IRD Number Required</option>
+            <option value="Queries Sent">Queries Sent</option>
+            <option value="Completed">Completed</option>
+            <option value="Sent for Review 1">Sent for Review 1</option>
+            <option value="Sent for Review 2">Sent for Review 2</option>
+            <option value="Sent for Review 3">Sent for Review 3</option>
           </select>
           <select className="select" value={filterPriority} onChange={e => setFilterPriority(e.target.value)}
             style={{ width: '130px', padding: '8px 12px', fontSize: '13px' }}>
@@ -266,12 +275,8 @@ export default function TasksPage() {
                     </td>
                     <td>
                       {!isAdmin(user) && task.assigned_to === user?.id ? (
-                        <select className="select" value={task.status} onChange={e => updateStatus(task.id, e.target.value)}
-                          style={{ width: '130px', fontSize: '12px', padding: '4px 8px' }}>
-                          <option value="pending">Pending</option>
-                          <option value="in_progress">In Progress</option>
-                          <option value="completed">Completed</option>
-                        </select>
+                        <input className="input" type="text" value={task.status} onChange={e => updateStatus(task.id, e.target.value)}
+                          list="status-options" style={{ width: '130px', fontSize: '12px', padding: '4px 8px' }} />
                       ) : (
                         getStatusBadge(task.status)
                       )}
@@ -345,11 +350,19 @@ export default function TasksPage() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
                 <div>
                   <label className="label">Status</label>
-                  <select className="select" value={taskStatus} onChange={e => setTaskStatus(e.target.value)}>
-                    <option value="pending">Pending</option>
-                    <option value="in_progress">In Progress</option>
-                    <option value="completed">Completed</option>
-                  </select>
+                  <input className="input" type="text" value={taskStatus} onChange={e => setTaskStatus(e.target.value)} list="status-options" />
+                  <datalist id="status-options">
+                    <option value="Yet to Start" />
+                    <option value="In Progress" />
+                    <option value="Waiting for Documents" />
+                    <option value="Xero Access Required" />
+                    <option value="IRD Number Required" />
+                    <option value="Queries Sent" />
+                    <option value="Completed" />
+                    <option value="Sent for Review 1" />
+                    <option value="Sent for Review 2" />
+                    <option value="Sent for Review 3" />
+                  </datalist>
                 </div>
                 <div>
                   <label className="label">Priority</label>

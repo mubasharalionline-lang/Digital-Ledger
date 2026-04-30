@@ -25,6 +25,7 @@ export default function CompaniesPage() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [formName, setFormName] = useState('');
+  const [formJob, setFormJob] = useState('');
   const [formNotes, setFormNotes] = useState('');
   const [saving, setSaving] = useState(false);
   const router = useRouter();
@@ -56,6 +57,7 @@ export default function CompaniesPage() {
     // Insert company
     const { data: newCompany, error } = await supabase.from('companies').insert({
       company_name: formName.trim(),
+      job: formJob.trim(),
       notes: formNotes.trim(),
       country: country || '',
     }).select().single();
@@ -70,6 +72,7 @@ export default function CompaniesPage() {
     }
 
     setFormName('');
+    setFormJob('');
     setFormNotes('');
     setSelectedStaff([]);
     setShowModal(false);
@@ -313,6 +316,28 @@ export default function CompaniesPage() {
                   required
                   autoFocus
                 />
+              </div>
+              <div style={{ marginBottom: '16px' }}>
+                <label className="label">Job</label>
+                <input
+                  className="input"
+                  type="text"
+                  placeholder="Enter or select job type"
+                  value={formJob}
+                  onChange={e => setFormJob(e.target.value)}
+                  list="job-suggestions"
+                />
+                <datalist id="job-suggestions">
+                  <option value="Bookkeeping" />
+                  <option value="Financial Accounts & P&L" />
+                  <option value="Financials" />
+                  <option value="Financials & Returns" />
+                  <option value="Financials & Tax" />
+                  <option value="GST Return" />
+                  <option value="Rental" />
+                  <option value="Rentals & Returns" />
+                  <option value="Tax Return" />
+                </datalist>
               </div>
               <div style={{ marginBottom: '16px' }}>
                 <label className="label">Quick Notes</label>

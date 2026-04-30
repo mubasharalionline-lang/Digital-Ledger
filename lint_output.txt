@@ -1,0 +1,157 @@
+
+> nasir@0.1.0 lint
+> eslint
+
+
+/Users/ashrarehmat/nasir/src/app/dashboard/companies/[id]/page.tsx
+  32:52  error    Unexpected any. Specify a different type                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        @typescript-eslint/no-explicit-any
+  59:5   error    Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+/Users/ashrarehmat/nasir/src/app/dashboard/companies/[id]/page.tsx:59:5
+  57 |     const { user: u } = getSession();
+  58 |     if (!u) { router.push('/'); return; }
+> 59 |     setUser(u);
+     |     ^^^^^^^ Avoid calling setState() directly within an effect
+  60 |     loadData();
+  61 |   }, [router, id]);
+  62 |  react-hooks/set-state-in-effect
+  61:6   warning  React Hook useEffect has a missing dependency: 'loadData'. Either include it or remove the dependency array                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     react-hooks/exhaustive-deps
+
+/Users/ashrarehmat/nasir/src/app/dashboard/companies/page.tsx
+  35:5   error    Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+/Users/ashrarehmat/nasir/src/app/dashboard/companies/page.tsx:35:5
+  33 |     const { user: u } = getSession();
+  34 |     if (!u) { router.push('/'); return; }
+> 35 |     setUser(u);
+     |     ^^^^^^^ Avoid calling setState() directly within an effect
+  36 |     loadData();
+  37 |   }, [router]);
+  38 |  react-hooks/set-state-in-effect
+  57:31  warning  'error' is assigned a value but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             @typescript-eslint/no-unused-vars
+
+/Users/ashrarehmat/nasir/src/app/dashboard/layout.tsx
+  46:5  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+/Users/ashrarehmat/nasir/src/app/dashboard/layout.tsx:46:5
+  44 |       return;
+  45 |     }
+> 46 |     setUser(u);
+     |     ^^^^^^^ Avoid calling setState() directly within an effect
+  47 |     setCountry(c);
+  48 |   }, [router]);
+  49 |  react-hooks/set-state-in-effect
+
+/Users/ashrarehmat/nasir/src/app/dashboard/page.tsx
+  44:5  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+/Users/ashrarehmat/nasir/src/app/dashboard/page.tsx:44:5
+  42 |       return;
+  43 |     }
+> 44 |     setUser(u);
+     |     ^^^^^^^ Avoid calling setState() directly within an effect
+  45 |     loadDashboard(u);
+  46 |   }, [router]);
+  47 |                                                                                react-hooks/set-state-in-effect
+  45:5  error  Error: Cannot access variable before it is declared
+
+`loadDashboard` is accessed before it is declared, which prevents the earlier access from updating when this value changes over time.
+
+/Users/ashrarehmat/nasir/src/app/dashboard/page.tsx:45:5
+  43 |     }
+  44 |     setUser(u);
+> 45 |     loadDashboard(u);
+     |     ^^^^^^^^^^^^^ `loadDashboard` accessed before it is declared
+  46 |   }, [router]);
+  47 |
+  48 |   async function loadDashboard(currentUser: User) {
+
+/Users/ashrarehmat/nasir/src/app/dashboard/page.tsx:48:3
+   46 |   }, [router]);
+   47 |
+>  48 |   async function loadDashboard(currentUser: User) {
+      |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  49 |     setLoading(true);
+      | ^^^^^^^^^^^^^^^^^^^^^
+>  50 |     try {
+      …
+      | ^^^^^^^^^^^^^^^^^^^^^
+> 104 |     }
+      | ^^^^^^^^^^^^^^^^^^^^^
+> 105 |   }
+      | ^^^^ `loadDashboard` is declared here
+  106 |
+  107 |   const getStatusBadge = (status: string) => {
+  108 |     const map: Record<string, string> = {  react-hooks/immutability
+
+/Users/ashrarehmat/nasir/src/app/dashboard/staff/page.tsx
+   12:3   warning  'Users' is defined but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       @typescript-eslint/no-unused-vars
+   21:63  error    Unexpected any. Specify a different type                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                @typescript-eslint/no-explicit-any
+   39:5   error    Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+/Users/ashrarehmat/nasir/src/app/dashboard/staff/page.tsx:39:5
+  37 |       return;
+  38 |     }
+> 39 |     setUser(u);
+     |     ^^^^^^^ Avoid calling setState() directly within an effect
+  40 |     loadStaff();
+  41 |   }, [router]);
+  42 |  react-hooks/set-state-in-effect
+  276:47  error    Unexpected any. Specify a different type                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                @typescript-eslint/no-explicit-any
+
+/Users/ashrarehmat/nasir/src/app/dashboard/tasks/page.tsx
+  46:5  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+/Users/ashrarehmat/nasir/src/app/dashboard/tasks/page.tsx:46:5
+  44 |     const { user: u } = getSession();
+  45 |     if (!u) { router.push('/'); return; }
+> 46 |     setUser(u);
+     |     ^^^^^^^ Avoid calling setState() directly within an effect
+  47 |     loadData(u);
+  48 |   }, [router]);
+  49 |  react-hooks/set-state-in-effect
+
+/Users/ashrarehmat/nasir/test_db.js
+  1:26  error  A `require()` style import is forbidden  @typescript-eslint/no-require-imports
+
+/Users/ashrarehmat/nasir/test_db2.js
+  1:26  error  A `require()` style import is forbidden  @typescript-eslint/no-require-imports
+
+✖ 15 problems (12 errors, 3 warnings)
+

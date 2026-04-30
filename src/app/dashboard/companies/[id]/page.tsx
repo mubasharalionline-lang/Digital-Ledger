@@ -40,7 +40,7 @@ export default function CompanyDetailPage() {
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [taskTitle, setTaskTitle] = useState('');
   const [taskAssignee, setTaskAssignee] = useState('');
-  const [taskStatus, setTaskStatus] = useState('pending');
+  const [taskStatus, setTaskStatus] = useState('Yet to Start');
   const [taskPriority, setTaskPriority] = useState('medium');
   const [taskDeadline, setTaskDeadline] = useState('');
   const [savingTask, setSavingTask] = useState(false);
@@ -49,6 +49,7 @@ export default function CompanyDetailPage() {
   // Edit Company modal
   const [showEditModal, setShowEditModal] = useState(false);
   const [editName, setEditName] = useState('');
+  const [editJob, setEditJob] = useState('');
   const [editNotes, setEditNotes] = useState('');
   const [editStaffList, setEditStaffList] = useState<{ id: string; role: string; username: string }[]>([]);
   const [savingCompany, setSavingCompany] = useState(false);
@@ -95,6 +96,7 @@ export default function CompanyDetailPage() {
   function openEditModal() {
     if (!company) return;
     setEditName(company.company_name);
+    setEditJob(company.job || '');
     setEditNotes(company.notes || '');
     setEditStaffList(companyStaff.map(cs => ({
       id: cs.user_id,
@@ -111,6 +113,7 @@ export default function CompanyDetailPage() {
 
     await supabase.from('companies').update({
       company_name: editName.trim(),
+      job: editJob.trim(),
       notes: editNotes.trim(),
     }).eq('id', id);
 
@@ -178,7 +181,7 @@ export default function CompanyDetailPage() {
   function resetTaskForm() {
     setTaskTitle('');
     setTaskAssignee('');
-    setTaskStatus('pending');
+    setTaskStatus('Yet to Start');
     setTaskPriority('medium');
     setTaskDeadline('');
     setEditingTaskId(null);
@@ -207,9 +210,11 @@ export default function CompanyDetailPage() {
   }
 
   const getStatusBadge = (status: string) => {
-    const map: Record<string, string> = { pending: 'badge-pending', in_progress: 'badge-in-progress', completed: 'badge-completed' };
-    const labels: Record<string, string> = { pending: 'Pending', in_progress: 'In Progress', completed: 'Completed' };
-    return <span className={`badge ${map[status]}`}>{labels[status]}</span>;
+    let badgeClass = 'badge-pending';
+    const s = status.toLowerCase();
+    if (s.includes('completed')) badgeClass = 'badge-completed';
+    else if (s.includes('progress') || s.includes('review') || s.includes('sent') || s.includes('waiting') || s.includes('required')) badgeClass = 'badge-in-progress';
+    return <span className={`badge ${badgeClass}`}>{status}</span>;
   };
 
   const getPriorityBadge = (priority: string) => {
@@ -399,16 +404,14 @@ export default function CompanyDetailPage() {
 
                     {/* Staff can update status */}
                     {!isAdmin(user) && task.assigned_to === user?.id && (
-                      <select
-                        className="select"
+                      <input
+                        className="input"
+                        type="text"
                         value={task.status}
                         onChange={e => updateTaskStatus(task.id, e.target.value)}
+                        list="status-options"
                         style={{ width: '140px', fontSize: '13px', padding: '6px 10px' }}
-                      >
-                        <option value="pending">Pending</option>
-                        <option value="in_progress">In Progress</option>
-                        <option value="completed">Completed</option>
-                      </select>
+                      />
                     )}
 
                     {/* Admin actions */}
@@ -612,11 +615,19 @@ export default function CompanyDetailPage() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
                 <div>
                   <label className="label">Status</label>
-                  <select className="select" value={taskStatus} onChange={e => setTaskStatus(e.target.value)}>
-                    <option value="pending">Pending</option>
-                    <option value="in_progress">In Progress</option>
-                    <option value="completed">Completed</option>
-                  </select>
+                  <input className="input" type="text" value={taskStatus} onChange={e => setTaskStatus(e.target.value)} list="status-options" />
+                  <datalist id="status-options">
+                    <option value="Yet to Start" />
+                    <option value="In Progress" />
+                    <option value="Waiting for Documents" />
+                    <option value="Xero Access Required" />
+                    <option value="IRD Number Required" />
+                    <option value="Queries Sent" />
+                    <option value="Completed" />
+                    <option value="Sent for Review 1" />
+                    <option value="Sent for Review 2" />
+                    <option value="Sent for Review 3" />
+                  </datalist>
                 </div>
                 <div>
                   <label className="label">Priority</label>
@@ -662,6 +673,22 @@ export default function CompanyDetailPage() {
                 <label className="label">Company Name *</label>
                 <input className="input" type="text" placeholder="Enter company name"
                   value={editName} onChange={e => setEditName(e.target.value)} required autoFocus />
+              </div>
+              <div style={{ marginBottom: '16px' }}>
+                <label className="label">Job</label>
+                <input className="input" type="text" placeholder="Enter or select job type"
+                  value={editJob} onChange={e => setEditJob(e.target.value)} list="edit-job-suggestions" />
+                <datalist id="edit-job-suggestions">
+                  <option value="Bookkeeping" />
+                  <option value="Financial Accounts & P&L" />
+                  <option value="Financials" />
+                  <option value="Financials & Returns" />
+                  <option value="Financials & Tax" />
+                  <option value="GST Return" />
+                  <option value="Rental" />
+                  <option value="Rentals & Returns" />
+                  <option value="Tax Return" />
+                </datalist>
               </div>
               <div style={{ marginBottom: '16px' }}>
                 <label className="label">Quick Notes</label>
