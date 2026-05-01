@@ -423,3 +423,47 @@ tr:hover td {
   animation: shimmer 1.5s infinite;
   border-radius: 8px;
 }
+
+/* Responsive Grid Layouts */
+.detail-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 24px;
+}
+
+.page-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.company-meta-row {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  align-items: center;
+  padding-left: 62px;
+}
+
+@media (max-width: 900px) {
+  .detail-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 600px) {
+  .page-header-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+  }
+  .page-header-row > div {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .company-meta-row {
+    padding-left: 0;
+    margin-top: 12px;
+  }
+}

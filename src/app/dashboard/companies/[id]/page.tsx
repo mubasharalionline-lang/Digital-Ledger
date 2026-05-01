@@ -329,7 +329,7 @@ export default function CompanyDetailPage() {
 
       {/* Company Header */}
       <div className="card animate-fadeIn" style={{ padding: '20px', marginBottom: '24px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap', marginBottom: '14px' }}>
+        <div className="page-header-row">
           <div style={{
             width: '48px', height: '48px', borderRadius: '14px',
             background: 'linear-gradient(135deg, #0071e3, #0077ed)',
@@ -389,7 +389,7 @@ export default function CompanyDetailPage() {
           )}
         </div>
         {/* Detail meta row */}
-        <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', alignItems: 'center', paddingLeft: '62px' }}>
+        <div className="company-meta-row">
           {company.job && (
             <span className="job-tag"><Briefcase size={10} />{company.job}</span>
           )}
