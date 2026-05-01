@@ -58,7 +58,7 @@ export default function StaffPage() {
 
     const withTasks = users.map(u => ({
       ...u,
-      tasks: tasks.filter(t => t.assigned_to === u.id),
+      tasks: tasks.filter(t => t.assigned_to === u.id && !t.status.toLowerCase().includes('completed')),
     }));
 
     setStaffList(withTasks);
@@ -325,12 +325,16 @@ export default function StaffPage() {
                   </h4>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     {member.tasks.map((task) => (
-                      <div key={task.id} style={{
+                      <div key={task.id} 
+                        onClick={() => router.push(`/dashboard/companies/${task.company_id}`)}
+                        className="staff-task-item"
+                        style={{
                         background: 'var(--bg-tertiary)',
                         padding: '10px 12px',
                         borderRadius: '8px',
                         fontSize: '13px',
                         border: '1px solid var(--border-light)',
+                        cursor: 'pointer',
                       }}>
                         <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: '4px' }}>
                           {task.title}
@@ -411,6 +415,17 @@ export default function StaffPage() {
           </div>
         </div>
       )}
+
+      <style jsx>{`
+        .staff-task-item {
+          transition: all 0.2s ease;
+        }
+        .staff-task-item:hover {
+          border-color: var(--accent) !important;
+          transform: translateY(-1px);
+          box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+        }
+      `}</style>
     </div>
   );
 }

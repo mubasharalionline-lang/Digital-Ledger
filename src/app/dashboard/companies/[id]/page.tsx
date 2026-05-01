@@ -23,6 +23,7 @@ import {
   Calendar,
   Clock,
   Briefcase,
+  MessageCircle,
 } from 'lucide-react';
 
 export default function CompanyDetailPage() {
@@ -47,6 +48,12 @@ export default function CompanyDetailPage() {
   const [taskDeadline, setTaskDeadline] = useState('');
   const [savingTask, setSavingTask] = useState(false);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+
+  // Message modal state
+  const [showMessageModal, setShowMessageModal] = useState(false);
+  const [messageTaskId, setMessageTaskId] = useState<string | null>(null);
+  const [messageContent, setMessageContent] = useState('');
+  const [savingMessage, setSavingMessage] = useState(false);
 
   // Edit Company modal
   const [showEditModal, setShowEditModal] = useState(false);
@@ -232,6 +239,22 @@ export default function CompanyDetailPage() {
     loadData();
   }
 
+  function openMessageModal(task: Task) {
+    setMessageTaskId(task.id);
+    setMessageContent(task.admin_note || '');
+    setShowMessageModal(true);
+  }
+
+  async function saveMessage(e: React.FormEvent) {
+    e.preventDefault();
+    if (!messageTaskId) return;
+    setSavingMessage(true);
+    await supabase.from('tasks').update({ admin_note: messageContent }).eq('id', messageTaskId);
+    setShowMessageModal(false);
+    setSavingMessage(false);
+    loadData();
+  }
+
   async function updateCompanyStatusDirectly(newStatus: string) {
     if (!company) return;
     setCompany({ ...company, status: newStatus });
@@ -253,10 +276,10 @@ export default function CompanyDetailPage() {
   };
 
   const generators = [
-    { name: 'WhatsApp Generator', icon: <MessageSquare size={22} />, color: '#25d366', bg: '#e8faf0' },
-    { name: 'Confirmation Generator', icon: <FileCheck size={22} />, color: '#5856d6', bg: '#ededfa' },
-    { name: 'Letter Generator', icon: <Mail size={22} />, color: '#0071e3', bg: '#e8f4fd' },
-    { name: 'Net Worth Certificate', icon: <Award size={22} />, color: '#ff9f0a', bg: '#fff5e5' },
+    { name: 'WhatsApp Generator', icon: <MessageSquare size={22} />, color: '#25d366', bg: '#e8faf0', link: null },
+    { name: 'Confirmation Generator', icon: <FileCheck size={22} />, color: '#5856d6', bg: '#ededfa', link: null },
+    { name: 'Letter Generator', icon: <Mail size={22} />, color: '#0071e3', bg: '#e8f4fd', link: null },
+    { name: 'Net Worth Certificate', icon: <Award size={22} />, color: '#ff9f0a', bg: '#fff5e5', link: `/dashboard/companies/${id}/net-worth` },
   ];
 
   if (loading) {
@@ -320,8 +343,7 @@ export default function CompanyDetailPage() {
             </h1>
           </div>
           {company.status && (() => {
-            const isAuthorized = isAdmin(user) || tasks.some(t => t.assigned_to === user?.id);
-            if (!isAuthorized) {
+            if (!isAdmin(user)) {
               const s = company.status.toLowerCase();
               let cls = 'badge-pending';
               if (s.includes('completed') || s.includes('done')) cls = 'badge-completed';
@@ -491,37 +513,61 @@ export default function CompanyDetailPage() {
                       </div>
                     </div>
 
-                    {/* Admin actions */}
-                    {isAdmin(user) && (
-                      <div style={{ display: 'flex', gap: '6px' }}>
-                        <button
-                          onClick={() => editTask(task)}
-                          style={{
-                            background: 'var(--bg-tertiary)',
-                            border: 'none',
-                            borderRadius: '8px',
-                            padding: '6px',
-                            cursor: 'pointer',
-                            color: 'var(--text-secondary)',
-                          }}
-                        >
-                          <Pencil size={14} />
-                        </button>
-                        <button
-                          onClick={() => deleteTask(task.id)}
-                          style={{
-                            background: '#fff0f0',
-                            border: 'none',
-                            borderRadius: '8px',
-                            padding: '6px',
-                            cursor: 'pointer',
-                            color: 'var(--danger)',
-                          }}
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    )}
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      <button
+                        onClick={() => openMessageModal(task)}
+                        style={{
+                          background: task.admin_note ? 'var(--accent-light)' : 'var(--bg-tertiary)',
+                          border: 'none',
+                          borderRadius: '8px',
+                          padding: '6px',
+                          cursor: 'pointer',
+                          color: task.admin_note ? 'var(--accent)' : 'var(--text-secondary)',
+                          position: 'relative'
+                        }}
+                        title={isAdmin(user) ? "Send/Edit Message" : "View Message"}
+                      >
+                        <MessageCircle size={14} />
+                        {task.admin_note && (
+                          <span style={{
+                            position: 'absolute', top: '-2px', right: '-2px',
+                            width: '8px', height: '8px', borderRadius: '50%', background: 'var(--danger)'
+                          }} />
+                        )}
+                      </button>
+                      
+                      {/* Admin actions */}
+                      {isAdmin(user) && (
+                        <>
+                          <button
+                            onClick={() => editTask(task)}
+                            style={{
+                              background: 'var(--bg-tertiary)',
+                              border: 'none',
+                              borderRadius: '8px',
+                              padding: '6px',
+                              cursor: 'pointer',
+                              color: 'var(--text-secondary)',
+                            }}
+                          >
+                            <Pencil size={14} />
+                          </button>
+                          <button
+                            onClick={() => deleteTask(task.id)}
+                            style={{
+                              background: '#fff0f0',
+                              border: 'none',
+                              borderRadius: '8px',
+                              padding: '6px',
+                              cursor: 'pointer',
+                              color: 'var(--danger)',
+                            }}
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -611,13 +657,15 @@ export default function CompanyDetailPage() {
               {generators.map((gen, i) => (
                 <div
                   key={i}
+                  onClick={() => { if (gen.link) router.push(gen.link); }}
                   style={{
                     padding: '16px 14px',
                     borderRadius: '14px',
                     background: gen.bg,
                     textAlign: 'center',
-                    opacity: 0.7,
-                    cursor: 'not-allowed',
+                    opacity: gen.link ? 1 : 0.7,
+                    cursor: gen.link ? 'pointer' : 'not-allowed',
+                    transition: 'all 0.2s ease',
                   }}
                 >
                   <div style={{
@@ -642,7 +690,7 @@ export default function CompanyDetailPage() {
                     color: 'var(--text-tertiary)',
                     marginTop: '4px',
                   }}>
-                    Coming Soon
+                    {gen.link ? 'Available' : 'Coming Soon'}
                   </div>
                 </div>
               ))}
@@ -840,6 +888,69 @@ export default function CompanyDetailPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Message Modal */}
+      {showMessageModal && (
+        <div className="modal-overlay" onClick={() => setShowMessageModal(false)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '500px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '24px 24px 0' }}>
+              <h2 style={{ fontSize: '20px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <MessageCircle size={20} color="var(--accent)" />
+                Task Message
+              </h2>
+              <button onClick={() => setShowMessageModal(false)} style={{
+                background: 'var(--bg-tertiary)', border: 'none', borderRadius: '50%',
+                width: '32px', height: '32px', display: 'flex', alignItems: 'center',
+                justifyContent: 'center', cursor: 'pointer',
+              }}>
+                <X size={16} />
+              </button>
+            </div>
+            {isAdmin(user) ? (
+              <form onSubmit={saveMessage} style={{ padding: '24px' }}>
+                <div style={{ marginBottom: '20px' }}>
+                  <label className="label">Message to Staff</label>
+                  <textarea className="input" placeholder="Enter private message/notes for the assigned staff..."
+                    value={messageContent} onChange={e => setMessageContent(e.target.value)} rows={5} style={{ resize: 'vertical' }} autoFocus />
+                  <p style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginTop: '6px' }}>
+                    This message is only visible to you and the assigned staff member.
+                  </p>
+                </div>
+                <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                  <button type="button" className="btn btn-secondary" onClick={() => setShowMessageModal(false)}>Cancel</button>
+                  <button type="submit" className="btn btn-primary" disabled={savingMessage}>
+                    {savingMessage ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : 'Save Message'}
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <div style={{ padding: '24px' }}>
+                {messageContent ? (
+                  <div style={{
+                    padding: '16px',
+                    background: 'var(--bg-secondary)',
+                    borderRadius: '12px',
+                    border: '1px solid var(--border-light)',
+                    fontSize: '14px',
+                    color: 'var(--text-primary)',
+                    lineHeight: 1.6,
+                    whiteSpace: 'pre-wrap'
+                  }}>
+                    {messageContent}
+                  </div>
+                ) : (
+                  <div style={{ textAlign: 'center', padding: '32px 0', color: 'var(--text-tertiary)' }}>
+                    No messages from admin yet.
+                  </div>
+                )}
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '20px' }}>
+                  <button type="button" className="btn btn-secondary" onClick={() => setShowMessageModal(false)}>Close</button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

@@ -15,6 +15,7 @@ import {
   Menu,
   Globe,
   ChevronDown,
+  Settings,
 } from 'lucide-react';
 
 interface NavItem {
@@ -29,6 +30,7 @@ const navItems: NavItem[] = [
   { label: 'Companies', href: '/dashboard/companies', icon: <Building2 size={20} /> },
   { label: 'Tasks', href: '/dashboard/tasks', icon: <ListTodo size={20} /> },
   { label: 'Staff', href: '/dashboard/staff', icon: <Users size={20} />, adminOnly: true },
+  { label: 'Settings', href: '/dashboard/settings', icon: <Settings size={20} /> },
 ];
 
 const countries = [

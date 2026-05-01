@@ -16,6 +16,7 @@ import {
   Pencil,
   Trash2,
   Building2,
+  MessageCircle,
 } from 'lucide-react';
 
 export default function TasksPage() {
@@ -39,6 +40,12 @@ export default function TasksPage() {
   const [taskDeadline, setTaskDeadline] = useState('');
   const [savingTask, setSavingTask] = useState(false);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+
+  // Message modal state
+  const [showMessageModal, setShowMessageModal] = useState(false);
+  const [messageTaskId, setMessageTaskId] = useState<string | null>(null);
+  const [messageContent, setMessageContent] = useState('');
+  const [savingMessage, setSavingMessage] = useState(false);
 
   useEffect(() => {
     const { user: u } = getSession();
@@ -139,6 +146,22 @@ export default function TasksPage() {
 
   async function updateStatus(taskId: string, status: string) {
     await supabase.from('tasks').update({ status }).eq('id', taskId);
+    if (user) loadData(user);
+  }
+
+  function openMessageModal(task: Task) {
+    setMessageTaskId(task.id);
+    setMessageContent(task.admin_note || '');
+    setShowMessageModal(true);
+  }
+
+  async function saveMessage(e: React.FormEvent) {
+    e.preventDefault();
+    if (!messageTaskId) return;
+    setSavingMessage(true);
+    await supabase.from('tasks').update({ admin_note: messageContent }).eq('id', messageTaskId);
+    setShowMessageModal(false);
+    setSavingMessage(false);
     if (user) loadData(user);
   }
 
@@ -321,22 +344,39 @@ export default function TasksPage() {
                       </select>
                     </td>
                     <td>
-                      {isAdmin(user) && (
-                        <div style={{ display: 'flex', gap: '6px' }}>
-                          <button onClick={() => editTask(task)} style={{
-                            background: 'var(--bg-tertiary)', border: 'none', borderRadius: '8px',
-                            padding: '6px', cursor: 'pointer', color: 'var(--text-secondary)',
-                          }}>
-                            <Pencil size={14} />
-                          </button>
-                          <button onClick={() => deleteTask(task.id)} style={{
-                            background: '#fff0f0', border: 'none', borderRadius: '8px',
-                            padding: '6px', cursor: 'pointer', color: 'var(--danger)',
-                          }}>
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
-                      )}
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        <button onClick={() => openMessageModal(task)} style={{
+                          background: task.admin_note ? 'var(--accent-light)' : 'var(--bg-tertiary)',
+                          border: 'none', borderRadius: '8px',
+                          padding: '6px', cursor: 'pointer', 
+                          color: task.admin_note ? 'var(--accent)' : 'var(--text-secondary)',
+                          position: 'relative'
+                        }} title={isAdmin(user) ? "Send/Edit Message" : "View Message"}>
+                          <MessageCircle size={14} />
+                          {task.admin_note && (
+                            <span style={{
+                              position: 'absolute', top: '-2px', right: '-2px',
+                              width: '8px', height: '8px', borderRadius: '50%', background: 'var(--danger)'
+                            }} />
+                          )}
+                        </button>
+                        {isAdmin(user) && (
+                          <>
+                            <button onClick={() => editTask(task)} style={{
+                              background: 'var(--bg-tertiary)', border: 'none', borderRadius: '8px',
+                              padding: '6px', cursor: 'pointer', color: 'var(--text-secondary)',
+                            }} title="Edit Task">
+                              <Pencil size={14} />
+                            </button>
+                            <button onClick={() => deleteTask(task.id)} style={{
+                              background: '#fff0f0', border: 'none', borderRadius: '8px',
+                              padding: '6px', cursor: 'pointer', color: 'var(--danger)',
+                            }} title="Delete Task">
+                              <Trash2 size={14} />
+                            </button>
+                          </>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -424,6 +464,69 @@ export default function TasksPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Message Modal */}
+      {showMessageModal && (
+        <div className="modal-overlay" onClick={() => setShowMessageModal(false)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '500px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '24px 24px 0' }}>
+              <h2 style={{ fontSize: '20px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <MessageCircle size={20} color="var(--accent)" />
+                Task Message
+              </h2>
+              <button onClick={() => setShowMessageModal(false)} style={{
+                background: 'var(--bg-tertiary)', border: 'none', borderRadius: '50%',
+                width: '32px', height: '32px', display: 'flex', alignItems: 'center',
+                justifyContent: 'center', cursor: 'pointer',
+              }}>
+                <X size={16} />
+              </button>
+            </div>
+            {isAdmin(user) ? (
+              <form onSubmit={saveMessage} style={{ padding: '24px' }}>
+                <div style={{ marginBottom: '20px' }}>
+                  <label className="label">Message to Staff</label>
+                  <textarea className="input" placeholder="Enter private message/notes for the assigned staff..."
+                    value={messageContent} onChange={e => setMessageContent(e.target.value)} rows={5} style={{ resize: 'vertical' }} autoFocus />
+                  <p style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginTop: '6px' }}>
+                    This message is only visible to you and the assigned staff member.
+                  </p>
+                </div>
+                <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                  <button type="button" className="btn btn-secondary" onClick={() => setShowMessageModal(false)}>Cancel</button>
+                  <button type="submit" className="btn btn-primary" disabled={savingMessage}>
+                    {savingMessage ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : 'Save Message'}
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <div style={{ padding: '24px' }}>
+                {messageContent ? (
+                  <div style={{
+                    padding: '16px',
+                    background: 'var(--bg-secondary)',
+                    borderRadius: '12px',
+                    border: '1px solid var(--border-light)',
+                    fontSize: '14px',
+                    color: 'var(--text-primary)',
+                    lineHeight: 1.6,
+                    whiteSpace: 'pre-wrap'
+                  }}>
+                    {messageContent}
+                  </div>
+                ) : (
+                  <div style={{ textAlign: 'center', padding: '32px 0', color: 'var(--text-tertiary)' }}>
+                    No messages from admin yet.
+                  </div>
+                )}
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '20px' }}>
+                  <button type="button" className="btn btn-secondary" onClick={() => setShowMessageModal(false)}>Close</button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

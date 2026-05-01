@@ -45,6 +45,7 @@ export interface Task {
   status: TaskStatus;
   priority: TaskPriority;
   deadline: string;
+  admin_note?: string;
   created_at: string;
   // joined fields
   company?: Company;

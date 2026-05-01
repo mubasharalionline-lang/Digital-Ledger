@@ -320,8 +320,7 @@ export default function CompaniesPage() {
                     </h3>
                   </div>
                   {company.status && (() => {
-                    const isAuthorized = isAdmin(user) || company.userHasAssignedTask;
-                    if (!isAuthorized) return getCompanyStatusBadge(company.status);
+                    if (!isAdmin(user)) return getCompanyStatusBadge(company.status);
                     
                     return (
                       <div onClick={(e) => e.stopPropagation()}>
