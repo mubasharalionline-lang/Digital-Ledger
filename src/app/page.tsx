@@ -87,11 +87,10 @@ export default function LoginPage() {
             src="/logo.png" 
             alt="The Digital Ledger" 
             style={{ 
-              height: '100px', 
-              marginBottom: '16px', 
+              height: '160px', 
+              marginBottom: '-10px', 
               objectFit: 'contain',
-              transform: 'scale(1.8)',
-              transformOrigin: 'center center'
+              mixBlendMode: 'multiply'
             }}
             onError={(e) => {
               (e.target as HTMLImageElement).style.display = 'none';
