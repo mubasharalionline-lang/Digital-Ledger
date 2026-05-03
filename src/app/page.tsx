@@ -83,27 +83,20 @@ export default function LoginPage() {
           textAlign: 'center',
           marginBottom: '32px',
         }}>
-          <div style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            width: '64px',
-            height: '64px',
-            borderRadius: '18px',
-            background: 'linear-gradient(135deg, #0071e3, #0077ed)',
-            boxShadow: '0 8px 24px rgba(0,113,227,0.25)',
-            marginBottom: '16px',
-          }}>
-            <Building2 size={28} color="white" />
-          </div>
-          <h1 style={{
-            fontSize: '28px',
-            fontWeight: 700,
-            color: 'var(--text-primary)',
-            letterSpacing: '-0.02em',
-          }}>
-            Digital Ledger
-          </h1>
+          <img 
+            src="/logo.png" 
+            alt="The Digital Ledger" 
+            style={{ 
+              height: '100px', 
+              marginBottom: '16px', 
+              objectFit: 'contain',
+              transform: 'scale(1.8)',
+              transformOrigin: 'center center'
+            }}
+            onError={(e) => {
+              (e.target as HTMLImageElement).style.display = 'none';
+            }}
+          />
           <p style={{
             fontSize: '15px',
             color: 'var(--text-secondary)',

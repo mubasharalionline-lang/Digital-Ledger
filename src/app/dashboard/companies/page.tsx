@@ -3,6 +3,9 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { getSession, isAdmin, getDataCountry } from '@/lib/auth';
+import { getTerminology } from '@/lib/terminology';
+import { isBahrainMode } from '@/lib/bahrain';
+import BahrainCompanies from '@/components/bahrain/BahrainCompanies';
 import { supabase } from '@/lib/supabase';
 import type { User, Company } from '@/lib/supabase';
 import {
@@ -30,6 +33,12 @@ interface CompanyWithMeta extends Company {
 }
 
 export default function CompaniesPage() {
+  // Bahrain gets a different companies view
+  const { country: sessionCountry } = getSession();
+  if (isBahrainMode(sessionCountry)) {
+    return <BahrainCompanies />;
+  }
+
   const [user, setUser] = useState<User | null>(null);
   const [companies, setCompanies] = useState<CompanyWithMeta[]>([]);
   const [staffList, setStaffList] = useState<User[]>([]);
@@ -46,6 +55,8 @@ export default function CompaniesPage() {
   const [formStatus, setFormStatus] = useState('Yet to Start');
   const [saving, setSaving] = useState(false);
   const router = useRouter();
+  const terms = getTerminology();
+
 
   useEffect(() => {
     const { user: u } = getSession();
@@ -526,9 +537,9 @@ export default function CompaniesPage() {
               </div>
 
               <div style={{ marginBottom: '24px' }}>
-                <label className="label">Assign Staff</label>
+                <label className="label">{terms.assignStaff}</label>
                 <select className="select" onChange={handleStaffSelect} defaultValue="" style={{ marginBottom: '10px' }}>
-                  <option value="" disabled>Select a staff member...</option>
+                  <option value="" disabled>{terms.selectStaffMember}</option>
                   {staffList.filter(s => !selectedStaff.some(sel => sel.id === s.id)).map(s => (
                     <option key={s.id} value={s.id}>{s.username}</option>
                   ))}

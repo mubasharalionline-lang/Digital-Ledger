@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { getSession, isAdmin, getDataCountry } from '@/lib/auth';
+import { getTerminology } from '@/lib/terminology';
 import { supabase } from '@/lib/supabase';
 import type { User, Company, Task } from '@/lib/supabase';
 import {
@@ -29,6 +30,7 @@ import {
 export default function CompanyDetailPage() {
   const { id } = useParams();
   const router = useRouter();
+  const terms = getTerminology();
   const [user, setUser] = useState<User | null>(null);
   const [company, setCompany] = useState<Company | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -843,9 +845,9 @@ export default function CompanyDetailPage() {
                   value={editNotes} onChange={e => setEditNotes(e.target.value)} rows={2} style={{ resize: 'vertical' }} />
               </div>
               <div style={{ marginBottom: '24px' }}>
-                <label className="label">Assign Staff</label>
+                <label className="label">{terms.assignStaff}</label>
                 <select className="select" onChange={handleStaffSelect} defaultValue="" style={{ marginBottom: '12px' }}>
-                  <option value="" disabled>Select a staff member...</option>
+                  <option value="" disabled>{terms.selectStaffMember}</option>
                   {allStaff.filter(s => !editStaffList.some(sel => sel.id === s.id)).map(s => (
                     <option key={s.id} value={s.id}>{s.username}</option>
                   ))}
@@ -912,11 +914,11 @@ export default function CompanyDetailPage() {
             {isAdmin(user) ? (
               <form onSubmit={saveMessage} style={{ padding: '24px' }}>
                 <div style={{ marginBottom: '20px' }}>
-                  <label className="label">Message to Staff</label>
-                  <textarea className="input" placeholder="Enter private message/notes for the assigned staff..."
+                  <label className="label">Message to {terms.staffSingular}</label>
+                  <textarea className="input" placeholder={`Enter private message/notes for the assigned ${terms.staffSingular.toLowerCase()}...`}
                     value={messageContent} onChange={e => setMessageContent(e.target.value)} rows={5} style={{ resize: 'vertical' }} autoFocus />
                   <p style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginTop: '6px' }}>
-                    This message is only visible to you and the assigned staff member.
+                    This message is only visible to you and the assigned {terms.staffSingular.toLowerCase()}.
                   </p>
                 </div>
                 <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>

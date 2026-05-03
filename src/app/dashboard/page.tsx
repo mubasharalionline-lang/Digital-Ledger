@@ -3,6 +3,9 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { getSession, isAdmin, getDataCountry } from '@/lib/auth';
+import { getTerminology } from '@/lib/terminology';
+import { isBahrainMode } from '@/lib/bahrain';
+import BahrainDashboard from '@/components/bahrain/BahrainDashboard';
 import { supabase } from '@/lib/supabase';
 import type { User, Task, Company } from '@/lib/supabase';
 import {
@@ -80,6 +83,13 @@ export default function DashboardPage() {
   const [expandedCompanies, setExpandedCompanies] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const router = useRouter();
+  const terms = getTerminology();
+
+  // Bahrain gets a completely different dashboard
+  const { country: sessionCountry } = getSession();
+  if (isBahrainMode(sessionCountry)) {
+    return <BahrainDashboard />;
+  }
 
   useEffect(() => {
     const { user: u } = getSession();
@@ -554,7 +564,7 @@ export default function DashboardPage() {
                             letterSpacing: '0.05em',
                             marginBottom: '8px',
                           }}>
-                            Assigned Staff
+                            {terms.assignedStaff}
                           </div>
                           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                             {company.staff.map(s => (

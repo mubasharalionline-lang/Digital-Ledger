@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { getSession, isAdmin, getDataCountry } from '@/lib/auth';
+import { getTerminology } from '@/lib/terminology';
 import { supabase } from '@/lib/supabase';
 import type { User } from '@/lib/supabase';
 import {
@@ -22,6 +23,7 @@ export default function StaffPage() {
   const [staffList, setStaffList] = useState<(User & { tasks: any[] })[]>([]);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
+  const terms = getTerminology();
 
   // Modal state
   const [showModal, setShowModal] = useState(false);
@@ -29,6 +31,12 @@ export default function StaffPage() {
   const [formUsername, setFormUsername] = useState('');
   const [formPassword, setFormPassword] = useState('');
   const [formRole, setFormRole] = useState('Accountant');
+  
+  // Permissions state
+  const [canUpdateStatus, setCanUpdateStatus] = useState(true);
+  const [canViewCompanies, setCanViewCompanies] = useState(false);
+  const [canMessage, setCanMessage] = useState(false);
+  
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
 
@@ -95,6 +103,11 @@ export default function StaffPage() {
       const updates: any = {
         username: formUsername.trim(),
         role: formRole,
+        permissions: {
+          can_update_status: canUpdateStatus,
+          can_view_companies: canViewCompanies,
+          can_message: canMessage,
+        }
       };
       if (formPassword.trim()) {
         updates.password = formPassword.trim();
@@ -111,6 +124,11 @@ export default function StaffPage() {
         password: formPassword.trim(),
         role: formRole,
         country: country || null,
+        permissions: {
+          can_update_status: canUpdateStatus,
+          can_view_companies: canViewCompanies,
+          can_message: canMessage,
+        }
       });
       if (error) {
         setFormError(error.message || 'Error creating user');
@@ -133,6 +151,9 @@ export default function StaffPage() {
     setFormUsername('');
     setFormPassword('');
     setFormRole('Accountant');
+    setCanUpdateStatus(true);
+    setCanViewCompanies(false);
+    setCanMessage(false);
     setFormError('');
     setShowModal(true);
   }
@@ -142,6 +163,9 @@ export default function StaffPage() {
     setFormUsername(member.username);
     setFormPassword(''); // Don't show existing password
     setFormRole(member.role);
+    setCanUpdateStatus(member.permissions?.can_update_status ?? true);
+    setCanViewCompanies(member.permissions?.can_view_companies ?? false);
+    setCanMessage(member.permissions?.can_message ?? false);
     setFormError('');
     setShowModal(true);
   }
@@ -172,14 +196,14 @@ export default function StaffPage() {
             fontSize: '28px', fontWeight: 700,
             color: 'var(--text-primary)', letterSpacing: '-0.02em',
           }}>
-            Staff Management
+            {terms.staffPageTitle}
           </h1>
           <p style={{ fontSize: '15px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-            {staffList.length} team members
+            {staffList.length} {terms.teamMembers}
           </p>
         </div>
         <button className="btn btn-primary" onClick={openCreateModal}>
-          <Plus size={16} /> Add User
+          <Plus size={16} /> {terms.addStaff}
         </button>
       </div>
 
@@ -198,10 +222,10 @@ export default function StaffPage() {
         <div className="card" style={{ padding: '64px 24px', textAlign: 'center' }}>
           <AlertCircle size={40} style={{ margin: '0 auto 16px', color: 'var(--text-tertiary)', opacity: 0.5 }} />
           <p style={{ fontSize: '16px', fontWeight: 500, color: 'var(--text-secondary)' }}>
-            No users yet
+            {terms.noUsersYet}
           </p>
           <button className="btn btn-primary" style={{ marginTop: '16px' }} onClick={openCreateModal}>
-            <Plus size={16} /> Add First User
+            <Plus size={16} /> {terms.addFirstUser}
           </button>
         </div>
       ) : (
@@ -393,6 +417,22 @@ export default function StaffPage() {
                   <option value="Admin">Admin</option>
                   <option value="CA">CA</option>
                 </select>
+              </div>
+
+              <div style={{ marginBottom: '24px', background: 'var(--bg-tertiary)', padding: '16px', borderRadius: '12px' }}>
+                <h4 style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px' }}>Permissions</h4>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={canUpdateStatus} onChange={e => setCanUpdateStatus(e.target.checked)} />
+                  <span style={{ fontSize: '14px' }}>Can update task status</span>
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={canViewCompanies} onChange={e => setCanViewCompanies(e.target.checked)} />
+                  <span style={{ fontSize: '14px' }}>Can view assigned companies</span>
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={canMessage} onChange={e => setCanMessage(e.target.checked)} />
+                  <span style={{ fontSize: '14px' }}>Can send/receive messages</span>
+                </label>
               </div>
 
               {formError && (

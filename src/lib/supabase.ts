@@ -7,13 +7,22 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export type UserRole = string;
 export type TaskStatus = string;
-export type TaskPriority = 'high' | 'medium' | 'low';
+export type TaskPriority = string;
 
 export interface User {
   id: string;
   username: string;
   role: UserRole;
   country?: string;
+  organization?: string;
+  email?: string;
+  jurisdiction?: string;
+  access_level?: string;
+  permissions?: {
+    can_update_status: boolean;
+    can_view_companies: boolean;
+    can_message: boolean;
+  };
   created_at: string;
 }
 
@@ -34,6 +43,10 @@ export interface Company {
   due_date?: string;
   status?: string;
   country: string;
+  tax_registration?: string;
+  industry?: string;
+  fy_end?: string;
+  compliance_type?: string;
   created_at: string;
 }
 
@@ -42,12 +55,38 @@ export interface Task {
   title: string;
   company_id: string;
   assigned_to: string;
+  assigned_partners?: string[];
   status: TaskStatus;
   priority: TaskPriority;
   deadline: string;
   admin_note?: string;
+  task_type_id?: string;
+  description?: string;
   created_at: string;
   // joined fields
   company?: Company;
   assignee?: User;
+  task_type?: TaskType;
+}
+
+export interface TaskType {
+  id: string;
+  name: string;
+  category: string;
+  jurisdiction: string;
+  status_options?: string;
+  description?: string;
+  active: boolean;
+  created_at: string;
+}
+
+export interface StatusLog {
+  id: string;
+  task_id: string;
+  status: string;
+  updated_by?: string;
+  remarks?: string;
+  created_at: string;
+  // joined
+  updater?: User;
 }

@@ -3,6 +3,9 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { getSession, isAdmin, getDataCountry } from '@/lib/auth';
+import { getTerminology } from '@/lib/terminology';
+import { isBahrainMode } from '@/lib/bahrain';
+import BahrainTasks from '@/components/bahrain/BahrainTasks';
 import { supabase } from '@/lib/supabase';
 import type { User, Task, Company } from '@/lib/supabase';
 import {
@@ -20,6 +23,12 @@ import {
 } from 'lucide-react';
 
 export default function TasksPage() {
+  // Bahrain gets a different tasks view
+  const { country: sessionCountry } = getSession();
+  if (isBahrainMode(sessionCountry)) {
+    return <BahrainTasks />;
+  }
+
   const [user, setUser] = useState<User | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
@@ -29,6 +38,8 @@ export default function TasksPage() {
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterPriority, setFilterPriority] = useState('all');
   const router = useRouter();
+  const terms = getTerminology();
+
 
   // Modal state
   const [showModal, setShowModal] = useState(false);
@@ -488,11 +499,11 @@ export default function TasksPage() {
             {isAdmin(user) ? (
               <form onSubmit={saveMessage} style={{ padding: '24px' }}>
                 <div style={{ marginBottom: '20px' }}>
-                  <label className="label">Message to Staff</label>
-                  <textarea className="input" placeholder="Enter private message/notes for the assigned staff..."
+                  <label className="label">Message to {terms.staffSingular}</label>
+                  <textarea className="input" placeholder={`Enter private message/notes for the assigned ${terms.staffSingular.toLowerCase()}...`}
                     value={messageContent} onChange={e => setMessageContent(e.target.value)} rows={5} style={{ resize: 'vertical' }} autoFocus />
                   <p style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginTop: '6px' }}>
-                    This message is only visible to you and the assigned staff member.
+                    This message is only visible to you and the assigned {terms.staffSingular.toLowerCase()}.
                   </p>
                 </div>
                 <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>

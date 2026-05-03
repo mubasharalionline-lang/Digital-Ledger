@@ -1,8 +1,10 @@
 'use client';
 
-import { useEffect, useState, ReactNode } from 'react';
+import { useEffect, useState, ReactNode, useMemo } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { getSession, clearSession, isAdmin, setSession } from '@/lib/auth';
+import { getTerminology } from '@/lib/terminology';
+import { isBahrainMode } from '@/lib/bahrain';
 import type { User } from '@/lib/supabase';
 import {
   LayoutDashboard,
@@ -16,6 +18,8 @@ import {
   Globe,
   ChevronDown,
   Settings,
+  ClipboardList,
+  BarChart3,
 } from 'lucide-react';
 
 interface NavItem {
@@ -24,14 +28,6 @@ interface NavItem {
   icon: ReactNode;
   adminOnly?: boolean;
 }
-
-const navItems: NavItem[] = [
-  { label: 'Dashboard', href: '/dashboard', icon: <LayoutDashboard size={20} /> },
-  { label: 'Companies', href: '/dashboard/companies', icon: <Building2 size={20} /> },
-  { label: 'Tasks', href: '/dashboard/tasks', icon: <ListTodo size={20} /> },
-  { label: 'Staff', href: '/dashboard/staff', icon: <Users size={20} />, adminOnly: true },
-  { label: 'Settings', href: '/dashboard/settings', icon: <Settings size={20} /> },
-];
 
 const countries = [
   { code: 'NZ', name: 'New Zealand', flag: '🇳🇿' },
@@ -74,6 +70,32 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const currentCountryData = countries.find(c =>
     c.name === country || c.code === country
   );
+
+  const terms = useMemo(() => getTerminology(country), [country]);
+
+  const bahrainMode = useMemo(() => isBahrainMode(country), [country]);
+
+  const navItems: NavItem[] = useMemo(() => {
+    if (bahrainMode) {
+      const canViewCompanies = user?.permissions?.can_view_companies === true;
+      return [
+        { label: 'Dashboard', href: '/dashboard', icon: <LayoutDashboard size={20} /> },
+        { label: 'Companies', href: '/dashboard/companies', icon: <Building2 size={20} />, adminOnly: !canViewCompanies },
+        { label: 'Tasks', href: '/dashboard/tasks', icon: <ListTodo size={20} /> },
+        { label: 'Task Types', href: '/dashboard/task-types', icon: <ClipboardList size={20} />, adminOnly: true },
+        { label: 'Partners', href: '/dashboard/staff', icon: <Users size={20} />, adminOnly: true },
+        { label: 'Reports', href: '/dashboard/reports', icon: <BarChart3 size={20} />, adminOnly: true },
+        { label: 'Settings', href: '/dashboard/settings', icon: <Settings size={20} />, adminOnly: true },
+      ];
+    }
+    return [
+      { label: 'Dashboard', href: '/dashboard', icon: <LayoutDashboard size={20} /> },
+      { label: 'Companies', href: '/dashboard/companies', icon: <Building2 size={20} /> },
+      { label: 'Tasks', href: '/dashboard/tasks', icon: <ListTodo size={20} /> },
+      { label: terms.staffSingular, href: '/dashboard/staff', icon: <Users size={20} />, adminOnly: true },
+      { label: 'Settings', href: '/dashboard/settings', icon: <Settings size={20} /> },
+    ];
+  }, [terms, bahrainMode, user]);
 
   if (!user) return null;
 
@@ -125,36 +147,24 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           gap: '12px',
           minHeight: '72px',
         }}>
-          <div style={{
-            width: '36px',
-            height: '36px',
-            borderRadius: '10px',
-            background: 'linear-gradient(135deg, #0071e3, #0077ed)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            flexShrink: 0,
-          }}>
-            <Building2 size={18} color="white" />
+          <div style={{ overflow: 'hidden', height: '60px', display: 'flex', alignItems: 'center', width: collapsed ? '40px' : '200px', transition: 'width 0.3s cubic-bezier(0.25, 0.1, 0.25, 1)' }}>
+            <img 
+              src="/logo.png" 
+              alt="The Digital Ledger" 
+              style={{ 
+                height: '100%', 
+                width: '100%',
+                objectFit: collapsed ? 'cover' : 'contain', 
+                objectPosition: 'left center',
+                transform: collapsed ? 'scale(2.2) translateX(4px)' : 'scale(2.2)',
+                transformOrigin: 'left center',
+                transition: 'all 0.3s cubic-bezier(0.25, 0.1, 0.25, 1)'
+              }}
+              onError={(e) => {
+                (e.target as HTMLImageElement).style.display = 'none';
+              }}
+            />
           </div>
-          {!collapsed && (
-            <div style={{ overflow: 'hidden', whiteSpace: 'nowrap' }}>
-              <div style={{
-                fontSize: '16px',
-                fontWeight: 700,
-                color: 'var(--text-primary)',
-                letterSpacing: '-0.01em',
-              }}>
-                Digital Ledger
-              </div>
-              <div style={{
-                fontSize: '11px',
-                color: 'var(--text-tertiary)',
-              }}>
-                {country || 'Select Country'}
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Country Switcher (Admin only) */}
