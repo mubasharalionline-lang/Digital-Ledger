@@ -147,10 +147,10 @@ export default function BahrainTasks() {
   function openEditTask(task: Task) {
     setEditingTaskId(task.id);
     setNewTask({
-      company_id: task.company_id,
-      task_type_id: task.task_type_id,
-      priority: task.priority,
-      deadline: task.deadline,
+      company_id: task.company_id || '',
+      task_type_id: task.task_type_id || '',
+      priority: task.priority || 'Medium',
+      deadline: task.deadline || '',
       description: task.description || '',
       assigned_to: task.assigned_to || '',
       assigned_partners: task.assigned_partners || (task.assigned_to ? [task.assigned_to] : [])
