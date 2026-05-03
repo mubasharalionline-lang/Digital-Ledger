@@ -89,8 +89,7 @@ export default function LoginPage() {
             style={{ 
               height: '160px', 
               marginBottom: '-10px', 
-              objectFit: 'contain',
-              mixBlendMode: 'multiply'
+              objectFit: 'contain'
             }}
             onError={(e) => {
               (e.target as HTMLImageElement).style.display = 'none';

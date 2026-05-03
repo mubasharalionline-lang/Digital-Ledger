@@ -158,8 +158,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
                 objectPosition: 'left center',
                 transform: collapsed ? 'scale(2.2) translateX(4px)' : 'scale(2.2)',
                 transformOrigin: 'left center',
-                transition: 'all 0.3s cubic-bezier(0.25, 0.1, 0.25, 1)',
-                mixBlendMode: 'multiply'
+                transition: 'all 0.3s cubic-bezier(0.25, 0.1, 0.25, 1)'
               }}
               onError={(e) => {
                 (e.target as HTMLImageElement).style.display = 'none';
