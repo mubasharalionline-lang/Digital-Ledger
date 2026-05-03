@@ -78,38 +78,53 @@ export default function LoginPage() {
         width: '100%',
         maxWidth: '420px',
       }}>
-        {/* Logo & Branding */}
-        <div style={{
-          textAlign: 'center',
-          marginBottom: '32px',
-        }}>
-          <img 
-            src="/logo.png" 
-            alt="The Digital Ledger" 
-            style={{ 
-              height: '160px', 
-              marginBottom: '-10px', 
-              objectFit: 'contain'
-            }}
-            onError={(e) => {
-              (e.target as HTMLImageElement).style.display = 'none';
-            }}
-          />
-          <p style={{
-            fontSize: '15px',
-            color: 'var(--text-secondary)',
-            marginTop: '4px',
-          }}>
-            Work Management System
-          </p>
-        </div>
-
         {/* Login Card */}
         <div className="glass" style={{
           borderRadius: '24px',
-          padding: '36px',
-          boxShadow: '0 8px 32px rgba(0,0,0,0.08)',
+          padding: '40px',
+          boxShadow: '0 12px 40px rgba(0,0,0,0.1)',
+          background: 'rgba(255, 255, 255, 0.95)',
         }}>
+          {/* Logo & Branding */}
+          <div style={{
+            textAlign: 'center',
+            marginBottom: '32px',
+          }}>
+            <div style={{ 
+              display: 'flex', 
+              justifyContent: 'center', 
+              alignItems: 'center',
+              marginBottom: '-20px',
+              marginTop: '-30px'
+            }}>
+              <img 
+                src="/logo.png" 
+                alt="The Digital Ledger" 
+                style={{ 
+                  height: '180px', 
+                  objectFit: 'contain'
+                }}
+                onError={(e) => {
+                  (e.target as HTMLImageElement).style.display = 'none';
+                }}
+              />
+            </div>
+            <h1 style={{
+              fontSize: '20px',
+              fontWeight: 700,
+              color: 'var(--text-primary)',
+              margin: 0
+            }}>
+              Welcome Back
+            </h1>
+            <p style={{
+              fontSize: '14px',
+              color: 'var(--text-secondary)',
+              marginTop: '6px',
+            }}>
+              Work Management System
+            </p>
+          </div>
           <form onSubmit={handleLogin}>
             <div style={{ marginBottom: '20px' }}>
               <label className="label" htmlFor="username">Username</label>
