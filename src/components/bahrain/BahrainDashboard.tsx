@@ -28,6 +28,14 @@ interface TaskTypeStats {
   companies: Set<string>;
 }
 
+interface PartnerWorkload {
+  partner: User;
+  totalTasks: number;
+  completedTasks: number;
+  overdueTasks: number;
+  inProgressTasks: number;
+}
+
 export default function BahrainDashboard() {
   const [totalTasks, setTotalTasks] = useState(0);
   const [overdueTasks, setOverdueTasks] = useState(0);
@@ -37,6 +45,7 @@ export default function BahrainDashboard() {
   const [taskTypeStats, setTaskTypeStats] = useState<TaskTypeStats[]>([]);
   const [statusCounts, setStatusCounts] = useState<Record<string, number>>({});
   const [upcomingTasks, setUpcomingTasks] = useState<(Task & { companyName: string; daysLeft: number })[]>([]);
+  const [partnerWorkloads, setPartnerWorkloads] = useState<PartnerWorkload[]>([]);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
@@ -55,6 +64,7 @@ export default function BahrainDashboard() {
         setTaskTypeStats(parsed.taskTypeStats);
         setStatusCounts(parsed.statusCounts);
         setUpcomingTasks(parsed.upcomingTasks);
+        if (parsed.partnerWorkloads) setPartnerWorkloads(parsed.partnerWorkloads);
         setLoading(false); // Disable loading instantly if cache exists
       } catch (e) {}
     }
@@ -163,6 +173,26 @@ export default function BahrainDashboard() {
         });
       setUpcomingTasks(newUpcomingTasks);
 
+      // Partner workload
+      const usersList = usersRes.data || [];
+      const newPartnerWorkloads: PartnerWorkload[] = usersList.map(partner => {
+        const partnerTasks = taskList.filter(t => 
+          t.assigned_to === partner.id || (t.assigned_partners && t.assigned_partners.includes(partner.id))
+        );
+        const completedTasks = partnerTasks.filter(t => 
+          t.status === 'Closed' || t.status === 'Completed' || t.status === 'Filed'
+        ).length;
+        const overdueTasks = partnerTasks.filter(t => {
+          const due = new Date(t.deadline);
+          return due < today && t.status !== 'Closed' && t.status !== 'Completed' && t.status !== 'Filed';
+        }).length;
+        const inProgressTasks = partnerTasks.filter(t => 
+          t.status !== 'Closed' && t.status !== 'Completed' && t.status !== 'Filed' && t.status !== 'Not Started'
+        ).length;
+        return { partner, totalTasks: partnerTasks.length, completedTasks, overdueTasks, inProgressTasks };
+      }).filter(pw => pw.totalTasks > 0).sort((a, b) => b.totalTasks - a.totalTasks);
+      setPartnerWorkloads(newPartnerWorkloads);
+
       // Save to cache
       sessionStorage.setItem(cacheKey, JSON.stringify({
         totalTasks: newTotalTasks,
@@ -172,7 +202,8 @@ export default function BahrainDashboard() {
         urgentClients: newUrgentClients,
         taskTypeStats: newTaskTypeStats,
         statusCounts: newStatusCounts,
-        upcomingTasks: newUpcomingTasks
+        upcomingTasks: newUpcomingTasks,
+        partnerWorkloads: newPartnerWorkloads
       }));
       
     } catch (err) {
@@ -194,15 +225,15 @@ export default function BahrainDashboard() {
   return (
     <div style={{ paddingBottom: '40px', maxWidth: '1200px', margin: '0 auto' }}>
       
-      <div style={{ marginBottom: '24px' }}>
-        <h1 style={{ fontSize: '24px', fontWeight: 700, color: '#111827', margin: '0 0 8px 0' }}>Dashboard Overview</h1>
-        <p style={{ fontSize: '14px', color: '#6B7280', margin: 0 }}>Monitor tasks, clients, and deadlines across your operations.</p>
+      <div style={{ marginBottom: '32px', padding: '24px 28px', background: 'linear-gradient(135deg, #1E293B 0%, #334155 100%)', borderRadius: '16px', color: '#fff' }}>
+        <h1 style={{ fontSize: '26px', fontWeight: 700, color: '#fff', margin: '0 0 6px 0', letterSpacing: '-0.5px' }}>Dashboard Overview</h1>
+        <p style={{ fontSize: '14px', color: '#94A3B8', margin: 0 }}>Monitor tasks, clients, and deadlines across your operations.</p>
       </div>
 
       {/* Stats Grid */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
         gap: '20px',
         marginBottom: '32px',
       }}>
@@ -240,7 +271,7 @@ export default function BahrainDashboard() {
         )}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '24px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '24px' }}>
         
         {/* Urgent Clients */}
         <div style={panelStyle}>
@@ -277,6 +308,58 @@ export default function BahrainDashboard() {
             )}
           </div>
         </div>
+
+        {/* Partner Workload */}
+        {isAdmin(getSession().user) && partnerWorkloads.length > 0 && (
+          <div style={panelStyle}>
+            <div style={panelHeaderStyle}>
+              <h3 style={panelTitleStyle}>
+                <UsersIcon size={18} color="#8B5CF6" /> Partner Workload
+              </h3>
+              <span style={badgeStyle}>{partnerWorkloads.length} active</span>
+            </div>
+            <div style={listContainerStyle}>
+              {partnerWorkloads.map((pw, idx) => {
+                const { partner, totalTasks: total, completedTasks, overdueTasks: overdue, inProgressTasks } = pw;
+                const completionPct = total > 0 ? Math.round((completedTasks / total) * 100) : 0;
+                const colors = ['#8B5CF6', '#3B82F6', '#10B981', '#F59E0B', '#EC4899', '#14B8A6'];
+                const pColor = colors[idx % colors.length];
+                return (
+                  <div key={partner.id} style={{
+                    padding: '14px 16px', borderRadius: '12px', background: '#FAFAFA',
+                    border: overdue > 0 ? '1px solid #FCA5A5' : '1px solid #E5E7EB',
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div style={{
+                          width: '34px', height: '34px', borderRadius: '50%',
+                          background: `linear-gradient(135deg, ${pColor}, ${pColor}CC)`,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: '13px', fontWeight: 700, color: '#fff',
+                        }}>
+                          {partner.username.charAt(0).toUpperCase()}
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '14px', fontWeight: 600, color: '#111827' }}>{partner.username}</div>
+                          <div style={{ fontSize: '12px', color: '#6B7280' }}>{total} task{total !== 1 ? 's' : ''}</div>
+                        </div>
+                      </div>
+                      <div style={{ fontSize: '18px', fontWeight: 700, color: pColor }}>{completionPct}%</div>
+                    </div>
+                    <div style={{ background: '#E5E7EB', height: '6px', borderRadius: '3px', overflow: 'hidden', marginBottom: '8px' }}>
+                      <div style={{ width: `${completionPct}%`, height: '100%', background: `linear-gradient(90deg, ${pColor}, ${pColor}AA)`, borderRadius: '3px', transition: 'width 0.8s ease-out' }} />
+                    </div>
+                    <div style={{ display: 'flex', gap: '12px', fontSize: '11px' }}>
+                      <span style={{ color: '#10B981', fontWeight: 600 }}>✓ {completedTasks} done</span>
+                      <span style={{ color: '#3B82F6', fontWeight: 600 }}>⟳ {inProgressTasks} active</span>
+                      {overdue > 0 && <span style={{ color: '#EF4444', fontWeight: 600 }}>⚠ {overdue} overdue</span>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Tasks by Category */}
         {taskTypeStats.length > 0 && (

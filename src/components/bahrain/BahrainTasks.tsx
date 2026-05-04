@@ -22,6 +22,7 @@ export default function BahrainTasks() {
   const [filterStatus, setFilterStatus] = useState('');
   const [filterPriority, setFilterPriority] = useState('');
   const [filterCompany, setFilterCompany] = useState('');
+  const [filterPartner, setFilterPartner] = useState('');
   const [search, setSearch] = useState('');
 
   // New Task modal
@@ -110,6 +111,10 @@ export default function BahrainTasks() {
     if (filterStatus && t.status !== filterStatus) return false;
     if (filterPriority && t.priority !== filterPriority) return false;
     if (filterCompany && t.company_id !== filterCompany) return false;
+    if (filterPartner) {
+      const hasPartner = (t.assigned_partners && t.assigned_partners.includes(filterPartner)) || t.assigned_to === filterPartner;
+      if (!hasPartner) return false;
+    }
     if (search) {
       const s = search.toLowerCase();
       const tt = taskTypes.find(x => x.id === t.task_type_id);
@@ -341,20 +346,34 @@ export default function BahrainTasks() {
     }
   };
 
+  const statusColor = (s: string) => {
+    const sl = s.toLowerCase();
+    if (sl.includes('closed') || sl.includes('completed') || sl.includes('filed')) return { bg: '#ECFDF5', color: '#059669', border: '#A7F3D0' };
+    if (sl.includes('review') || sl.includes('ready')) return { bg: '#F5F3FF', color: '#7C3AED', border: '#DDD6FE' };
+    if (sl.includes('progress') || sl.includes('active')) return { bg: '#EFF6FF', color: '#2563EB', border: '#BFDBFE' };
+    if (sl.includes('query') || sl.includes('waiting')) return { bg: '#FFFBEB', color: '#D97706', border: '#FDE68A' };
+    if (sl.includes('not started')) return { bg: '#F3F4F6', color: '#6B7280', border: '#D1D5DB' };
+    return { bg: '#F3F4F6', color: '#6B7280', border: '#D1D5DB' };
+  };
+
   if (loading) return <div style={{ textAlign: 'center', padding: '60px', color: '#7F8C8D' }}>Loading tasks...</div>;
 
   return (
     <div>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-        <h2 style={{ color: 'var(--text-primary, #2E4053)', fontSize: '22px', fontWeight: 600 }}>Task Management</h2>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '28px' }}>
+        <div>
+          <h2 style={{ color: '#111827', fontSize: '26px', fontWeight: 700, margin: 0, letterSpacing: '-0.5px' }}>Task Management</h2>
+          <p style={{ color: '#6B7280', fontSize: '14px', margin: '4px 0 0 0' }}>Manage, assign, and track all compliance tasks</p>
+        </div>
         {isAdminUser && (
           <button
             onClick={() => { setEditingTaskId(null); setNewTask({ company_id: '', task_type_id: '', priority: 'Medium', deadline: '', description: '', assigned_to: '', assigned_partners: [] }); setShowTaskModal(true); }}
             style={{
-              display: 'flex', alignItems: 'center', gap: '6px',
-              padding: '10px 20px', background: '#5DADE2', color: '#fff',
-              border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 500, fontSize: '14px',
+              display: 'flex', alignItems: 'center', gap: '8px',
+              padding: '11px 24px', background: 'linear-gradient(135deg, #3B82F6, #2563EB)', color: '#fff',
+              border: 'none', borderRadius: '10px', cursor: 'pointer', fontWeight: 600, fontSize: '14px',
+              boxShadow: '0 4px 14px rgba(59,130,246,0.35)', transition: 'all 0.2s ease',
             }}
           >
             <Plus size={16} /> New Task
@@ -363,7 +382,7 @@ export default function BahrainTasks() {
       </div>
 
       {/* Filters */}
-      <div style={{ display: 'flex', gap: '12px', marginBottom: '20px', flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: '10px', marginBottom: '24px', flexWrap: 'wrap', padding: '16px 20px', background: '#F9FAFB', borderRadius: '14px', border: '1px solid #E5E7EB' }}>
         <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={filterStyle}>
           <option value="">All Status</option>
           {BAHRAIN_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
@@ -376,6 +395,10 @@ export default function BahrainTasks() {
           <option value="">All Companies</option>
           {companies.map(c => <option key={c.id} value={c.id}>{c.company_name}</option>)}
         </select>
+        <select value={filterPartner} onChange={e => setFilterPartner(e.target.value)} style={filterStyle}>
+          <option value="">All Partners</option>
+          {partners.map(p => <option key={p.id} value={p.id}>{p.username}</option>)}
+        </select>
         <input
           type="text"
           value={search}
@@ -386,12 +409,12 @@ export default function BahrainTasks() {
       </div>
 
       {/* Tasks Table */}
-      <div style={{ overflowX: 'auto', borderRadius: '10px', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
+      <div style={{ overflowX: 'auto', borderRadius: '14px', boxShadow: '0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04)', border: '1px solid #E5E7EB' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', background: 'var(--bg-card, #fff)' }}>
           <thead>
-            <tr style={{ background: '#2E4053', color: 'white' }}>
+            <tr style={{ background: 'linear-gradient(135deg, #1E293B, #334155)', color: 'white' }}>
               {['Task ID', 'Company', 'Type', 'Description', 'Priority', 'Due Date', 'Status', 'Assigned To', 'Actions'].map(h => (
-                <th key={h} style={{ padding: '14px 12px', textAlign: 'left', fontSize: '12px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{h}</th>
+                <th key={h} style={{ padding: '14px 14px', textAlign: 'left', fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.8px' }}>{h}</th>
               ))}
             </tr>
           </thead>
@@ -416,24 +439,35 @@ export default function BahrainTasks() {
                   <td style={cellStyle}>{task.deadline}</td>
                   <td style={cellStyle}>
                     {canUpdateStatus ? (
-                      <select
-                        value={task.status}
-                        onChange={e => handleStatusChange(task.id, e.target.value)}
-                        style={dropdownStyle}
-                      >
-                        {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
-                      </select>
+                      (() => {
+                        const sc = statusColor(task.status);
+                        return (
+                          <select
+                            value={task.status}
+                            onChange={e => handleStatusChange(task.id, e.target.value)}
+                            style={{ ...dropdownStyle, background: sc.bg, color: sc.color, border: `1.5px solid ${sc.border}`, fontWeight: 600, fontSize: '12px' }}
+                          >
+                            {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
+                          </select>
+                        );
+                      })()
                     ) : (
-                      <span style={{ padding: '4px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: 600, background: '#D6EAF8', color: '#3498DB' }}>{task.status}</span>
+                      (() => {
+                        const sc = statusColor(task.status);
+                        return <span style={{ padding: '5px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: 600, background: sc.bg, color: sc.color, border: `1px solid ${sc.border}` }}>{task.status}</span>;
+                      })()
                     )}
                   </td>
                   <td style={cellStyle}>
                     {isAdminUser ? (
-                      <span style={{ cursor: 'not-allowed', color: '#7F8C8D' }}>
-                        {(task.assigned_partners && task.assigned_partners.length > 0) 
-                          ? task.assigned_partners.map(id => partners.find(p => p.id === id)?.username).filter(Boolean).join(', ') 
-                          : (partners.find(p => p.id === task.assigned_to)?.username || 'Unassigned')}
-                      </span>
+                      <select
+                        value={task.assigned_to || ''}
+                        onChange={e => handleAssign(task.id, e.target.value)}
+                        style={dropdownStyle}
+                      >
+                        <option value="">Unassigned</option>
+                        {partners.map(p => <option key={p.id} value={p.id}>{p.username}</option>)}
+                      </select>
                     ) : (
                       <span>
                         {(task.assigned_partners && task.assigned_partners.length > 0) 
