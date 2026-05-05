@@ -20,6 +20,7 @@ import {
   Settings,
   ClipboardList,
   BarChart3,
+  Edit,
 } from 'lucide-react';
 
 interface NavItem {
@@ -85,6 +86,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         { label: 'Task Types', href: '/dashboard/task-types', icon: <ClipboardList size={20} />, adminOnly: true },
         { label: 'Partners', href: '/dashboard/staff', icon: <Users size={20} />, adminOnly: true },
         { label: 'Reports', href: '/dashboard/reports', icon: <BarChart3 size={20} />, adminOnly: true },
+        { label: 'Edits', href: '/dashboard/edits', icon: <Edit size={20} />, adminOnly: true },
         { label: 'Settings', href: '/dashboard/settings', icon: <Settings size={20} />, adminOnly: true },
       ];
     }

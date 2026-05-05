@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import { Edit2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import type { TaskType } from '@/lib/supabase';
 import { TASK_TYPE_CATEGORIES, BAHRAIN_JURISDICTIONS } from '@/lib/bahrain';
@@ -11,6 +12,7 @@ export default function BahrainTaskTypes() {
   const [taskTypes, setTaskTypes] = useState<TaskType[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState({
     name: '', category: 'Tax Filing', jurisdiction: 'All', status_options: '', description: '',
   });
@@ -27,21 +29,55 @@ export default function BahrainTaskTypes() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
+  function openEdit(tt: TaskType) {
+    setEditingId(tt.id);
+    setForm({
+      name: tt.name,
+      category: tt.category || 'Tax Filing',
+      jurisdiction: tt.jurisdiction || 'All',
+      status_options: tt.status_options || '',
+      description: tt.description || '',
+    });
+    setShowModal(true);
+  }
+
+  function openCreate() {
+    setEditingId(null);
+    setForm({ name: '', category: 'Tax Filing', jurisdiction: 'All', status_options: '', description: '' });
+    setShowModal(true);
+  }
+
   async function save() {
     if (!form.name || !form.category) { alert('Please fill required fields'); return; }
-    const { error } = await supabase.from('task_types').insert({
-      name: form.name,
-      category: form.category,
-      jurisdiction: form.jurisdiction,
-      status_options: form.status_options || null,
-      description: form.description || null,
-      active: true,
-    });
+
+    let error;
+    if (editingId) {
+      const res = await supabase.from('task_types').update({
+        name: form.name,
+        category: form.category,
+        jurisdiction: form.jurisdiction,
+        status_options: form.status_options || null,
+        description: form.description || null,
+      }).eq('id', editingId);
+      error = res.error;
+    } else {
+      const res = await supabase.from('task_types').insert({
+        name: form.name,
+        category: form.category,
+        jurisdiction: form.jurisdiction,
+        status_options: form.status_options || null,
+        description: form.description || null,
+        active: true,
+      });
+      error = res.error;
+    }
+
     if (error) { alert('Error: ' + error.message); return; }
     setShowModal(false);
+    setEditingId(null);
     setForm({ name: '', category: 'Tax Filing', jurisdiction: 'All', status_options: '', description: '' });
     loadData();
-    alert('Task Type added!');
+    alert(editingId ? 'Task Type updated!' : 'Task Type added!');
   }
 
   async function toggle(id: string, current: boolean) {
@@ -63,7 +99,7 @@ export default function BahrainTaskTypes() {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
         <h2 style={{ color: 'var(--text-primary, #2E4053)', fontSize: '22px', fontWeight: 600 }}>Task Type Management</h2>
-        <button onClick={() => setShowModal(true)} style={{
+        <button onClick={openCreate} style={{
           display: 'flex', alignItems: 'center', gap: '6px',
           padding: '10px 20px', background: '#5DADE2', color: '#fff',
           border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 500, fontSize: '14px',
@@ -97,6 +133,13 @@ export default function BahrainTaskTypes() {
                   </span>
                 </td>
                 <td style={{ ...cell, display: 'flex', gap: '6px' }}>
+                  <button onClick={() => openEdit(tt)} style={{
+                    padding: '6px 12px', background: '#3498DB', color: '#fff',
+                    border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '12px',
+                    display: 'flex', alignItems: 'center', gap: '4px',
+                  }}>
+                    <Edit2 size={12} /> Edit
+                  </button>
                   <button onClick={() => toggle(tt.id, tt.active)} style={{
                     padding: '6px 12px', background: tt.active ? '#F39C12' : '#27AE60', color: '#fff',
                     border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '12px',
@@ -127,8 +170,8 @@ export default function BahrainTaskTypes() {
             maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 10px 40px rgba(0,0,0,0.25)',
           }}>
             <div style={{ padding: '20px 25px', borderBottom: '2px solid var(--border, #ECF0F1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h2 style={{ fontSize: '20px', color: '#2E4053' }}>New Task Type</h2>
-              <button onClick={() => setShowModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '24px', color: '#34495E' }}><X size={22} /></button>
+              <h2 style={{ fontSize: '20px', color: '#2E4053' }}>{editingId ? 'Edit Task Type' : 'New Task Type'}</h2>
+              <button onClick={() => { setShowModal(false); setEditingId(null); }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '24px', color: '#34495E' }}><X size={22} /></button>
             </div>
             <div style={{ padding: '25px' }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
@@ -159,8 +202,8 @@ export default function BahrainTaskTypes() {
                 <textarea value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} placeholder="Details..." style={{ ...inpStyle, minHeight: '80px', resize: 'vertical' }} />
               </div>
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-                <button onClick={() => setShowModal(false)} style={{ padding: '10px 20px', background: '#BDC3C7', color: '#34495E', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>Cancel</button>
-                <button onClick={save} style={{ padding: '10px 20px', background: '#27AE60', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}>Save</button>
+                <button onClick={() => { setShowModal(false); setEditingId(null); }} style={{ padding: '10px 20px', background: '#BDC3C7', color: '#34495E', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>Cancel</button>
+                <button onClick={save} style={{ padding: '10px 20px', background: '#27AE60', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}>{editingId ? 'Update' : 'Save'}</button>
               </div>
             </div>
           </div>

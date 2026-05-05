@@ -21,6 +21,7 @@ import {
 export default function StaffPage() {
   const [user, setUser] = useState<User | null>(null);
   const [staffList, setStaffList] = useState<(User & { tasks: any[] })[]>([]);
+  const [dynamicRoles, setDynamicRoles] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
   const terms = getTerminology();
@@ -56,13 +57,27 @@ export default function StaffPage() {
     let usersQuery = supabase.from('users').select('*').order('created_at', { ascending: false });
     if (dataCountry) usersQuery = usersQuery.eq('country', dataCountry);
 
-    const [usersRes, tasksRes] = await Promise.all([
+    const [usersRes, tasksRes, rolesRes] = await Promise.all([
       usersQuery,
       supabase.from('tasks').select('*, company:companies(company_name)'),
+      dataCountry 
+        ? supabase.from('roles').select('name').eq('country', dataCountry) 
+        : supabase.from('roles').select('name')
     ]);
 
     const users = usersRes.data || [];
     const tasks = tasksRes.data || [];
+    const dbRoles = rolesRes.data?.map(r => r.name) || [];
+    
+    // Fallback to defaults if table is empty or missing
+    if (dbRoles.length > 0) {
+      setDynamicRoles([...new Set(dbRoles)] as string[]);
+      if (!dbRoles.includes(formRole) && dbRoles.length > 0) {
+        setFormRole(dbRoles[0]);
+      }
+    } else {
+      setDynamicRoles(['Accountant', 'Secretary', 'Admin', 'CA']);
+    }
 
     const withTasks = users.map(u => ({
       ...u,
@@ -412,10 +427,9 @@ export default function StaffPage() {
               <div style={{ marginBottom: '24px' }}>
                 <label className="label">Role</label>
                 <select className="select" value={formRole} onChange={e => setFormRole(e.target.value)}>
-                  <option value="Accountant">Accountant</option>
-                  <option value="Secretary">Secretary</option>
-                  <option value="Admin">Admin</option>
-                  <option value="CA">CA</option>
+                  {dynamicRoles.map(role => (
+                    <option key={role} value={role}>{role}</option>
+                  ))}
                 </select>
               </div>
 
