@@ -61,6 +61,7 @@ export interface Task {
   deadline: string;
   admin_note?: string;
   task_type_id?: string;
+  task_type_ids?: string[];
   description?: string;
   created_at: string;
   // joined fields

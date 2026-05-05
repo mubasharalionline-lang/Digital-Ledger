@@ -16,6 +16,7 @@ export default function BahrainTasks() {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [taskTypes, setTaskTypes] = useState<TaskType[]>([]);
   const [partners, setPartners] = useState<User[]>([]);
+  const [dynamicStatuses, setDynamicStatuses] = useState<string[]>(BAHRAIN_STATUSES);
   const [loading, setLoading] = useState(true);
 
   // Filters
@@ -29,7 +30,7 @@ export default function BahrainTasks() {
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [newTask, setNewTask] = useState({
-    company_id: '', task_type_id: '', priority: 'Medium', deadline: '', description: '', assigned_to: '', assigned_partners: [] as string[]
+    company_id: '', task_type_id: '', task_type_ids: [] as string[], priority: 'Medium', deadline: '', description: '', assigned_to: '', assigned_partners: [] as string[]
   });
 
   // Task Detail modal
@@ -64,15 +65,25 @@ export default function BahrainTasks() {
       }
 
       // Fire all independent queries simultaneously
-      const [compsRes, ttRes, usersRes] = await Promise.all([
+      const [compsRes, ttRes, usersRes, statusRes] = await Promise.all([
         supabase.from('companies').select('*').eq('country', dataCountry || 'Bahrain'),
         supabase.from('task_types').select('*').eq('active', true),
-        usersQuery
+        usersQuery,
+        dataCountry 
+          ? supabase.from('statuses').select('name').eq('country', dataCountry) 
+          : supabase.from('statuses').select('name')
       ]);
 
       const companyList = compsRes.data || [];
       const ttList = ttRes.data || [];
       const usersList = usersRes.data || [];
+      const dbStatuses = statusRes.data?.map(s => s.name) || [];
+      
+      if (dbStatuses.length > 0) {
+        setDynamicStatuses([...new Set(dbStatuses)] as string[]);
+      } else {
+        setDynamicStatuses(BAHRAIN_STATUSES);
+      }
 
       // Fetch tasks (depends on companyIds)
       const companyIds = companyList.map(c => c.id);
@@ -117,11 +128,16 @@ export default function BahrainTasks() {
     }
     if (search) {
       const s = search.toLowerCase();
-      const tt = taskTypes.find(x => x.id === t.task_type_id);
+      const ttIds = t.task_type_ids && t.task_type_ids.length > 0 ? t.task_type_ids : (t.task_type_id ? [t.task_type_id] : []);
+      const comp = companies.find(c => c.id === t.company_id);
       const matchTitle = t.title?.toLowerCase().includes(s);
       const matchDesc = t.description?.toLowerCase().includes(s);
-      const matchType = tt?.name.toLowerCase().includes(s);
-      if (!matchTitle && !matchDesc && !matchType) return false;
+      const matchType = ttIds.some(id => taskTypes.find(x => x.id === id)?.name.toLowerCase().includes(s));
+      const matchCompany = comp?.company_name?.toLowerCase().includes(s);
+      const matchStatus = t.status?.toLowerCase().includes(s);
+      const matchPriority = t.priority?.toLowerCase().includes(s);
+      const matchId = t.id?.toLowerCase().includes(s);
+      if (!matchTitle && !matchDesc && !matchType && !matchCompany && !matchStatus && !matchPriority && !matchId) return false;
     }
     return true;
   });
@@ -139,10 +155,16 @@ export default function BahrainTasks() {
     }
     
     const { user } = getSession();
+    // In Bahrain, Admins act on behalf of the assigned partner for status updates
+    let updaterId = user?.id || null;
+    if (isAdminUser && dataCountry === 'Bahrain' && task.assigned_to) {
+      updaterId = task.assigned_to;
+    }
+
     await supabase.from('status_log').insert({
       task_id: taskId,
       status: newStatus,
-      updated_by: user?.id || null,
+      updated_by: updaterId,
       remarks: `Status changed from ${task.status} to ${newStatus}`,
     });
 
@@ -151,9 +173,11 @@ export default function BahrainTasks() {
 
   function openEditTask(task: Task) {
     setEditingTaskId(task.id);
+    const existingTypeIds = task.task_type_ids && task.task_type_ids.length > 0 ? task.task_type_ids : (task.task_type_id ? [task.task_type_id] : []);
     setNewTask({
       company_id: task.company_id || '',
       task_type_id: task.task_type_id || '',
+      task_type_ids: existingTypeIds,
       priority: task.priority || 'Medium',
       deadline: task.deadline || '',
       description: task.description || '',
@@ -188,25 +212,30 @@ export default function BahrainTasks() {
 
   // Save new task
   async function saveTask() {
-    if (!newTask.company_id || !newTask.task_type_id || !newTask.deadline) {
-      alert('Please fill all required fields');
+    const typeIds = newTask.task_type_ids || [];
+    if (!newTask.company_id || typeIds.length === 0 || !newTask.deadline) {
+      alert('Please fill all required fields (Company, at least one Task Type, and Due Date)');
       return;
     }
 
-    const tt = taskTypes.find(t => t.id === newTask.task_type_id);
-    const firstStatus = tt?.status_options ? tt.status_options.split(',')[0].trim() : 'Not Started';
+    // Use the first selected task type for backward-compatible fields
+    const firstTt = taskTypes.find(t => t.id === typeIds[0]);
+    const firstStatus = firstTt?.status_options ? firstTt.status_options.split(',')[0].trim() : 'Not Started';
     const assignArray = newTask.assigned_partners || [];
     const assignTo = assignArray.length > 0 ? assignArray[0] : null;
     const desc = newTask.description && newTask.description.length > 0 ? newTask.description : null;
-    const ttId = newTask.task_type_id && newTask.task_type_id.length > 0 ? newTask.task_type_id : null;
+    const primaryTtId = typeIds.length > 0 ? typeIds[0] : null;
+    // Build a combined title from all selected types
+    const combinedTitle = typeIds.map(id => taskTypes.find(t => t.id === id)?.name).filter(Boolean).join(', ') || 'Untitled';
 
     let resultError, resultData;
 
     if (editingTaskId) {
       const { data, error } = await supabase.from('tasks').update({
-        title: tt?.name || 'Untitled',
+        title: combinedTitle,
         company_id: newTask.company_id,
-        task_type_id: ttId,
+        task_type_id: primaryTtId,
+        task_type_ids: typeIds,
         priority: newTask.priority,
         deadline: newTask.deadline,
         description: desc,
@@ -217,9 +246,10 @@ export default function BahrainTasks() {
       resultData = data;
     } else {
       const { data, error } = await supabase.from('tasks').insert({
-        title: tt?.name || 'Untitled',
+        title: combinedTitle,
         company_id: newTask.company_id,
-        task_type_id: ttId,
+        task_type_id: primaryTtId,
+        task_type_ids: typeIds,
         priority: newTask.priority,
         deadline: newTask.deadline,
         description: desc,
@@ -246,7 +276,7 @@ export default function BahrainTasks() {
 
     setShowTaskModal(false);
     setEditingTaskId(null);
-    setNewTask({ company_id: '', task_type_id: '', priority: 'Medium', deadline: '', description: '', assigned_to: '', assigned_partners: [] });
+    setNewTask({ company_id: '', task_type_id: '', task_type_ids: [], priority: 'Medium', deadline: '', description: '', assigned_to: '', assigned_partners: [] });
     loadData();
     alert(editingTaskId ? 'Task updated successfully!' : 'Task created successfully!');
   }
@@ -267,15 +297,52 @@ export default function BahrainTasks() {
       .order('created_at', { ascending: false });
     if (error) console.error('Status log error:', error);
 
-    // Enrich with partner names
+    // Enrich with partner names — resolve from local list, session, or DB
+    const { user: sessionUser } = getSession();
+    const unresolvedIds = new Set<string>();
+    (logs || []).forEach(log => {
+      if (log.updated_by && !partners.find(p => p.id === log.updated_by) && log.updated_by !== sessionUser?.id) {
+        unresolvedIds.add(log.updated_by);
+      }
+    });
+
+    // Fetch any missing user names from the database
+    let extraUsers: { id: string; username: string }[] = [];
+    if (unresolvedIds.size > 0) {
+      const { data: fetchedUsers } = await supabase
+        .from('users')
+        .select('id, username')
+        .in('id', Array.from(unresolvedIds));
+      extraUsers = fetchedUsers || [];
+    }
+
     const enriched = (logs || []).map(log => {
-      const updater = partners.find(p => p.id === log.updated_by);
-      return { ...log, updater: updater ? { username: updater.username } : null };
+      let username: string | null = null;
+      // 1. Check local partners array
+      const localPartner = partners.find(p => p.id === log.updated_by);
+      if (localPartner) {
+        username = localPartner.username;
+      }
+      // 2. Check current session user
+      else if (sessionUser && log.updated_by === sessionUser.id) {
+        username = sessionUser.username;
+      }
+      // 3. Check extra fetched users
+      else {
+        const extra = extraUsers.find(u => u.id === log.updated_by);
+        if (extra) username = extra.username;
+      }
+      return { ...log, updater: username ? { username } : null };
     });
     setStatusLogs(enriched as any);
 
     const { user } = getSession();
-    setUpdateBy(user?.id || '');
+    // Default to the assigned partner if Admin in Bahrain, otherwise self
+    if (isAdminUser && dataCountry === 'Bahrain' && task.assigned_to) {
+      setUpdateBy(task.assigned_to);
+    } else {
+      setUpdateBy(user?.id || '');
+    }
     setUpdateRemarks('');
   }
 
@@ -368,7 +435,7 @@ export default function BahrainTasks() {
         </div>
         {isAdminUser && (
           <button
-            onClick={() => { setEditingTaskId(null); setNewTask({ company_id: '', task_type_id: '', priority: 'Medium', deadline: '', description: '', assigned_to: '', assigned_partners: [] }); setShowTaskModal(true); }}
+            onClick={() => { setEditingTaskId(null); setNewTask({ company_id: '', task_type_id: '', task_type_ids: [], priority: 'Medium', deadline: '', description: '', assigned_to: '', assigned_partners: [] }); setShowTaskModal(true); }}
             style={{
               display: 'flex', alignItems: 'center', gap: '8px',
               padding: '11px 24px', background: 'linear-gradient(135deg, #3B82F6, #2563EB)', color: '#fff',
@@ -385,7 +452,14 @@ export default function BahrainTasks() {
       <div style={{ display: 'flex', gap: '10px', marginBottom: '24px', flexWrap: 'wrap', padding: '16px 20px', background: '#F9FAFB', borderRadius: '14px', border: '1px solid #E5E7EB' }}>
         <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={filterStyle}>
           <option value="">All Status</option>
-          {BAHRAIN_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+          {(() => {
+            const allStatuses = new Set<string>(dynamicStatuses);
+            tasks.forEach(t => { if (t.status) allStatuses.add(t.status); });
+            taskTypes.forEach(tt => {
+              if (tt.status_options) tt.status_options.split(',').map(s => s.trim()).filter(Boolean).forEach(s => allStatuses.add(s));
+            });
+            return Array.from(allStatuses).map(s => <option key={s} value={s}>{s}</option>);
+          })()}
         </select>
         <select value={filterPriority} onChange={e => setFilterPriority(e.target.value)} style={filterStyle}>
           <option value="">All Priority</option>
@@ -423,15 +497,25 @@ export default function BahrainTasks() {
               <tr><td colSpan={9} style={{ textAlign: 'center', padding: '40px', color: '#7F8C8D' }}>No tasks found</td></tr>
             ) : filtered.map(task => {
               const company = companies.find(c => c.id === task.company_id);
-              const tt = taskTypes.find(t => t.id === task.task_type_id);
-              const statusOptions = tt?.status_options ? tt.status_options.split(',').map(s => s.trim()) : BAHRAIN_STATUSES;
+              const ttIds = task.task_type_ids && task.task_type_ids.length > 0 ? task.task_type_ids : (task.task_type_id ? [task.task_type_id] : []);
+              const ttNames = ttIds.map(id => taskTypes.find(t => t.id === id)?.name).filter(Boolean);
+              const primaryTt = taskTypes.find(t => t.id === ttIds[0]);
+              const statusOptions = primaryTt?.status_options ? primaryTt.status_options.split(',').map(s => s.trim()) : dynamicStatuses;
               const pc = priorityColor(task.priority);
 
               return (
                 <tr key={task.id} style={{ borderBottom: '1px solid var(--border, #ECF0F1)' }}>
                   <td style={cellStyle}><strong>#{task.id.slice(0, 6)}</strong></td>
                   <td style={cellStyle}>{company?.company_name || 'Unknown'}</td>
-                  <td style={cellStyle}>{tt?.name || task.title}</td>
+                  <td style={cellStyle}>
+                    {ttNames.length > 0 ? (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                        {ttNames.map((name, i) => (
+                          <span key={i} style={{ padding: '2px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: 600, background: '#EBF5FB', color: '#2980B9', border: '1px solid #AED6F1' }}>{name}</span>
+                        ))}
+                      </div>
+                    ) : task.title}
+                  </td>
                   <td style={{ ...cellStyle, maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{task.description || '-'}</td>
                   <td style={cellStyle}>
                     <span style={{ padding: '4px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: 600, background: pc.bg, color: pc.color }}>{task.priority}</span>
@@ -502,11 +586,13 @@ export default function BahrainTasks() {
                 {companies.map(c => <option key={c.id} value={c.id}>{c.company_name}</option>)}
               </select>
             </FormField>
-            <FormField label="Task Type *">
-              <select value={newTask.task_type_id} onChange={e => setNewTask(p => ({ ...p, task_type_id: e.target.value }))} style={inputStyle}>
-                <option value="">Select Task Type</option>
-                {taskTypes.filter(t => t.active).map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-              </select>
+            <FormField label="Task Types *">
+              <MultiSelect 
+                options={taskTypes.filter(t => t.active).map(t => ({id: t.id, label: t.name}))} 
+                selected={newTask.task_type_ids} 
+                onChange={vals => setNewTask(p => ({ ...p, task_type_ids: vals, task_type_id: vals[0] || '' }))} 
+                placeholder="Select Task Types" 
+              />
             </FormField>
             <FormField label="Priority *">
               <select value={newTask.priority} onChange={e => setNewTask(p => ({ ...p, priority: e.target.value }))} style={inputStyle}>
@@ -544,7 +630,11 @@ export default function BahrainTasks() {
             padding: '20px', background: 'var(--bg-secondary, #ECF0F1)', borderRadius: '8px', marginBottom: '24px',
           }}>
             <div><strong>Company:</strong> {detailCompany?.company_name || 'Unknown'}</div>
-            <div><strong>Type:</strong> {taskTypes.find(t => t.id === detailTask.task_type_id)?.name || detailTask.title}</div>
+            <div><strong>Type:</strong> {(() => {
+              const ids = detailTask.task_type_ids && detailTask.task_type_ids.length > 0 ? detailTask.task_type_ids : (detailTask.task_type_id ? [detailTask.task_type_id] : []);
+              const names = ids.map(id => taskTypes.find(t => t.id === id)?.name).filter(Boolean);
+              return names.length > 0 ? names.join(', ') : detailTask.title;
+            })()}</div>
             <div><strong>Priority:</strong> <span style={{ padding: '3px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: 600, background: priorityColor(detailTask.priority).bg, color: '#fff' }}>{detailTask.priority}</span></div>
             <div><strong>Status:</strong> <span style={{ padding: '3px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: 600, background: '#D6EAF8', color: '#3498DB' }}>{detailTask.status}</span></div>
             <div><strong>Due Date:</strong> {detailTask.deadline}</div>
@@ -584,11 +674,14 @@ export default function BahrainTasks() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
                 <FormField label="New Status">
                   <select value={updateStatus} onChange={e => setUpdateStatus(e.target.value)} style={inputStyle}>
-                    {BAHRAIN_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                    {dynamicStatuses.map(s => <option key={s} value={s}>{s}</option>)}
                   </select>
                 </FormField>
                 <FormField label="Updated By">
                   <select value={updateBy} onChange={e => setUpdateBy(e.target.value)} style={inputStyle} disabled={!isAdminUser}>
+                    {!partners.some(p => p.id === updateBy) && updateBy && (
+                      <option value={updateBy}>{currentUser?.username || 'Current User'}</option>
+                    )}
                     {partners.map(p => <option key={p.id} value={p.id}>{p.username}</option>)}
                   </select>
                 </FormField>
