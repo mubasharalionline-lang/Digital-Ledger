@@ -50,24 +50,34 @@ export default function BahrainDashboard() {
   const router = useRouter();
 
   const loadDashboard = useCallback(async () => {
-    // Try to load from cache first for instant UI response
-    const cacheKey = 'dashboard_data_cache';
+    const cacheKey = 'dashboard_data_cache_v2';
+    const cacheTimeKey = 'dashboard_data_time_v2';
     const cachedData = sessionStorage.getItem(cacheKey);
-    if (cachedData) {
-      try {
-        const parsed = JSON.parse(cachedData);
-        setTotalTasks(parsed.totalTasks);
-        setTotalCompanies(parsed.totalCompanies);
-        setActivePartners(parsed.activePartners);
-        setOverdueTasks(parsed.overdueTasks);
-        setUrgentClients(parsed.urgentClients);
-        setTaskTypeStats(parsed.taskTypeStats);
-        setStatusCounts(parsed.statusCounts);
-        setUpcomingTasks(parsed.upcomingTasks);
-        if (parsed.partnerWorkloads) setPartnerWorkloads(parsed.partnerWorkloads);
-        setLoading(false); // Disable loading instantly if cache exists
-      } catch (e) {}
+    const cacheTime = sessionStorage.getItem(cacheTimeKey);
+    
+    let useCache = false;
+
+    if (cachedData && cacheTime) {
+      const isFresh = Date.now() - parseInt(cacheTime) < 5 * 60 * 1000; // 5 mins TTL
+      if (isFresh) {
+        try {
+          const parsed = JSON.parse(cachedData);
+          setTotalTasks(parsed.totalTasks);
+          setTotalCompanies(parsed.totalCompanies);
+          setActivePartners(parsed.activePartners);
+          setOverdueTasks(parsed.overdueTasks);
+          setUrgentClients(parsed.urgentClients);
+          setTaskTypeStats(parsed.taskTypeStats);
+          setStatusCounts(parsed.statusCounts);
+          setUpcomingTasks(parsed.upcomingTasks);
+          if (parsed.partnerWorkloads) setPartnerWorkloads(parsed.partnerWorkloads);
+          setLoading(false);
+          useCache = true;
+        } catch (e) {}
+      }
     }
+
+    if (useCache) return; // Skip expensive DB queries if cache is fresh!
 
     try {
       const dataCountry = getDataCountry();
@@ -77,7 +87,7 @@ export default function BahrainDashboard() {
       // Fire all independent queries simultaneously
       const [companiesRes, usersRes, taskTypesRes] = await Promise.all([
         supabase.from('companies').select('*').eq('country', dataCountry || 'Bahrain'),
-        supabase.from('users').select('*').eq('role', 'staff'),
+        dataCountry ? supabase.from('users').select('*').eq('country', dataCountry).neq('role', 'admin') : supabase.from('users').select('*').neq('role', 'admin'),
         supabase.from('task_types').select('*')
       ]);
 
@@ -193,18 +203,20 @@ export default function BahrainDashboard() {
       }).filter(pw => pw.totalTasks > 0).sort((a, b) => b.totalTasks - a.totalTasks);
       setPartnerWorkloads(newPartnerWorkloads);
 
-      // Save to cache
+      // Save cache (exclude Sets which don't JSON serialize well)
+      const serializableTaskTypeStats = newTaskTypeStats.map(s => ({ ...s, companies: Array.from(s.companies) }));
       sessionStorage.setItem(cacheKey, JSON.stringify({
         totalTasks: newTotalTasks,
         totalCompanies: newTotalCompanies,
         activePartners: (usersRes.data || []).length,
         overdueTasks: newOverdueTasks,
         urgentClients: newUrgentClients,
-        taskTypeStats: newTaskTypeStats,
+        taskTypeStats: serializableTaskTypeStats,
         statusCounts: newStatusCounts,
         upcomingTasks: newUpcomingTasks,
         partnerWorkloads: newPartnerWorkloads
       }));
+      sessionStorage.setItem('dashboard_data_time_v2', Date.now().toString());
       
     } catch (err) {
       console.error('Dashboard load error:', err);
@@ -288,7 +300,7 @@ export default function BahrainDashboard() {
             ) : (
               urgentClients.map(({ company, tasks, overdueCount }) => (
                 <div key={company.id} 
-                  onClick={() => router.push('/dashboard/tasks')}
+                  onClick={() => router.push(`/dashboard/tasks?company=${company.id}`)}
                   style={{...listItemStyle, background: '#FEF2F2', borderColor: '#FCA5A5'}}
                   onMouseEnter={e => { e.currentTarget.style.background = '#FEE2E2'; e.currentTarget.style.borderColor = '#F87171'; }}
                   onMouseLeave={e => { e.currentTarget.style.background = '#FEF2F2'; e.currentTarget.style.borderColor = '#FCA5A5'; }}
@@ -308,6 +320,55 @@ export default function BahrainDashboard() {
             )}
           </div>
         </div>
+
+        {/* Tasks by Category */}
+        {taskTypeStats.length > 0 && (
+          <div style={panelStyle}>
+            <div style={panelHeaderStyle}>
+              <h3 style={panelTitleStyle}>
+                <ListTodo size={18} color="#10B981" /> Tasks by Category
+              </h3>
+            </div>
+            
+            <div style={listContainerStyle}>
+              {taskTypeStats.map(({ taskType, count, companies }, idx) => {
+                const categoryColors = ['#3B82F6', '#10B981', '#8B5CF6', '#F59E0B', '#EC4899', '#14B8A6'];
+                const catColor = categoryColors[idx % categoryColors.length];
+                return (
+                <div key={taskType.id} 
+                  onClick={() => router.push(`/dashboard/tasks?search=${encodeURIComponent(taskType.name)}`)}
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    padding: '12px 16px',
+                    cursor: 'pointer', background: '#FAFAFA', borderRadius: '10px', border: '1px solid #E5E7EB', marginBottom: '8px',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.background = '#F3F4F6'; e.currentTarget.style.borderColor = catColor; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = '#FAFAFA'; e.currentTarget.style.borderColor = '#E5E7EB'; }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <div style={{ 
+                      width: '36px', height: '36px', borderRadius: '8px', 
+                      background: `${catColor}20`, color: catColor, 
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', 
+                      fontSize: '14px', fontWeight: 700 
+                    }}>
+                      {idx + 1}
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '14px', fontWeight: 600, color: '#111827' }}>{taskType.name}</div>
+                      <div style={{ fontSize: '12px', color: '#6B7280' }}>🏢 {companies.size} {companies.size === 1 ? 'company' : 'companies'}</div>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <div style={{ fontSize: '15px', fontWeight: 700, color: catColor }}>{count}</div>
+                    <ChevronRight size={16} color="#D1D5DB" />
+                  </div>
+                </div>
+              )})}
+            </div>
+          </div>
+        )}
 
         {/* Partner Workload */}
         {isAdmin(getSession().user) && partnerWorkloads.length > 0 && (
@@ -361,55 +422,6 @@ export default function BahrainDashboard() {
           </div>
         )}
 
-        {/* Tasks by Category */}
-        {taskTypeStats.length > 0 && (
-          <div style={panelStyle}>
-            <div style={panelHeaderStyle}>
-              <h3 style={panelTitleStyle}>
-                <ListTodo size={18} color="#10B981" /> Tasks by Category
-              </h3>
-            </div>
-            
-            <div style={listContainerStyle}>
-              {taskTypeStats.map(({ taskType, count, companies }, idx) => {
-                const categoryColors = ['#3B82F6', '#10B981', '#8B5CF6', '#F59E0B', '#EC4899', '#14B8A6'];
-                const catColor = categoryColors[idx % categoryColors.length];
-                return (
-                <div key={taskType.id} 
-                  onClick={() => router.push('/dashboard/tasks')}
-                  style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    padding: '12px 16px',
-                    cursor: 'pointer', background: '#FAFAFA', borderRadius: '10px', border: '1px solid #E5E7EB', marginBottom: '8px',
-                    transition: 'all 0.2s ease'
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.background = '#F3F4F6'; e.currentTarget.style.borderColor = catColor; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = '#FAFAFA'; e.currentTarget.style.borderColor = '#E5E7EB'; }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <div style={{ 
-                      width: '36px', height: '36px', borderRadius: '8px', 
-                      background: `${catColor}20`, color: catColor, 
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', 
-                      fontSize: '14px', fontWeight: 700 
-                    }}>
-                      {idx + 1}
-                    </div>
-                    <div>
-                      <div style={{ fontSize: '14px', fontWeight: 600, color: '#111827' }}>{taskType.name}</div>
-                      <div style={{ fontSize: '12px', color: '#6B7280' }}>🏢 {companies.size} {companies.size === 1 ? 'company' : 'companies'}</div>
-                    </div>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <div style={{ fontSize: '15px', fontWeight: 700, color: catColor }}>{count}</div>
-                    <ChevronRight size={16} color="#D1D5DB" />
-                  </div>
-                </div>
-              )})}
-            </div>
-          </div>
-        )}
-
         {/* Tasks by Status */}
         <div style={panelStyle}>
           <div style={panelHeaderStyle}>
@@ -428,7 +440,10 @@ export default function BahrainDashboard() {
                 const pct = totalTasks > 0 ? (count / totalTasks * 100).toFixed(1) : '0';
                 const barColor = getStatusColor(status);
                 return (
-                  <div key={status} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div key={status} 
+                    onClick={() => router.push(`/dashboard/tasks?status=${encodeURIComponent(status)}`)}
+                    style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}
+                  >
                     <div style={{ width: '140px', fontSize: '13px', color: '#374151', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {status}
                     </div>

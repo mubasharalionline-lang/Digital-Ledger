@@ -73,6 +73,8 @@ export default function BahrainTaskTypes() {
     }
 
     if (error) { alert('Error: ' + error.message); return; }
+    sessionStorage.removeItem('dashboard_data_time_v2');
+    sessionStorage.removeItem('tasks_data_time');
     setShowModal(false);
     setEditingId(null);
     setForm({ name: '', category: 'Tax Filing', jurisdiction: 'All', status_options: '', description: '' });
@@ -82,12 +84,16 @@ export default function BahrainTaskTypes() {
 
   async function toggle(id: string, current: boolean) {
     await supabase.from('task_types').update({ active: !current }).eq('id', id);
+    sessionStorage.removeItem('dashboard_data_time_v2');
+    sessionStorage.removeItem('tasks_data_time');
     loadData();
   }
 
   async function remove(id: string) {
     if (!confirm('Delete this task type?')) return;
     await supabase.from('task_types').delete().eq('id', id);
+    sessionStorage.removeItem('dashboard_data_time_v2');
+    sessionStorage.removeItem('tasks_data_time');
     loadData();
   }
 

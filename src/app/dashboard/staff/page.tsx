@@ -158,6 +158,10 @@ export default function StaffPage() {
     setEditUserId(null);
     setShowModal(false);
     setSaving(false);
+    
+    sessionStorage.removeItem('dashboard_data_time_v2');
+    sessionStorage.removeItem('tasks_data_time');
+    
     loadStaff();
   }
 
@@ -192,6 +196,10 @@ export default function StaffPage() {
     }
     if (!confirm('Are you sure you want to delete this user?')) return;
     await supabase.from('users').delete().eq('id', userId);
+    
+    sessionStorage.removeItem('dashboard_data_time_v2');
+    sessionStorage.removeItem('tasks_data_time');
+    
     loadStaff();
   }
 

@@ -40,16 +40,19 @@ export function isAdmin(user: User | null): boolean {
   return user?.role === 'admin';
 }
 
-/**
- * Returns the country code to filter data by.
- * Admin: uses selected session country.
- * Staff: uses the country saved on their user record (locked on creation).
- */
 export function getDataCountry(): string | null {
   const { user, country } = getSession();
   if (!user) return null;
+  
   // Staff always use their saved country
-  if (user.role === 'staff' && user.country) return user.country;
+  if (user.role === 'staff' && user.country && user.country !== 'undefined' && user.country !== 'null') {
+    return user.country;
+  }
+  
   // Admin uses session-selected country
-  return country;
+  if (country && country !== 'undefined' && country !== 'null') {
+    return country;
+  }
+  
+  return 'Bahrain'; // Default fallback
 }

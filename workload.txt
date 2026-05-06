@@ -1,0 +1,51 @@
+   324	        {/* Partner Workload */}
+   325	        {isAdmin(getSession().user) && partnerWorkloads.length > 0 && (
+   326	          <div style={panelStyle}>
+   327	            <div style={panelHeaderStyle}>
+   328	              <h3 style={panelTitleStyle}>
+   329	                <UsersIcon size={18} color="#8B5CF6" /> Partner Workload
+   330	              </h3>
+   331	              <span style={badgeStyle}>{partnerWorkloads.length} active</span>
+   332	            </div>
+   333	            <div style={listContainerStyle}>
+   334	              {partnerWorkloads.map((pw, idx) => {
+   335	                const { partner, totalTasks: total, completedTasks, overdueTasks: overdue, inProgressTasks } = pw;
+   336	                const completionPct = total > 0 ? Math.round((completedTasks / total) * 100) : 0;
+   337	                const colors = ['#8B5CF6', '#3B82F6', '#10B981', '#F59E0B', '#EC4899', '#14B8A6'];
+   338	                const pColor = colors[idx % colors.length];
+   339	                return (
+   340	                  <div key={partner.id} style={{
+   341	                    padding: '14px 16px', borderRadius: '12px', background: '#FAFAFA',
+   342	                    border: overdue > 0 ? '1px solid #FCA5A5' : '1px solid #E5E7EB',
+   343	                  }}>
+   344	                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+   345	                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+   346	                        <div style={{
+   347	                          width: '34px', height: '34px', borderRadius: '50%',
+   348	                          background: `linear-gradient(135deg, ${pColor}, ${pColor}CC)`,
+   349	                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+   350	                          fontSize: '13px', fontWeight: 700, color: '#fff',
+   351	                        }}>
+   352	                          {partner.username.charAt(0).toUpperCase()}
+   353	                        </div>
+   354	                        <div>
+   355	                          <div style={{ fontSize: '14px', fontWeight: 600, color: '#111827' }}>{partner.username}</div>
+   356	                          <div style={{ fontSize: '12px', color: '#6B7280' }}>{total} task{total !== 1 ? 's' : ''}</div>
+   357	                        </div>
+   358	                      </div>
+   359	                      <div style={{ fontSize: '18px', fontWeight: 700, color: pColor }}>{completionPct}%</div>
+   360	                    </div>
+   361	                    <div style={{ background: '#E5E7EB', height: '6px', borderRadius: '3px', overflow: 'hidden', marginBottom: '8px' }}>
+   362	                      <div style={{ width: `${completionPct}%`, height: '100%', background: `linear-gradient(90deg, ${pColor}, ${pColor}AA)`, borderRadius: '3px', transition: 'width 0.8s ease-out' }} />
+   363	                    </div>
+   364	                    <div style={{ display: 'flex', gap: '12px', fontSize: '11px' }}>
+   365	                      <span style={{ color: '#10B981', fontWeight: 600 }}>✓ {completedTasks} done</span>
+   366	                      <span style={{ color: '#3B82F6', fontWeight: 600 }}>⟳ {inProgressTasks} active</span>
+   367	                      {overdue > 0 && <span style={{ color: '#EF4444', fontWeight: 600 }}>⚠ {overdue} overdue</span>}
+   368	                    </div>
+   369	                  </div>
+   370	                );
+   371	              })}
+   372	            </div>
+   373	          </div>
+   374	        )}

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import type { Task, Company, User, TaskType, StatusLog } from '@/lib/supabase';
 import { getDataCountry, getSession, isAdmin } from '@/lib/auth';
@@ -19,12 +20,14 @@ export default function BahrainTasks() {
   const [dynamicStatuses, setDynamicStatuses] = useState<string[]>(BAHRAIN_STATUSES);
   const [loading, setLoading] = useState(true);
 
+  const searchParams = useSearchParams();
+
   // Filters
-  const [filterStatus, setFilterStatus] = useState('');
-  const [filterPriority, setFilterPriority] = useState('');
-  const [filterCompany, setFilterCompany] = useState('');
-  const [filterPartner, setFilterPartner] = useState('');
-  const [search, setSearch] = useState('');
+  const [filterStatus, setFilterStatus] = useState(searchParams.get('status') || '');
+  const [filterPriority, setFilterPriority] = useState(searchParams.get('priority') || '');
+  const [filterCompany, setFilterCompany] = useState(searchParams.get('company') || '');
+  const [filterPartner, setFilterPartner] = useState(searchParams.get('partner') || '');
+  const [search, setSearch] = useState(searchParams.get('search') || '');
 
   // New Task modal
   const [showTaskModal, setShowTaskModal] = useState(false);
@@ -46,17 +49,28 @@ export default function BahrainTasks() {
   const loadData = useCallback(async () => {
     // Try to load from cache first for instant UI response
     const cacheKey = 'tasks_data_cache';
+    const cacheTimeKey = 'tasks_data_time';
     const cachedData = sessionStorage.getItem(cacheKey);
-    if (cachedData) {
-      try {
-        const parsed = JSON.parse(cachedData);
-        setCompanies(parsed.companies);
-        setTasks(parsed.tasks);
-        setTaskTypes(parsed.taskTypes);
-        setPartners(parsed.partners);
-        setLoading(false); // Disable loading instantly if cache exists
-      } catch (e) {}
+    const cacheTime = sessionStorage.getItem(cacheTimeKey);
+    
+    let useCache = false;
+
+    if (cachedData && cacheTime) {
+      const isFresh = Date.now() - parseInt(cacheTime) < 5 * 60 * 1000; // 5 mins TTL
+      if (isFresh) {
+        try {
+          const parsed = JSON.parse(cachedData);
+          setCompanies(parsed.companies);
+          setTasks(parsed.tasks);
+          setTaskTypes(parsed.taskTypes);
+          setPartners(parsed.partners);
+          setLoading(false);
+          useCache = true;
+        } catch (e) {}
+      }
     }
+
+    if (useCache) return; // Skip expensive DB queries if cache is fresh!
 
     try {
       let usersQuery = supabase.from('users').select('*').order('created_at', { ascending: false });
@@ -105,6 +119,7 @@ export default function BahrainTasks() {
         partners: usersList,
         tasks: taskList
       }));
+      sessionStorage.setItem('tasks_data_time', Date.now().toString());
 
     } catch (err) {
       console.error('Load error:', err);
@@ -168,6 +183,9 @@ export default function BahrainTasks() {
       remarks: `Status changed from ${task.status} to ${newStatus}`,
     });
 
+    sessionStorage.removeItem('tasks_data_time');
+    sessionStorage.removeItem('dashboard_data_time_v2');
+
     setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: newStatus } : t));
   }
 
@@ -206,6 +224,9 @@ export default function BahrainTasks() {
         remarks: `Task assigned to ${partner?.username || 'Unknown'}`,
       });
     }
+
+    sessionStorage.removeItem('tasks_data_time');
+    sessionStorage.removeItem('dashboard_data_time_v2');
 
     setTasks(prev => prev.map(t => t.id === taskId ? { ...t, assigned_to: assignValue || '', assigned_partners: assignValue ? [assignValue] : [] } : t));
   }
@@ -277,6 +298,10 @@ export default function BahrainTasks() {
     setShowTaskModal(false);
     setEditingTaskId(null);
     setNewTask({ company_id: '', task_type_id: '', task_type_ids: [], priority: 'Medium', deadline: '', description: '', assigned_to: '', assigned_partners: [] });
+    
+    sessionStorage.removeItem('tasks_data_time');
+    sessionStorage.removeItem('dashboard_data_time_v2');
+    
     loadData();
     alert(editingTaskId ? 'Task updated successfully!' : 'Task created successfully!');
   }
@@ -374,6 +399,8 @@ export default function BahrainTasks() {
 
     alert('Status updated!');
     setDetailTask(null);
+    sessionStorage.removeItem('tasks_data_time');
+    sessionStorage.removeItem('dashboard_data_time_v2');
     loadData();
   }
 
@@ -395,6 +422,8 @@ export default function BahrainTasks() {
         return;
       }
       
+      sessionStorage.removeItem('tasks_data_time');
+      sessionStorage.removeItem('dashboard_data_time_v2');
       setTasks(prev => prev.filter(t => t.id !== taskId));
     } catch (err: any) {
       console.error('Delete exception:', err);

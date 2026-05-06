@@ -68,6 +68,7 @@ export default function EditsPage() {
     if (error) {
       alert('Error creating: ' + error.message);
     } else {
+      sessionStorage.removeItem('tasks_data_time');
       setNewName('');
       setIsAdding(false);
       loadData();
@@ -85,6 +86,7 @@ export default function EditsPage() {
     if (error) {
       alert('Error updating: ' + error.message);
     } else {
+      sessionStorage.removeItem('tasks_data_time');
       setEditingId(null);
       setEditName('');
       loadData();
@@ -97,7 +99,10 @@ export default function EditsPage() {
     
     const { error } = await supabase.from(table).delete().eq('id', id);
     if (error) alert('Error deleting: ' + error.message);
-    else loadData();
+    else {
+      sessionStorage.removeItem('tasks_data_time');
+      loadData();
+    }
   }
 
   const activeData = activeTab === 'statuses' ? statuses : roles;
@@ -191,7 +196,7 @@ export default function EditsPage() {
             </div>
           ) : activeData.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-tertiary)' }}>
-              No {activeTab === 'statuses' ? 'statuses' : 'roles'} found. Click "Add" to create one.
+              No {activeTab === 'statuses' ? 'statuses' : 'roles'} found. Click &quot;Add&quot; to create one.
               <div style={{ marginTop: '10px', fontSize: '13px', color: 'var(--danger)' }}>
                 Note: You may need to run the database SQL script if you see this right after the feature was added.
               </div>

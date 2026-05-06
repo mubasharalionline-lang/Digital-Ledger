@@ -25,12 +25,12 @@ export default function LoginPage() {
           setSession(user, user.country);
           router.push('/dashboard');
         } else if (user.role === 'admin') {
-          // Admin without country — let them pick
-          setSession(user, '');
-          router.push('/select-country');
+          // Admin without country — default to Bahrain instead of forcing selection
+          setSession(user, 'Bahrain');
+          router.push('/dashboard');
         } else {
           // Staff without country (edge case) — still go to dashboard
-          setSession(user, '');
+          setSession(user, 'Bahrain');
           router.push('/dashboard');
         }
       } else {

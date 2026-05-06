@@ -1,34 +1,33 @@
 import { getSession } from './auth';
 
 /**
- * Country-specific terminology mapping.
- * For Bahrain: "Staff" → "Partner"
- * For New Zealand (and others): keep "Staff"
+ * Unified terminology — all countries now use "Partner" terminology.
+ * The previous country-specific branching has been removed.
  */
 interface Terminology {
-  /** Singular: "Staff" or "Partner" */
+  /** Singular: "Partner" */
   staffSingular: string;
-  /** Plural: "Staff" or "Partners" */
+  /** Plural: "Partners" */
   staffPlural: string;
-  /** Page title: "Staff Management" or "Partner Management" */
+  /** Page title: "Partner Management" */
   staffPageTitle: string;
-  /** "Assigned Staff" or "Assigned Partners" */
+  /** "Assigned Partners" */
   assignedStaff: string;
-  /** "Assign Staff" or "Assign Partner" */
+  /** "Assign Partner" */
   assignStaff: string;
-  /** "Select a staff member..." or "Select a partner..." */
+  /** "Select a partner..." */
   selectStaffMember: string;
-  /** "Add Staff" or "Add Partner" */
+  /** "Add Partner" */
   addStaff: string;
-  /** "team members" or "partners" */
+  /** "partners" */
   teamMembers: string;
-  /** "No users yet" or "No partners yet" */
+  /** "No partners yet" */
   noUsersYet: string;
-  /** "Add First User" or "Add First Partner" */
+  /** "Add First Partner" */
   addFirstUser: string;
 }
 
-const BAHRAIN_TERMS: Terminology = {
+const UNIFIED_TERMS: Terminology = {
   staffSingular: 'Partner',
   staffPlural: 'Partners',
   staffPageTitle: 'Partner Management',
@@ -41,35 +40,16 @@ const BAHRAIN_TERMS: Terminology = {
   addFirstUser: 'Add First Partner',
 };
 
-const DEFAULT_TERMS: Terminology = {
-  staffSingular: 'Staff',
-  staffPlural: 'Staff',
-  staffPageTitle: 'Staff Management',
-  assignedStaff: 'Assigned Staff',
-  assignStaff: 'Assign Staff',
-  selectStaffMember: 'Select a staff member...',
-  addStaff: 'Add User',
-  teamMembers: 'team members',
-  noUsersYet: 'No users yet',
-  addFirstUser: 'Add First User',
-};
-
 /**
- * Returns the correct terminology based on the currently selected country.
- * Bahrain → "Partner" terminology
- * Everything else → "Staff" terminology (default)
+ * Returns unified Partner terminology for all countries.
  */
-export function getTerminology(country?: string | null): Terminology {
-  const resolvedCountry = country ?? getSession().country;
-  if (resolvedCountry === 'Bahrain') {
-    return BAHRAIN_TERMS;
-  }
-  return DEFAULT_TERMS;
+export function getTerminology(_country?: string | null): Terminology {
+  return UNIFIED_TERMS;
 }
 
 /**
- * Returns the nav label for the Staff/Partner sidebar item.
+ * Returns the nav label for the sidebar item.
  */
-export function getStaffNavLabel(country?: string | null): string {
-  return getTerminology(country).staffSingular;
+export function getStaffNavLabel(_country?: string | null): string {
+  return UNIFIED_TERMS.staffSingular;
 }

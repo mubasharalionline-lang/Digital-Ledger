@@ -55,6 +55,10 @@ export default function BahrainCompanies() {
       status: 'Active',
     });
     if (error) { alert('Error: ' + error.message); return; }
+    
+    sessionStorage.removeItem('dashboard_data_time_v2');
+    sessionStorage.removeItem('tasks_data_time');
+    
     setShowModal(false);
     setForm({ name: '', country: 'Bahrain', tax_registration: '', industry: '', fy_end: '', compliance_type: '' });
     loadData();
@@ -64,6 +68,10 @@ export default function BahrainCompanies() {
   async function remove(id: string) {
     if (!confirm('Delete this company?')) return;
     await supabase.from('companies').delete().eq('id', id);
+    
+    sessionStorage.removeItem('dashboard_data_time_v2');
+    sessionStorage.removeItem('tasks_data_time');
+    
     loadData();
   }
 

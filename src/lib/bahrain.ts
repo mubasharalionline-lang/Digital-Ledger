@@ -1,15 +1,17 @@
 import { getDataCountry } from './auth';
 
 /**
- * Returns true if the current session is viewing Bahrain data.
+ * Unified system config — all countries now use the same Bahrain-style architecture.
+ * This file is kept for backward compatibility but isBahrainMode() always returns true.
  */
-export function isBahrainMode(country?: string | null): boolean {
-  const resolved = country ?? getDataCountry();
-  return resolved === 'Bahrain';
+
+/** Always returns true — the unified system uses Bahrain-style UI for all countries. */
+export function isBahrainMode(_country?: string | null): boolean {
+  return true;
 }
 
-/** Bahrain-specific task statuses (default set) */
-export const BAHRAIN_STATUSES = [
+/** Default task statuses (used as fallback if DB statuses table is empty) */
+export const DEFAULT_STATUSES = [
   'Not Started',
   'In Progress',
   'Under Review',
@@ -19,8 +21,14 @@ export const BAHRAIN_STATUSES = [
   'Closed',
 ];
 
-/** Bahrain-specific priority levels */
-export const BAHRAIN_PRIORITIES = ['Urgent', 'High', 'Medium', 'Low'];
+/** Legacy alias — kept for imports that reference BAHRAIN_STATUSES */
+export const BAHRAIN_STATUSES = DEFAULT_STATUSES;
+
+/** Default priority levels */
+export const DEFAULT_PRIORITIES = ['Urgent', 'High', 'Medium', 'Low'];
+
+/** Legacy alias */
+export const BAHRAIN_PRIORITIES = DEFAULT_PRIORITIES;
 
 /** Task type categories */
 export const TASK_TYPE_CATEGORIES = [
@@ -32,8 +40,8 @@ export const TASK_TYPE_CATEGORIES = [
   'Other',
 ];
 
-/** Bahrain jurisdictions */
-export const BAHRAIN_JURISDICTIONS = [
+/** Default jurisdictions list */
+export const DEFAULT_JURISDICTIONS = [
   'All',
   'India',
   'Bahrain',
@@ -42,3 +50,6 @@ export const BAHRAIN_JURISDICTIONS = [
   'New Zealand',
   'UK',
 ];
+
+/** Legacy alias */
+export const BAHRAIN_JURISDICTIONS = DEFAULT_JURISDICTIONS;
