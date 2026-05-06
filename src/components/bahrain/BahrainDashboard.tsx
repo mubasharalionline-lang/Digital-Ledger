@@ -152,15 +152,19 @@ export default function BahrainDashboard() {
       const ttMap = new Map<string, TaskTypeStats>();
       taskList.forEach(task => {
         if (task.task_type_id && taskTypesRes.data) {
-          const tt = taskTypesRes.data.find(t => t.id === task.task_type_id);
-          if (tt) {
-            if (!ttMap.has(tt.id)) {
-              ttMap.set(tt.id, { taskType: tt, count: 0, companies: new Set() });
+          // Support comma-separated task_type_id (multiple types per task)
+          const typeIds = task.task_type_id.split(',').map(s => s.trim()).filter(Boolean);
+          typeIds.forEach(ttId => {
+            const tt = taskTypesRes.data!.find(t => t.id === ttId);
+            if (tt) {
+              if (!ttMap.has(tt.id)) {
+                ttMap.set(tt.id, { taskType: tt, count: 0, companies: new Set() });
+              }
+              const entry = ttMap.get(tt.id)!;
+              entry.count++;
+              entry.companies.add(task.company_id);
             }
-            const entry = ttMap.get(tt.id)!;
-            entry.count++;
-            entry.companies.add(task.company_id);
-          }
+          });
         }
       });
       const newTaskTypeStats = Array.from(ttMap.values()).sort((a, b) => b.count - a.count);

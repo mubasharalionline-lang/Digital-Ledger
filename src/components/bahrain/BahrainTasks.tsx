@@ -143,7 +143,7 @@ export default function BahrainTasks() {
     }
     if (search) {
       const s = search.toLowerCase();
-      const ttIds = t.task_type_ids && t.task_type_ids.length > 0 ? t.task_type_ids : (t.task_type_id ? [t.task_type_id] : []);
+      const ttIds = t.task_type_id ? t.task_type_id.split(',').map(s => s.trim()).filter(Boolean) : [];
       const comp = companies.find(c => c.id === t.company_id);
       const matchTitle = t.title?.toLowerCase().includes(s);
       const matchDesc = t.description?.toLowerCase().includes(s);
@@ -191,7 +191,7 @@ export default function BahrainTasks() {
 
   function openEditTask(task: Task) {
     setEditingTaskId(task.id);
-    const existingTypeIds = task.task_type_ids && task.task_type_ids.length > 0 ? task.task_type_ids : (task.task_type_id ? [task.task_type_id] : []);
+    const existingTypeIds = task.task_type_id ? task.task_type_id.split(',').map(s => s.trim()).filter(Boolean) : [];
     setNewTask({
       company_id: task.company_id || '',
       task_type_id: task.task_type_id || '',
@@ -255,8 +255,7 @@ export default function BahrainTasks() {
       const { data, error } = await supabase.from('tasks').update({
         title: combinedTitle,
         company_id: newTask.company_id,
-        task_type_id: primaryTtId,
-        task_type_ids: typeIds,
+        task_type_id: typeIds.join(','),
         priority: newTask.priority,
         deadline: newTask.deadline,
         description: desc,
@@ -269,8 +268,7 @@ export default function BahrainTasks() {
       const { data, error } = await supabase.from('tasks').insert({
         title: combinedTitle,
         company_id: newTask.company_id,
-        task_type_id: primaryTtId,
-        task_type_ids: typeIds,
+        task_type_id: typeIds.join(','),
         priority: newTask.priority,
         deadline: newTask.deadline,
         description: desc,
@@ -526,7 +524,7 @@ export default function BahrainTasks() {
               <tr><td colSpan={9} style={{ textAlign: 'center', padding: '40px', color: '#7F8C8D' }}>No tasks found</td></tr>
             ) : filtered.map(task => {
               const company = companies.find(c => c.id === task.company_id);
-              const ttIds = task.task_type_ids && task.task_type_ids.length > 0 ? task.task_type_ids : (task.task_type_id ? [task.task_type_id] : []);
+              const ttIds = task.task_type_id ? task.task_type_id.split(',').map(s => s.trim()).filter(Boolean) : [];
               const ttNames = ttIds.map(id => taskTypes.find(t => t.id === id)?.name).filter(Boolean);
               const primaryTt = taskTypes.find(t => t.id === ttIds[0]);
               const statusOptions = primaryTt?.status_options ? primaryTt.status_options.split(',').map(s => s.trim()) : dynamicStatuses;
@@ -660,7 +658,7 @@ export default function BahrainTasks() {
           }}>
             <div><strong>Company:</strong> {detailCompany?.company_name || 'Unknown'}</div>
             <div><strong>Type:</strong> {(() => {
-              const ids = detailTask.task_type_ids && detailTask.task_type_ids.length > 0 ? detailTask.task_type_ids : (detailTask.task_type_id ? [detailTask.task_type_id] : []);
+              const ids = detailTask.task_type_id ? detailTask.task_type_id.split(',').map(s => s.trim()).filter(Boolean) : [];
               const names = ids.map(id => taskTypes.find(t => t.id === id)?.name).filter(Boolean);
               return names.length > 0 ? names.join(', ') : detailTask.title;
             })()}</div>
