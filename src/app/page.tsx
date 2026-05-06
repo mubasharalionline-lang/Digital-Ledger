@@ -2,39 +2,63 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { loginUser, setSession } from '@/lib/auth';
-import { Building2, Lock, User, ArrowRight, Loader2 } from 'lucide-react';
+import { loginUser, setSession, getLoginCountries } from '@/lib/auth';
+import { Building2, Lock, User, ArrowRight, Loader2, Globe } from 'lucide-react';
 
 export default function LoginPage() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [countryOptions, setCountryOptions] = useState<string[]>([]);
+  const [showCountryPicker, setShowCountryPicker] = useState(false);
   const router = useRouter();
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent, selectedCountry?: string) => {
     e.preventDefault();
     setError('');
     setLoading(true);
 
     try {
-      const user = await loginUser(username, password);
+      const user = await loginUser(username, password, selectedCountry);
       if (user) {
         if (user.country) {
-          // User has a country set (staff always have one, admin may have one)
           setSession(user, user.country);
           router.push('/dashboard');
         } else if (user.role === 'admin') {
-          // Admin without country — default to Bahrain instead of forcing selection
           setSession(user, 'Bahrain');
           router.push('/dashboard');
         } else {
-          // Staff without country (edge case) — still go to dashboard
           setSession(user, 'Bahrain');
           router.push('/dashboard');
         }
       } else {
-        setError('Invalid username or password');
+        // Check if it's a disambiguation case (same creds, multiple countries)
+        const countries = await getLoginCountries(username, password);
+        if (countries.length > 1) {
+          setCountryOptions(countries);
+          setShowCountryPicker(true);
+          setError('');
+        } else {
+          setError('Invalid username or password');
+        }
+      }
+    } catch {
+      setError('Something went wrong. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCountrySelect = async (country: string) => {
+    setLoading(true);
+    try {
+      const user = await loginUser(username, password, country);
+      if (user) {
+        setSession(user, user.country || country);
+        router.push('/dashboard');
+      } else {
+        setError('Login failed. Please try again.');
       }
     } catch {
       setError('Something went wrong. Please try again.');
@@ -125,6 +149,49 @@ export default function LoginPage() {
               Work Management System
             </p>
           </div>
+          {showCountryPicker ? (
+            <div className="animate-fadeIn" style={{ padding: '0' }}>
+              <div style={{ textAlign: 'center', marginBottom: '20px' }}>
+                <Globe size={32} style={{ color: 'var(--accent)', marginBottom: '8px' }} />
+                <h3 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 4px 0' }}>
+                  Select Your Country
+                </h3>
+                <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: 0 }}>
+                  Your account exists in multiple countries
+                </p>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '16px' }}>
+                {countryOptions.map(country => (
+                  <button
+                    key={country}
+                    onClick={() => handleCountrySelect(country)}
+                    disabled={loading}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: '12px',
+                      padding: '14px 18px', border: '2px solid #E5E7EB', borderRadius: '12px',
+                      background: '#FAFAFA', cursor: 'pointer', fontSize: '15px', fontWeight: 600,
+                      color: 'var(--text-primary)', transition: 'all 0.2s ease', width: '100%',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.background = '#F0F7FF'; }}
+                    onMouseLeave={e => { e.currentTarget.style.borderColor = '#E5E7EB'; e.currentTarget.style.background = '#FAFAFA'; }}
+                  >
+                    <span style={{ fontSize: '22px' }}>{country === 'Bahrain' ? '🇧🇭' : country === 'New Zealand' ? '🇳🇿' : '🌍'}</span>
+                    {country}
+                    <ArrowRight size={16} style={{ marginLeft: 'auto', color: 'var(--text-tertiary)' }} />
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={() => { setShowCountryPicker(false); setCountryOptions([]); }}
+                style={{
+                  width: '100%', padding: '10px', background: 'transparent', border: '1px solid #D1D5DB',
+                  borderRadius: '8px', cursor: 'pointer', fontSize: '13px', color: 'var(--text-secondary)',
+                }}
+              >
+                ← Back to Login
+              </button>
+            </div>
+          ) : (
           <form onSubmit={handleLogin}>
             <div style={{ marginBottom: '20px' }}>
               <label className="label" htmlFor="username">Username</label>
@@ -208,6 +275,7 @@ export default function LoginPage() {
               )}
             </button>
           </form>
+          )}
         </div>
 
         <p style={{

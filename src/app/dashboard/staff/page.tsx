@@ -94,11 +94,17 @@ export default function StaffPage() {
     if (!formUsername.trim() || (!formPassword.trim() && !editUserId)) return;
     setSaving(true);
 
-    // Check if username already exists for a different user
+    // Check if username already exists for a different user in the SAME country
+    const dataCountry = getDataCountry();
     let existingQuery = supabase
       .from('users')
       .select('id')
       .eq('username', formUsername.trim());
+
+    // Scope uniqueness to the same country
+    if (dataCountry) {
+      existingQuery = existingQuery.eq('country', dataCountry);
+    }
 
     if (editUserId) {
       existingQuery = existingQuery.neq('id', editUserId);
@@ -107,7 +113,7 @@ export default function StaffPage() {
     const { data: existing } = await existingQuery.single();
 
     if (existing) {
-      setFormError('Username already exists');
+      setFormError('Username already exists in this country');
       setSaving(false);
       return;
     }
