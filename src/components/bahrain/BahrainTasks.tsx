@@ -3,10 +3,10 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import type { Task, Company, User, TaskType, StatusLog } from '@/lib/supabase';
+import type { Task, Company, User, TaskType, StatusLog, TaskMessage } from '@/lib/supabase';
 import { getDataCountry, getSession, isAdmin } from '@/lib/auth';
 import { BAHRAIN_PRIORITIES, BAHRAIN_STATUSES } from '@/lib/bahrain';
-import { Plus, Eye, Trash2, X, Edit2 } from 'lucide-react';
+import { Plus, Eye, Trash2, X, Edit2, MessageCircle, Send } from 'lucide-react';
 
 export default function BahrainTasks() {
   const { user: currentUser } = getSession();
@@ -27,6 +27,7 @@ export default function BahrainTasks() {
   const [filterPriority, setFilterPriority] = useState(searchParams.get('priority') || '');
   const [filterCompany, setFilterCompany] = useState(searchParams.get('company') || '');
   const [filterPartner, setFilterPartner] = useState(searchParams.get('partner') || '');
+  const [filterTaskType, setFilterTaskType] = useState(searchParams.get('taskType') || '');
   const [search, setSearch] = useState(searchParams.get('search') || '');
 
   // New Task modal
@@ -144,6 +145,11 @@ export default function BahrainTasks() {
       const hasPartner = (t.assigned_partners && t.assigned_partners.includes(filterPartner)) || t.assigned_to === filterPartner;
       if (!hasPartner) return false;
     }
+    // Task Type filter
+    if (filterTaskType) {
+      const ttIds = t.task_type_id ? t.task_type_id.split(',').map(s => s.trim()).filter(Boolean) : [];
+      if (!ttIds.includes(filterTaskType)) return false;
+    }
     if (search) {
       const s = search.toLowerCase();
       const ttIds = t.task_type_id ? t.task_type_id.split(',').map(s => s.trim()).filter(Boolean) : [];
@@ -164,6 +170,7 @@ export default function BahrainTasks() {
   async function handleStatusChange(taskId: string, newStatus: string) {
     const task = tasks.find(t => t.id === taskId);
     if (!task || task.status === newStatus) return;
+    const previousStatus = task.status;
 
     const { data, error } = await supabase.from('tasks').update({ status: newStatus }).eq('id', taskId).select();
     if (error) { console.error('Status update error:', error); return; }
@@ -172,18 +179,15 @@ export default function BahrainTasks() {
       return;
     }
     
+    // Always use the actual logged-in user for accurate tracking
     const { user } = getSession();
-    // In Bahrain, Admins act on behalf of the assigned partner for status updates
-    let updaterId = user?.id || null;
-    if (isAdminUser && dataCountry === 'Bahrain' && task.assigned_to) {
-      updaterId = task.assigned_to;
-    }
+    const updaterId = user?.id || null;
 
     await supabase.from('status_log').insert({
       task_id: taskId,
       status: newStatus,
       updated_by: updaterId,
-      remarks: `Status changed from ${task.status} to ${newStatus}`,
+      remarks: `${previousStatus} → ${newStatus}`,
     });
 
     sessionStorage.removeItem('tasks_data_time');
@@ -377,7 +381,10 @@ export default function BahrainTasks() {
   // Update status and partners from detail modal
   async function submitStatusUpdate() {
     if (!detailTask) return;
-    const byVal = updateBy && updateBy.length > 0 ? updateBy : null;
+    const previousStatus = detailTask.status;
+    // Always use the actual logged-in user for accurate tracking
+    const { user: sessionUser } = getSession();
+    const actualUpdaterId = sessionUser?.id || null;
     const assignTo = updatePartners.length > 0 ? updatePartners[0] : null;
 
     const { data, error: e1 } = await supabase.from('tasks').update({ 
@@ -390,11 +397,19 @@ export default function BahrainTasks() {
       alert('Update blocked by Supabase RLS. Contact admin.');
       return;
     }
+    // Build clear remarks showing transition + any custom notes
+    const transitionNote = previousStatus !== updateStatus 
+      ? `${previousStatus} → ${updateStatus}` 
+      : `Status unchanged (${updateStatus})`;
+    const fullRemarks = updateRemarks 
+      ? `${transitionNote} | ${updateRemarks}` 
+      : transitionNote;
+
     const { error: e2 } = await supabase.from('status_log').insert({
       task_id: detailTask.id,
       status: updateStatus,
-      updated_by: byVal,
-      remarks: updateRemarks || null,
+      updated_by: actualUpdaterId,
+      remarks: fullRemarks,
     });
     if (e2) console.error('Log error:', e2);
 
@@ -430,6 +445,81 @@ export default function BahrainTasks() {
       console.error('Delete exception:', err);
       alert('Exception during delete: ' + err.message);
     }
+  }
+
+  // --- Chat Feature ---
+  const [chatTask, setChatTask] = useState<Task | null>(null);
+  const [taskMessages, setTaskMessages] = useState<TaskMessage[]>([]);
+  const [newMessage, setNewMessage] = useState('');
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  async function openChat(task: Task) {
+    setChatTask(task);
+    setNewMessage('');
+    loadMessages(task.id);
+  }
+
+  async function loadMessages(taskId: string) {
+    const { data: messages, error } = await supabase
+      .from('task_messages')
+      .select('*')
+      .eq('task_id', taskId)
+      .order('created_at', { ascending: true });
+    
+    if (error) {
+      console.error('Error loading messages:', error);
+      return;
+    }
+
+    const { user: sessionUser } = getSession();
+    
+    // Resolve user details
+    const enrichedMessages = messages.map(msg => {
+      let username = 'Unknown';
+      let role = 'staff';
+      
+      const partner = partners.find(p => p.id === msg.sender_id);
+      if (partner) {
+        username = partner.username;
+        role = partner.role;
+      } else if (sessionUser && sessionUser.id === msg.sender_id) {
+        username = sessionUser.username;
+        role = sessionUser.role;
+      }
+
+      return {
+        ...msg,
+        sender: { username, role }
+      };
+    });
+
+    setTaskMessages(enrichedMessages as any);
+  }
+
+  useEffect(() => {
+    if (chatTask && messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [taskMessages, chatTask]);
+
+  async function sendMessage() {
+    if (!newMessage.trim() || !chatTask) return;
+    const { user: sessionUser } = getSession();
+    if (!sessionUser) return;
+
+    const { error } = await supabase.from('task_messages').insert({
+      task_id: chatTask.id,
+      sender_id: sessionUser.id,
+      message: newMessage.trim()
+    });
+
+    if (error) {
+      alert('Failed to send message: ' + error.message);
+      return;
+    }
+
+    setNewMessage('');
+    loadMessages(chatTask.id);
   }
 
   const priorityColor = (p: string) => {
@@ -501,6 +591,10 @@ export default function BahrainTasks() {
           <option value="">All Partners</option>
           {partners.map(p => <option key={p.id} value={p.id}>{p.username}</option>)}
         </select>
+        <select value={filterTaskType} onChange={e => setFilterTaskType(e.target.value)} style={filterStyle}>
+          <option value="">All Task Types</option>
+          {taskTypes.filter(t => t.active).map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+        </select>
         <input
           type="text"
           value={search}
@@ -508,6 +602,14 @@ export default function BahrainTasks() {
           placeholder="Search tasks..."
           style={{ ...filterStyle, flex: 1, minWidth: '180px' }}
         />
+        {(filterStatus || filterPriority || filterCompany || filterPartner || filterTaskType || search) && (
+          <button
+            onClick={() => { setFilterStatus(''); setFilterPriority(''); setFilterCompany(''); setFilterPartner(''); setFilterTaskType(''); setSearch(''); }}
+            style={{ padding: '10px 16px', background: '#EF4444', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 600, fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}
+          >
+            <X size={14} /> Clear Filters
+          </button>
+        )}
       </div>
 
       {/* Tasks Table */}
@@ -515,7 +617,7 @@ export default function BahrainTasks() {
         <table style={{ width: '100%', borderCollapse: 'collapse', background: 'var(--bg-card, #fff)' }}>
           <thead>
             <tr style={{ background: 'linear-gradient(135deg, #1E293B, #334155)', color: 'white' }}>
-              {['Task ID', 'Company', 'Type', 'Description', 'Priority', 'Due Date', 'Status', 'Assigned To', 'Actions'].map(h => (
+              {['Task ID', 'Company', 'Task Type', 'Description', 'Priority', 'Due Date', 'Status', 'Assigned To', 'Actions'].map(h => (
                 <th key={h} style={{ padding: '14px 14px', textAlign: 'left', fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.8px' }}>{h}</th>
               ))}
             </tr>
@@ -591,11 +693,12 @@ export default function BahrainTasks() {
                     )}
                   </td>
                   <td style={{ ...cellStyle, display: 'flex', gap: '6px' }}>
-                    <button onClick={() => viewDetail(task.id)} style={btnSmStyle('#5DADE2')}><Eye size={14} /></button>
+                    <button onClick={() => viewDetail(task.id)} style={btnSmStyle('#5DADE2')} title="View Details"><Eye size={14} /></button>
+                    <button onClick={() => openChat(task)} style={btnSmStyle('#8E44AD')} title="Chat / Messages"><MessageCircle size={14} /></button>
                     {isAdminUser && (
                       <>
-                        <button onClick={() => openEditTask(task)} style={btnSmStyle('#F39C12')}><Edit2 size={14} /></button>
-                        <button onClick={() => deleteTask(task.id)} style={btnSmStyle('#E74C3C')}><Trash2 size={14} /></button>
+                        <button onClick={() => openEditTask(task)} style={btnSmStyle('#F39C12')} title="Edit Task"><Edit2 size={14} /></button>
+                        <button onClick={() => deleteTask(task.id)} style={btnSmStyle('#E74C3C')} title="Delete Task"><Trash2 size={14} /></button>
                       </>
                     )}
                   </td>
@@ -736,6 +839,81 @@ export default function BahrainTasks() {
             {canUpdateStatus && (
               <button onClick={submitStatusUpdate} style={{ padding: '10px 20px', background: '#27AE60', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}>Update Status</button>
             )}
+          </div>
+        </Modal>
+      )}
+      {/* Chat Modal */}
+      {chatTask && (
+        <Modal title={`Task Discussion: #${chatTask.id.slice(0, 6)}`} onClose={() => setChatTask(null)}>
+          <div style={{
+            display: 'flex', flexDirection: 'column', height: '60vh', minHeight: '400px',
+            background: '#F8FAFC', borderRadius: '12px', border: '1px solid #E2E8F0', overflow: 'hidden'
+          }}>
+            {/* Messages Area */}
+            <div style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              {taskMessages.length === 0 ? (
+                <div style={{ textAlign: 'center', color: '#94A3B8', marginTop: 'auto', marginBottom: 'auto' }}>
+                  No messages yet. Start the conversation!
+                </div>
+              ) : (
+                taskMessages.map((msg, i) => {
+                  const isMine = msg.sender_id === currentUser?.id;
+                  const senderRole = msg.sender?.role || 'staff';
+                  const showHeader = i === 0 || taskMessages[i - 1].sender_id !== msg.sender_id;
+                  
+                  return (
+                    <div key={msg.id} style={{ alignSelf: isMine ? 'flex-end' : 'flex-start', maxWidth: '80%' }}>
+                      {showHeader && (
+                        <div style={{ fontSize: '12px', color: '#64748B', marginBottom: '4px', marginLeft: isMine ? 0 : '12px', marginRight: isMine ? '12px' : 0, textAlign: isMine ? 'right' : 'left' }}>
+                          <strong>{msg.sender?.username || 'Unknown'}</strong>
+                          {senderRole === 'admin' && <span style={{ marginLeft: '6px', background: '#E2E8F0', padding: '2px 6px', borderRadius: '10px', fontSize: '10px' }}>Admin</span>}
+                        </div>
+                      )}
+                      <div style={{
+                        background: isMine ? '#3B82F6' : '#FFFFFF',
+                        color: isMine ? '#FFFFFF' : '#1E293B',
+                        padding: '10px 16px',
+                        borderRadius: isMine ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
+                        boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                        border: isMine ? 'none' : '1px solid #E2E8F0',
+                        fontSize: '14px',
+                        lineHeight: '1.5'
+                      }}>
+                        {msg.message}
+                      </div>
+                      <div style={{ fontSize: '10px', color: '#94A3B8', marginTop: '4px', textAlign: isMine ? 'right' : 'left', marginLeft: isMine ? 0 : '12px', marginRight: isMine ? '12px' : 0 }}>
+                        {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+              <div ref={messagesEndRef} />
+            </div>
+
+            {/* Input Area */}
+            <div style={{ padding: '16px', background: '#FFFFFF', borderTop: '1px solid #E2E8F0', display: 'flex', gap: '12px' }}>
+              <input 
+                type="text" 
+                value={newMessage}
+                onChange={e => setNewMessage(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && sendMessage()}
+                placeholder="Type a message..."
+                style={{ flex: 1, padding: '12px 16px', border: '1px solid #CBD5E1', borderRadius: '24px', fontSize: '14px', outline: 'none' }}
+              />
+              <button 
+                onClick={sendMessage}
+                disabled={!newMessage.trim()}
+                style={{
+                  background: newMessage.trim() ? '#3B82F6' : '#94A3B8',
+                  color: '#FFFFFF', border: 'none', borderRadius: '50%', width: '44px', height: '44px',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: newMessage.trim() ? 'pointer' : 'not-allowed',
+                  transition: 'background 0.2s'
+                }}
+              >
+                <Send size={18} style={{ marginLeft: '2px' }} />
+              </button>
+            </div>
           </div>
         </Modal>
       )}

@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { loginUser, setSession, getLoginCountries } from '@/lib/auth';
+import { loginUser, setSession, getLoginCountries, getSession } from '@/lib/auth';
 import { Building2, Lock, User, ArrowRight, Loader2, Globe } from 'lucide-react';
 
 export default function LoginPage() {
@@ -12,7 +12,18 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [countryOptions, setCountryOptions] = useState<string[]>([]);
   const [showCountryPicker, setShowCountryPicker] = useState(false);
+  const [checkingSession, setCheckingSession] = useState(true);
   const router = useRouter();
+
+  // Persistent login: auto-redirect to dashboard if session exists
+  useEffect(() => {
+    const { user } = getSession();
+    if (user) {
+      router.push('/dashboard');
+    } else {
+      setCheckingSession(false);
+    }
+  }, [router]);
 
   const handleLogin = async (e: React.FormEvent, selectedCountry?: string) => {
     e.preventDefault();
@@ -66,6 +77,21 @@ export default function LoginPage() {
       setLoading(false);
     }
   };
+
+  // While checking persistent session, show nothing (prevents flash of login form)
+  if (checkingSession) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'linear-gradient(135deg, #f5f7fa 0%, #e4e8f0 50%, #d5dbe6 100%)',
+      }}>
+        <Loader2 size={32} style={{ animation: 'spin 1s linear infinite', color: '#0071e3' }} />
+      </div>
+    );
+  }
 
   return (
     <div style={{

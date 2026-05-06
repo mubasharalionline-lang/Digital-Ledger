@@ -90,3 +90,13 @@ export interface StatusLog {
   // joined
   updater?: User;
 }
+
+export interface TaskMessage {
+  id: string;
+  task_id: string;
+  sender_id: string;
+  message: string;
+  created_at: string;
+  // joined / enriched
+  sender?: { username: string; role?: string };
+}

@@ -36,7 +36,9 @@ export default function BahrainReports() {
 
       const [companiesRes, usersRes] = await Promise.all([
         supabase.from('companies').select('*').eq('country', dataCountry || 'Bahrain'),
-        supabase.from('users').select('*').eq('role', 'staff')
+        dataCountry 
+          ? supabase.from('users').select('*').eq('country', dataCountry).neq('role', 'admin')
+          : supabase.from('users').select('*').neq('role', 'admin')
       ]);
 
       const companyList = companiesRes.data || [];

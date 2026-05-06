@@ -4,18 +4,17 @@ import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import type { Company } from '@/lib/supabase';
 import { getDataCountry, getSession, isAdmin } from '@/lib/auth';
-import { BAHRAIN_JURISDICTIONS } from '@/lib/bahrain';
 import { Plus, Trash2, X } from 'lucide-react';
 
 export default function BahrainCompanies() {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
-  const [form, setForm] = useState({
-    name: '', country: 'Bahrain', tax_registration: '', industry: '', fy_end: '', compliance_type: '',
-  });
-
   const dataCountry = getDataCountry();
+
+  const [form, setForm] = useState({
+    name: '', country: dataCountry || 'Bahrain', tax_registration: '', industry: '', fy_end: '', compliance_type: '',
+  });
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -43,10 +42,12 @@ export default function BahrainCompanies() {
   useEffect(() => { loadData(); }, [loadData]);
 
   async function save() {
-    if (!form.name || !form.country) { alert('Please fill required fields'); return; }
+    // Always use the current data country — strict separation
+    const companyCountry = dataCountry || 'Bahrain';
+    if (!form.name) { alert('Please fill required fields'); return; }
     const { error } = await supabase.from('companies').insert({
       company_name: form.name,
-      country: form.country,
+      country: companyCountry,
       tax_registration: form.tax_registration || null,
       industry: form.industry || null,
       fy_end: form.fy_end || null,
@@ -60,7 +61,7 @@ export default function BahrainCompanies() {
     sessionStorage.removeItem('tasks_data_time');
     
     setShowModal(false);
-    setForm({ name: '', country: 'Bahrain', tax_registration: '', industry: '', fy_end: '', compliance_type: '' });
+    setForm({ name: '', country: dataCountry || 'Bahrain', tax_registration: '', industry: '', fy_end: '', compliance_type: '' });
     loadData();
     alert('Company added!');
   }
@@ -152,10 +153,8 @@ export default function BahrainCompanies() {
                 <Field label="Company Name *">
                   <input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} style={inpStyle} />
                 </Field>
-                <Field label="Country *">
-                  <select value={form.country} onChange={e => setForm(p => ({ ...p, country: e.target.value }))} style={inpStyle}>
-                    {BAHRAIN_JURISDICTIONS.filter(j => j !== 'All').map(j => <option key={j} value={j}>{j}</option>)}
-                  </select>
+                <Field label="Country">
+                  <input value={dataCountry || 'Bahrain'} readOnly style={{ ...inpStyle, background: '#F3F4F6', color: '#6B7280', cursor: 'not-allowed' }} title="Company will be created in the currently selected country" />
                 </Field>
                 <Field label="Tax Registration">
                   <input value={form.tax_registration} onChange={e => setForm(p => ({ ...p, tax_registration: e.target.value }))} style={inpStyle} />

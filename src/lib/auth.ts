@@ -1,5 +1,28 @@
 import { supabase, User } from './supabase';
 
+// ─── Cookie helpers (persistent across browser restarts) ───────────
+const COOKIE_USER_KEY = 'dl_user';
+const COOKIE_COUNTRY_KEY = 'dl_country';
+const COOKIE_MAX_AGE = 30 * 24 * 60 * 60; // 30 days in seconds
+
+function setCookie(name: string, value: string, maxAge: number = COOKIE_MAX_AGE) {
+  if (typeof document === 'undefined') return;
+  document.cookie = `${name}=${encodeURIComponent(value)};path=/;max-age=${maxAge};SameSite=Lax`;
+}
+
+function getCookie(name: string): string | null {
+  if (typeof document === 'undefined') return null;
+  const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+  return match ? decodeURIComponent(match[2]) : null;
+}
+
+function deleteCookie(name: string) {
+  if (typeof document === 'undefined') return;
+  document.cookie = `${name}=;path=/;max-age=0;SameSite=Lax`;
+}
+
+// ─── Auth functions ────────────────────────────────────────────────
+
 export async function loginUser(username: string, password: string, country?: string): Promise<User | null> {
   let query = supabase
     .from('users')
@@ -36,27 +59,62 @@ export async function getLoginCountries(username: string, password: string): Pro
   return data.map(u => u.country).filter(Boolean) as string[];
 }
 
+/**
+ * Persist session in both localStorage (fast reads) and cookies (survives browser restart).
+ * Cookies are set with a 30-day expiry for "remember me" behavior.
+ */
 export function setSession(user: User, country: string) {
   if (typeof window !== 'undefined') {
-    localStorage.setItem('dl_user', JSON.stringify(user));
+    const userJson = JSON.stringify(user);
+    // localStorage — fast, same-origin
+    localStorage.setItem('dl_user', userJson);
     localStorage.setItem('dl_country', country);
+    // Cookies — survive browser restart
+    setCookie(COOKIE_USER_KEY, userJson);
+    setCookie(COOKIE_COUNTRY_KEY, country);
   }
 }
 
+/**
+ * Read session from localStorage first (fast). If missing, try cookies (persistent).
+ * If recovered from cookies, re-populate localStorage for future fast reads.
+ */
 export function getSession(): { user: User | null; country: string | null } {
   if (typeof window === 'undefined') return { user: null, country: null };
-  const userStr = localStorage.getItem('dl_user');
-  const country = localStorage.getItem('dl_country');
+
+  let userStr = localStorage.getItem('dl_user');
+  let country = localStorage.getItem('dl_country');
+
+  // Fallback to cookies if localStorage is empty (e.g. after browser restart cleared storage)
+  if (!userStr) {
+    const cookieUser = getCookie(COOKIE_USER_KEY);
+    const cookieCountry = getCookie(COOKIE_COUNTRY_KEY);
+    if (cookieUser) {
+      userStr = cookieUser;
+      country = cookieCountry;
+      // Re-populate localStorage from cookies
+      localStorage.setItem('dl_user', cookieUser);
+      if (cookieCountry) localStorage.setItem('dl_country', cookieCountry);
+    }
+  }
+
   return {
     user: userStr ? JSON.parse(userStr) : null,
-    country,
+    country: country || null,
   };
 }
 
+/**
+ * Clear session from both localStorage and cookies (explicit logout).
+ */
 export function clearSession() {
   if (typeof window !== 'undefined') {
     localStorage.removeItem('dl_user');
     localStorage.removeItem('dl_country');
+    deleteCookie(COOKIE_USER_KEY);
+    deleteCookie(COOKIE_COUNTRY_KEY);
+    // Also clear any cached dashboard/task data
+    sessionStorage.clear();
   }
 }
 
@@ -64,12 +122,17 @@ export function isAdmin(user: User | null): boolean {
   return user?.role === 'admin';
 }
 
+/**
+ * Returns the country whose data should be loaded.
+ * - Non-admin users always see their own country's data.
+ * - Admins see the country they've selected in the session (defaults to Bahrain).
+ */
 export function getDataCountry(): string | null {
   const { user, country } = getSession();
   if (!user) return null;
   
-  // Staff always use their saved country
-  if (user.role === 'staff' && user.country && user.country !== 'undefined' && user.country !== 'null') {
+  // Non-admin (partner/staff) always use their own country
+  if (user.role !== 'admin' && user.country && user.country !== 'undefined' && user.country !== 'null') {
     return user.country;
   }
   
@@ -78,5 +141,5 @@ export function getDataCountry(): string | null {
     return country;
   }
   
-  return 'Bahrain'; // Default fallback
+  return 'Bahrain'; // Default fallback — Bahrain is the default country
 }
