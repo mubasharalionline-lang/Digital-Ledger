@@ -3,8 +3,8 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { getSession, isAdmin } from '@/lib/auth';
-import { Plus, Trash2, Edit2, Loader2, Save, X } from 'lucide-react';
+import { getSession, isAdmin, getDataCountry } from '@/lib/auth';
+import { Plus, Trash2, Edit2, Loader2, Save, X, ToggleLeft, ToggleRight } from 'lucide-react';
 
 export default function EditsPage() {
   const [activeTab, setActiveTab] = useState<'statuses' | 'roles'>('statuses');
@@ -32,9 +32,8 @@ export default function EditsPage() {
 
   async function loadData() {
     setLoading(true);
-    const { country } = getSession();
+    const country = getDataCountry();
     
-    // Fallback if table doesn't exist yet
     try {
       let statusQuery = supabase.from('statuses').select('*').order('created_at', { ascending: true });
       let rolesQuery = supabase.from('roles').select('*').order('created_at', { ascending: true });
@@ -57,18 +56,24 @@ export default function EditsPage() {
 
   async function handleAdd() {
     if (!newName.trim()) return;
-    const { country } = getSession();
+    const country = getDataCountry();
     const table = activeTab === 'statuses' ? 'statuses' : 'roles';
     
-    const { error } = await supabase.from(table).insert({
+    const insertData: any = {
       name: newName.trim(),
       country: country || null
-    });
+    };
+    // For statuses, default to active
+    if (activeTab === 'statuses') {
+      insertData.active = true;
+    }
+    
+    const { error } = await supabase.from(table).insert(insertData);
     
     if (error) {
       alert('Error creating: ' + error.message);
     } else {
-      sessionStorage.removeItem('tasks_data_time');
+      invalidateCache();
       setNewName('');
       setIsAdding(false);
       loadData();
@@ -86,9 +91,22 @@ export default function EditsPage() {
     if (error) {
       alert('Error updating: ' + error.message);
     } else {
-      sessionStorage.removeItem('tasks_data_time');
+      invalidateCache();
       setEditingId(null);
       setEditName('');
+      loadData();
+    }
+  }
+
+  async function handleToggleActive(id: string, currentActive: boolean) {
+    const { error } = await supabase.from('statuses').update({
+      active: !currentActive
+    }).eq('id', id);
+    
+    if (error) {
+      alert('Error toggling status: ' + error.message);
+    } else {
+      invalidateCache();
       loadData();
     }
   }
@@ -100,9 +118,14 @@ export default function EditsPage() {
     const { error } = await supabase.from(table).delete().eq('id', id);
     if (error) alert('Error deleting: ' + error.message);
     else {
-      sessionStorage.removeItem('tasks_data_time');
+      invalidateCache();
       loadData();
     }
+  }
+
+  function invalidateCache() {
+    sessionStorage.removeItem('tasks_data_time');
+    sessionStorage.removeItem('dashboard_data_time_v2');
   }
 
   const activeData = activeTab === 'statuses' ? statuses : roles;
@@ -160,6 +183,11 @@ export default function EditsPage() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
             <h2 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--text-primary)' }}>
               {activeTab === 'statuses' ? 'Statuses' : 'Roles'}
+              {activeTab === 'statuses' && (
+                <span style={{ fontSize: '13px', fontWeight: 400, color: 'var(--text-tertiary)', marginLeft: '8px' }}>
+                  ({statuses.filter(s => s.active !== false).length} active / {statuses.length} total)
+                </span>
+              )}
             </h2>
             {!isAdding && (
               <button className="btn btn-primary" onClick={() => setIsAdding(true)}>
@@ -203,15 +231,21 @@ export default function EditsPage() {
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {activeData.map((item) => (
+              {activeData.map((item) => {
+                const isActive = item.active !== false; // default to true if column doesn't exist yet
+                const isStatus = activeTab === 'statuses';
+                
+                return (
                 <div key={item.id} style={{
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
                   padding: '12px 16px',
-                  background: 'var(--bg-secondary)',
-                  border: '1px solid var(--border-light)',
-                  borderRadius: '8px'
+                  background: isStatus && !isActive ? 'var(--bg-tertiary)' : 'var(--bg-secondary)',
+                  border: `1px solid ${isStatus && !isActive ? 'var(--border-light)' : 'var(--border-light)'}`,
+                  borderRadius: '8px',
+                  opacity: isStatus && !isActive ? 0.6 : 1,
+                  transition: 'all 0.2s ease'
                 }}>
                   {editingId === item.id ? (
                     <div style={{ display: 'flex', gap: '10px', flex: 1, alignItems: 'center', marginRight: '16px' }}>
@@ -232,8 +266,40 @@ export default function EditsPage() {
                     </div>
                   ) : (
                     <>
-                      <div style={{ fontWeight: 500, color: 'var(--text-primary)' }}>{item.name}</div>
-                      <div style={{ display: 'flex', gap: '12px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div style={{ fontWeight: 500, color: isStatus && !isActive ? 'var(--text-tertiary)' : 'var(--text-primary)' }}>
+                          {item.name}
+                        </div>
+                        {isStatus && (
+                          <span style={{
+                            fontSize: '11px',
+                            fontWeight: 600,
+                            padding: '2px 8px',
+                            borderRadius: '10px',
+                            background: isActive ? '#ECFDF5' : '#FEF2F2',
+                            color: isActive ? '#059669' : '#DC2626',
+                            border: `1px solid ${isActive ? '#A7F3D0' : '#FECACA'}`,
+                          }}>
+                            {isActive ? 'Active' : 'Inactive'}
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                        {/* Active/Deactivate toggle for statuses only */}
+                        {isStatus && (
+                          <button
+                            onClick={() => handleToggleActive(item.id, isActive)}
+                            style={{ 
+                              background: 'none', border: 'none', 
+                              color: isActive ? '#059669' : '#9CA3AF', 
+                              cursor: 'pointer',
+                              transition: 'color 0.2s'
+                            }}
+                            title={isActive ? 'Deactivate' : 'Activate'}
+                          >
+                            {isActive ? <ToggleRight size={22} /> : <ToggleLeft size={22} />}
+                          </button>
+                        )}
                         <button
                           onClick={() => { setEditingId(item.id); setEditName(item.name); setIsAdding(false); }}
                           style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}
@@ -252,7 +318,7 @@ export default function EditsPage() {
                     </>
                   )}
                 </div>
-              ))}
+              )})}
             </div>
           )}
         </div>

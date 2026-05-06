@@ -84,14 +84,17 @@ export default function BahrainTasks() {
         supabase.from('task_types').select('*').eq('active', true),
         usersQuery,
         dataCountry 
-          ? supabase.from('statuses').select('name').eq('country', dataCountry) 
-          : supabase.from('statuses').select('name')
+          ? supabase.from('statuses').select('name, active').eq('country', dataCountry) 
+          : supabase.from('statuses').select('name, active')
       ]);
 
       const companyList = compsRes.data || [];
       const ttList = ttRes.data || [];
       const usersList = usersRes.data || [];
-      const dbStatuses = statusRes.data?.map(s => s.name) || [];
+      // Only include active statuses (active !== false handles missing column gracefully)
+      const dbStatuses = statusRes.data
+        ?.filter(s => s.active !== false)
+        .map(s => s.name) || [];
       
       if (dbStatuses.length > 0) {
         setDynamicStatuses([...new Set(dbStatuses)] as string[]);
