@@ -484,10 +484,8 @@ export default function BahrainTasks() {
           <option value="">All Status</option>
           {(() => {
             const allStatuses = new Set<string>(dynamicStatuses);
+            // Also include any status currently on a task (e.g. deactivated statuses still in use)
             tasks.forEach(t => { if (t.status) allStatuses.add(t.status); });
-            taskTypes.forEach(tt => {
-              if (tt.status_options) tt.status_options.split(',').map(s => s.trim()).filter(Boolean).forEach(s => allStatuses.add(s));
-            });
             return Array.from(allStatuses).map(s => <option key={s} value={s}>{s}</option>);
           })()}
         </select>
@@ -530,7 +528,9 @@ export default function BahrainTasks() {
               const ttIds = task.task_type_id ? task.task_type_id.split(',').map(s => s.trim()).filter(Boolean) : [];
               const ttNames = ttIds.map(id => taskTypes.find(t => t.id === id)?.name).filter(Boolean);
               const primaryTt = taskTypes.find(t => t.id === ttIds[0]);
-              const statusOptions = primaryTt?.status_options ? primaryTt.status_options.split(',').map(s => s.trim()) : dynamicStatuses;
+              // Always use dynamic statuses from the Edits section; include task's current status if deactivated
+              const statusOptions = [...dynamicStatuses];
+              if (task.status && !statusOptions.includes(task.status)) statusOptions.unshift(task.status);
               const pc = priorityColor(task.priority);
 
               return (
