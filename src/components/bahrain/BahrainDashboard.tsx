@@ -14,6 +14,7 @@ import {
   ChevronRight,
   ArrowUpRight,
   BarChart3,
+  CalendarDays,
 } from 'lucide-react';
 
 interface UrgentClient {
@@ -38,6 +39,7 @@ interface PartnerWorkload {
 
 export default function BahrainDashboard() {
   const [totalTasks, setTotalTasks] = useState(0);
+  const [totalDailyTasks, setTotalDailyTasks] = useState(0);
   const [overdueTasks, setOverdueTasks] = useState(0);
   const [activePartners, setActivePartners] = useState(0);
   const [totalCompanies, setTotalCompanies] = useState(0);
@@ -63,6 +65,7 @@ export default function BahrainDashboard() {
         try {
           const parsed = JSON.parse(cachedData);
           setTotalTasks(parsed.totalTasks);
+          setTotalDailyTasks(parsed.totalDailyTasks || 0);
           setTotalCompanies(parsed.totalCompanies);
           setActivePartners(parsed.activePartners);
           setOverdueTasks(parsed.overdueTasks);
@@ -88,7 +91,7 @@ export default function BahrainDashboard() {
       const [companiesRes, usersRes, taskTypesRes] = await Promise.all([
         supabase.from('companies').select('*').eq('country', dataCountry || 'Bahrain'),
         dataCountry ? supabase.from('users').select('*').eq('country', dataCountry).neq('role', 'admin') : supabase.from('users').select('*').neq('role', 'admin'),
-        supabase.from('task_types').select('*')
+        supabase.from('task_types').select('*').eq('country', dataCountry || 'Bahrain')
       ]);
 
       const companyList = companiesRes.data || [];
@@ -100,7 +103,7 @@ export default function BahrainDashboard() {
       // Fetch tasks (depends on companyIds)
       let taskList: Task[] = [];
       if (companyIds.length > 0) {
-        let taskQuery = supabase.from('tasks').select('*').in('company_id', companyIds);
+        let taskQuery = supabase.from('tasks').select('*').in('company_id', companyIds).neq('is_daily', true);
         if (!isAdminUser && currentUser) {
           taskQuery = taskQuery.eq('assigned_to', currentUser.id);
         }
@@ -110,6 +113,13 @@ export default function BahrainDashboard() {
       
       const newTotalTasks = taskList.length;
       setTotalTasks(newTotalTasks);
+
+      // Fetch daily tasks
+      const { count: dailyCount } = await supabase.from('tasks')
+        .select('*', { count: 'exact', head: true })
+        .eq('is_daily', true)
+        .eq('country', dataCountry || 'Bahrain');
+      setTotalDailyTasks(dailyCount || 0);
 
       // Overdue count
       const today = new Date();
@@ -211,6 +221,7 @@ export default function BahrainDashboard() {
       const serializableTaskTypeStats = newTaskTypeStats.map(s => ({ ...s, companies: Array.from(s.companies) }));
       sessionStorage.setItem(cacheKey, JSON.stringify({
         totalTasks: newTotalTasks,
+        totalDailyTasks: dailyCount || 0,
         totalCompanies: newTotalCompanies,
         activePartners: (usersRes.data || []).length,
         overdueTasks: newOverdueTasks,
@@ -232,93 +243,72 @@ export default function BahrainDashboard() {
 
   if (loading) {
     return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
-        <div style={{ fontSize: '18px', color: 'var(--text-secondary, #666)' }}>Loading dashboard...</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', padding: '20px 0', maxWidth: '1200px', margin: '0 auto' }}>
+        <div style={{ height: '110px', borderRadius: '24px', background: 'linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%)', backgroundSize: '200% 100%' }} />
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
+          {[1,2,3,4,5].map(i => <div key={i} style={{ height: '130px', borderRadius: '18px', background: 'linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%)', backgroundSize: '200% 100%' }} />)}
+        </div>
       </div>
     );
   }
 
+  const greet = (() => { const h = new Date().getHours(); return h < 12 ? 'Good Morning' : h < 17 ? 'Good Afternoon' : 'Good Evening'; })();
+
   return (
     <div style={{ paddingBottom: '40px', maxWidth: '1200px', margin: '0 auto' }}>
       
-      <div style={{ marginBottom: '32px', padding: '24px 28px', background: 'linear-gradient(135deg, #1E293B 0%, #334155 100%)', borderRadius: '16px', color: '#fff' }}>
-        <h1 style={{ fontSize: '26px', fontWeight: 700, color: '#fff', margin: '0 0 6px 0', letterSpacing: '-0.5px' }}>Dashboard Overview</h1>
-        <p style={{ fontSize: '14px', color: '#94A3B8', margin: 0 }}>Monitor tasks, clients, and deadlines across your operations.</p>
+      <div style={{ marginBottom: '32px', padding: '32px 36px', background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 40%, #334155 100%)', borderRadius: '24px', color: '#fff', position: 'relative', overflow: 'hidden', boxShadow: '0 8px 32px rgba(15,23,42,0.2)' }}>
+        <div style={{ position: 'absolute', top: '-40px', right: '-20px', width: '200px', height: '200px', borderRadius: '50%', background: 'rgba(59,130,246,0.08)' }} />
+        <div style={{ position: 'absolute', bottom: '-60px', right: '100px', width: '160px', height: '160px', borderRadius: '50%', background: 'rgba(139,92,246,0.06)' }} />
+        <div style={{ position: 'relative', zIndex: 1 }}>
+          <p style={{ fontSize: '13px', color: '#64748b', margin: '0 0 4px 0', fontWeight: 600, letterSpacing: '0.5px', textTransform: 'uppercase' }}>{greet}</p>
+          <h1 style={{ fontSize: '28px', fontWeight: 800, color: '#fff', margin: '0 0 8px 0', letterSpacing: '-0.5px' }}>Dashboard Overview</h1>
+          <p style={{ fontSize: '14px', color: '#94a3b8', margin: 0 }}>Monitor tasks, clients, and deadlines across your operations.</p>
+        </div>
       </div>
 
       {/* Stats Grid */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-        gap: '20px',
-        marginBottom: '32px',
-      }}>
-        <StatCard 
-          icon={<ListTodo size={20} />} 
-          label="Total Tasks" 
-          value={totalTasks} 
-          colorHex="#3B82F6" 
-          onClick={() => router.push('/dashboard/tasks')}
-        />
-        <StatCard 
-          icon={<AlertTriangle size={20} />} 
-          label="Overdue Tasks" 
-          value={overdueTasks} 
-          colorHex="#EF4444" 
-          onClick={() => router.push('/dashboard/tasks')}
-        />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '32px' }}>
+        <StatCard icon={<ListTodo size={22} />} label="Total Tasks" value={totalTasks} colorHex="#3b82f6" onClick={() => router.push('/dashboard/tasks')} />
+        <StatCard icon={<AlertTriangle size={22} />} label="Overdue" value={overdueTasks} colorHex="#ef4444" onClick={() => router.push('/dashboard/tasks')} />
         {isAdmin(getSession().user) && (
           <>
-            <StatCard 
-              icon={<UsersIcon size={20} />} 
-              label="Active Partners" 
-              value={activePartners} 
-              colorHex="#10B981" 
-              onClick={() => router.push('/dashboard/staff')}
-            />
-            <StatCard 
-              icon={<Building2 size={20} />} 
-              label="Total Companies" 
-              value={totalCompanies} 
-              colorHex="#F59E0B" 
-              onClick={() => router.push('/dashboard/companies')}
-            />
+            <StatCard icon={<UsersIcon size={22} />} label="Partners" value={activePartners} colorHex="#10b981" onClick={() => router.push('/dashboard/staff')} />
+            <StatCard icon={<Building2 size={22} />} label="Companies" value={totalCompanies} colorHex="#f59e0b" onClick={() => router.push('/dashboard/companies')} />
+            <StatCard icon={<CalendarDays size={22} />} label="Daily Tasks" value={totalDailyTasks} colorHex="#8b5cf6" onClick={() => router.push('/dashboard/daily-tasks')} />
           </>
         )}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '24px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '20px' }}>
         
         {/* Urgent Clients */}
         <div style={panelStyle}>
           <div style={panelHeaderStyle}>
-            <h3 style={panelTitleStyle}>
-              <AlertTriangle size={18} color="#EF4444" /> Urgent Clients
-            </h3>
-            <span style={badgeStyle}>Due ≤ 7 days or Urgent</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div style={{ background: '#fef2f2', color: '#ef4444', width: '36px', height: '36px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><AlertTriangle size={18} /></div>
+              <h3 style={{ ...panelTitleStyle, margin: 0 }}>Urgent Clients</h3>
+            </div>
+            <span style={badgeStyle}>Due ≤ 7 days</span>
           </div>
-          
           <div style={listContainerStyle}>
             {urgentClients.length === 0 ? (
-              <EmptyState message="No urgent clients at the moment" icon="🎉" />
+              <EmptyState message="No urgent clients right now" icon="🎉" />
             ) : (
               urgentClients.map(({ company, tasks, overdueCount }) => (
-                <div key={company.id} 
-                  onClick={() => router.push(`/dashboard/tasks?company=${company.id}`)}
-                  style={{...listItemStyle, background: '#FEF2F2', borderColor: '#FCA5A5'}}
-                  onMouseEnter={e => { e.currentTarget.style.background = '#FEE2E2'; e.currentTarget.style.borderColor = '#F87171'; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = '#FEF2F2'; e.currentTarget.style.borderColor = '#FCA5A5'; }}
+                <div key={company.id} onClick={() => router.push(`/dashboard/tasks?company=${company.id}`)}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', border: '1px solid #fecaca', borderLeft: '4px solid #ef4444', borderRadius: '12px', background: '#fef2f2', cursor: 'pointer', transition: 'all 0.2s ease' }}
+                  onMouseEnter={e => { e.currentTarget.style.background = '#fee2e2'; e.currentTarget.style.transform = 'translateX(4px)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = '#fef2f2'; e.currentTarget.style.transform = 'none'; }}
                 >
                   <div>
-                    <div style={itemTitleStyle}>{company.company_name}</div>
-                    <div style={itemSubtitleStyle}>
-                      <span style={{ color: '#EF4444', fontWeight: 500 }}>{tasks.length} task{tasks.length > 1 ? 's' : ''}</span>
-                      {overdueCount > 0 ? <span style={{ color: '#B91C1C' }}> • {overdueCount} overdue</span> : 
-                       tasks.some(t => t.priority === 'Urgent' || t.priority === 'Critical') ? <span style={{ color: '#B91C1C' }}> • Urgent priority</span> :
-                       <span> • Due soon</span>}
+                    <div style={{ fontSize: '14px', fontWeight: 600, color: '#0f172a', marginBottom: '4px' }}>{company.company_name}</div>
+                    <div style={{ fontSize: '12px', color: '#64748b' }}>
+                      <span style={{ color: '#ef4444', fontWeight: 600 }}>{tasks.length} task{tasks.length > 1 ? 's' : ''}</span>
+                      {overdueCount > 0 && <span style={{ color: '#b91c1c' }}> · {overdueCount} overdue</span>}
                     </div>
                   </div>
-                  <ChevronRight size={18} color="#9CA3AF" />
+                  <ChevronRight size={16} color="#94a3b8" />
                 </div>
               ))
             )}
@@ -329,43 +319,30 @@ export default function BahrainDashboard() {
         {taskTypeStats.length > 0 && (
           <div style={panelStyle}>
             <div style={panelHeaderStyle}>
-              <h3 style={panelTitleStyle}>
-                <ListTodo size={18} color="#10B981" /> Tasks by Category
-              </h3>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ background: '#ecfdf5', color: '#10b981', width: '36px', height: '36px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><ListTodo size={18} /></div>
+                <h3 style={{ ...panelTitleStyle, margin: 0 }}>Tasks by Category</h3>
+              </div>
             </div>
-            
             <div style={listContainerStyle}>
               {taskTypeStats.map(({ taskType, count, companies }, idx) => {
-                const categoryColors = ['#3B82F6', '#10B981', '#8B5CF6', '#F59E0B', '#EC4899', '#14B8A6'];
-                const catColor = categoryColors[idx % categoryColors.length];
+                const colors = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ec4899', '#14b8a6'];
+                const c = colors[idx % colors.length];
                 return (
-                <div key={taskType.id} 
-                  onClick={() => router.push(`/dashboard/tasks?search=${encodeURIComponent(taskType.name)}`)}
-                  style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    padding: '12px 16px',
-                    cursor: 'pointer', background: '#FAFAFA', borderRadius: '10px', border: '1px solid #E5E7EB', marginBottom: '8px',
-                    transition: 'all 0.2s ease'
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.background = '#F3F4F6'; e.currentTarget.style.borderColor = catColor; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = '#FAFAFA'; e.currentTarget.style.borderColor = '#E5E7EB'; }}
+                <div key={taskType.id} onClick={() => router.push(`/dashboard/tasks?search=${encodeURIComponent(taskType.name)}`)}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', cursor: 'pointer', background: '#ffffff', borderRadius: '12px', border: '1px solid #f1f5f9', transition: 'all 0.2s ease' }}
+                  onMouseEnter={e => { e.currentTarget.style.background = '#f8fafc'; e.currentTarget.style.borderColor = c; e.currentTarget.style.transform = 'translateX(4px)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = '#ffffff'; e.currentTarget.style.borderColor = '#f1f5f9'; e.currentTarget.style.transform = 'none'; }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <div style={{ 
-                      width: '36px', height: '36px', borderRadius: '8px', 
-                      background: `${catColor}20`, color: catColor, 
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', 
-                      fontSize: '14px', fontWeight: 700 
-                    }}>
-                      {idx + 1}
-                    </div>
+                    <div style={{ width: '38px', height: '38px', borderRadius: '10px', background: `${c}12`, color: c, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', fontWeight: 800 }}>{idx + 1}</div>
                     <div>
-                      <div style={{ fontSize: '14px', fontWeight: 600, color: '#111827' }}>{taskType.name}</div>
-                      <div style={{ fontSize: '12px', color: '#6B7280' }}>🏢 {companies.size} {companies.size === 1 ? 'company' : 'companies'}</div>
+                      <div style={{ fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>{taskType.name}</div>
+                      <div style={{ fontSize: '12px', color: '#94a3b8' }}>{companies.size} {companies.size === 1 ? 'company' : 'companies'}</div>
                     </div>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <div style={{ fontSize: '15px', fontWeight: 700, color: catColor }}>{count}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <span style={{ fontSize: '18px', fontWeight: 800, color: c }}>{count}</span>
                     <ChevronRight size={16} color="#D1D5DB" />
                   </div>
                 </div>
@@ -378,46 +355,42 @@ export default function BahrainDashboard() {
         {isAdmin(getSession().user) && partnerWorkloads.length > 0 && (
           <div style={panelStyle}>
             <div style={panelHeaderStyle}>
-              <h3 style={panelTitleStyle}>
-                <UsersIcon size={18} color="#8B5CF6" /> Partner Workload
-              </h3>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ background: '#f5f3ff', color: '#8b5cf6', width: '36px', height: '36px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><UsersIcon size={18} /></div>
+                <h3 style={{ ...panelTitleStyle, margin: 0 }}>Partner Workload</h3>
+              </div>
               <span style={badgeStyle}>{partnerWorkloads.length} active</span>
             </div>
             <div style={listContainerStyle}>
               {partnerWorkloads.map((pw, idx) => {
                 const { partner, totalTasks: total, completedTasks, overdueTasks: overdue, inProgressTasks } = pw;
-                const completionPct = total > 0 ? Math.round((completedTasks / total) * 100) : 0;
-                const colors = ['#8B5CF6', '#3B82F6', '#10B981', '#F59E0B', '#EC4899', '#14B8A6'];
-                const pColor = colors[idx % colors.length];
+                const pct = total > 0 ? Math.round((completedTasks / total) * 100) : 0;
+                const colors = ['#8b5cf6', '#3b82f6', '#10b981', '#f59e0b', '#ec4899', '#14b8a6'];
+                const c = colors[idx % colors.length];
                 return (
-                  <div key={partner.id} style={{
-                    padding: '14px 16px', borderRadius: '12px', background: '#FAFAFA',
-                    border: overdue > 0 ? '1px solid #FCA5A5' : '1px solid #E5E7EB',
-                  }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <div style={{
-                          width: '34px', height: '34px', borderRadius: '50%',
-                          background: `linear-gradient(135deg, ${pColor}, ${pColor}CC)`,
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          fontSize: '13px', fontWeight: 700, color: '#fff',
-                        }}>
+                  <div key={partner.id} style={{ padding: '16px', borderRadius: '14px', background: '#ffffff', border: overdue > 0 ? '1px solid #fecaca' : '1px solid #f1f5f9', transition: 'all 0.2s ease' }}
+                    onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.06)'}
+                    onMouseLeave={e => e.currentTarget.style.boxShadow = 'none'}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: `linear-gradient(135deg, ${c}, ${c}cc)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '15px', fontWeight: 700, color: '#fff' }}>
                           {partner.username.charAt(0).toUpperCase()}
                         </div>
                         <div>
-                          <div style={{ fontSize: '14px', fontWeight: 600, color: '#111827' }}>{partner.username}</div>
-                          <div style={{ fontSize: '12px', color: '#6B7280' }}>{total} task{total !== 1 ? 's' : ''}</div>
+                          <div style={{ fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>{partner.username}</div>
+                          <div style={{ fontSize: '12px', color: '#94a3b8' }}>{total} task{total !== 1 ? 's' : ''} assigned</div>
                         </div>
                       </div>
-                      <div style={{ fontSize: '18px', fontWeight: 700, color: pColor }}>{completionPct}%</div>
+                      <div style={{ fontSize: '20px', fontWeight: 800, color: c, background: `${c}10`, padding: '4px 12px', borderRadius: '10px' }}>{pct}%</div>
                     </div>
-                    <div style={{ background: '#E5E7EB', height: '6px', borderRadius: '3px', overflow: 'hidden', marginBottom: '8px' }}>
-                      <div style={{ width: `${completionPct}%`, height: '100%', background: `linear-gradient(90deg, ${pColor}, ${pColor}AA)`, borderRadius: '3px', transition: 'width 0.8s ease-out' }} />
+                    <div style={{ background: '#f1f5f9', height: '8px', borderRadius: '4px', overflow: 'hidden', marginBottom: '10px' }}>
+                      <div style={{ width: `${pct}%`, height: '100%', background: `linear-gradient(90deg, ${c}, ${c}aa)`, borderRadius: '4px', transition: 'width 1s ease-out' }} />
                     </div>
-                    <div style={{ display: 'flex', gap: '12px', fontSize: '11px' }}>
-                      <span style={{ color: '#10B981', fontWeight: 600 }}>✓ {completedTasks} done</span>
-                      <span style={{ color: '#3B82F6', fontWeight: 600 }}>⟳ {inProgressTasks} active</span>
-                      {overdue > 0 && <span style={{ color: '#EF4444', fontWeight: 600 }}>⚠ {overdue} overdue</span>}
+                    <div style={{ display: 'flex', gap: '16px', fontSize: '12px' }}>
+                      <span style={{ color: '#10b981', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}><span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10b981', display: 'inline-block' }} />{completedTasks} done</span>
+                      <span style={{ color: '#3b82f6', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}><span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#3b82f6', display: 'inline-block' }} />{inProgressTasks} active</span>
+                      {overdue > 0 && <span style={{ color: '#ef4444', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}><span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#ef4444', display: 'inline-block' }} />{overdue} overdue</span>}
                     </div>
                   </div>
                 );
@@ -429,40 +402,29 @@ export default function BahrainDashboard() {
         {/* Tasks by Status */}
         <div style={panelStyle}>
           <div style={panelHeaderStyle}>
-            <h3 style={panelTitleStyle}>
-              <BarChart3 size={18} color="#3B82F6" /> Tasks by Status
-            </h3>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div style={{ background: '#eff6ff', color: '#3b82f6', width: '36px', height: '36px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><BarChart3 size={18} /></div>
+              <h3 style={{ ...panelTitleStyle, margin: 0 }}>Tasks by Status</h3>
+            </div>
           </div>
-          
-          <div style={{ ...listContainerStyle, gap: '16px', padding: '8px 0' }}>
+          <div style={{ ...listContainerStyle, gap: '14px' }}>
             {Object.keys(statusCounts).length === 0 ? (
               <EmptyState message="No status data available" />
             ) : (
               Object.entries(statusCounts)
                 .sort((a, b) => b[1] - a[1])
                 .map(([status, count]) => {
-                const pct = totalTasks > 0 ? (count / totalTasks * 100).toFixed(1) : '0';
+                const pct = totalTasks > 0 ? (count / totalTasks * 100) : 0;
                 const barColor = getStatusColor(status);
                 return (
-                  <div key={status} 
-                    onClick={() => router.push(`/dashboard/tasks?status=${encodeURIComponent(status)}`)}
-                    style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}
+                  <div key={status} onClick={() => router.push(`/dashboard/tasks?status=${encodeURIComponent(status)}`)}
+                    style={{ display: 'flex', alignItems: 'center', gap: '14px', cursor: 'pointer', padding: '2px 0' }}
                   >
-                    <div style={{ width: '140px', fontSize: '13px', color: '#374151', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {status}
+                    <div style={{ width: '120px', fontSize: '13px', color: '#334155', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{status}</div>
+                    <div style={{ flex: 1, background: '#f1f5f9', height: '10px', borderRadius: '5px', overflow: 'hidden' }}>
+                      <div style={{ width: `${pct}%`, height: '100%', background: `linear-gradient(90deg, ${barColor}, ${barColor}bb)`, borderRadius: '5px', transition: 'width 1s ease-out', minWidth: count > 0 ? '4px' : '0px' }} />
                     </div>
-                    <div style={{ flex: 1, background: '#F3F4F6', height: '10px', borderRadius: '5px', overflow: 'hidden', border: '1px solid #E5E7EB' }}>
-                      <div style={{
-                        width: `${pct}%`,
-                        height: '100%',
-                        background: barColor,
-                        borderRadius: '5px',
-                        transition: 'width 1s ease-out'
-                      }} />
-                    </div>
-                    <div style={{ width: '30px', textAlign: 'right', fontSize: '13px', color: '#6B7280', fontWeight: 600 }}>
-                      {count}
-                    </div>
+                    <div style={{ minWidth: '36px', textAlign: 'center', fontSize: '13px', fontWeight: 700, color: barColor, background: `${barColor}12`, padding: '2px 8px', borderRadius: '6px' }}>{count}</div>
                   </div>
                 );
               })
@@ -473,169 +435,101 @@ export default function BahrainDashboard() {
         {/* Upcoming Deadlines */}
         <div style={panelStyle}>
           <div style={panelHeaderStyle}>
-            <h3 style={panelTitleStyle}>
-              <Clock size={18} color="#F59E0B" /> Upcoming Deadlines
-            </h3>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div style={{ background: '#fffbeb', color: '#f59e0b', width: '36px', height: '36px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Clock size={18} /></div>
+              <h3 style={{ ...panelTitleStyle, margin: 0 }}>Upcoming Deadlines</h3>
+            </div>
           </div>
-          
           <div style={listContainerStyle}>
             {upcomingTasks.length === 0 ? (
-              <EmptyState message="No upcoming tasks" />
+              <EmptyState message="No upcoming deadlines" icon="✅" />
             ) : (
               upcomingTasks.map(task => (
-                <div key={task.id} 
-                  onClick={() => router.push('/dashboard/tasks')}
-                  style={{...listItemStyle, background: task.daysLeft < 0 ? '#FEF2F2' : '#FFFBEB', borderColor: task.daysLeft < 0 ? '#FCA5A5' : '#FDE68A'}}
-                  onMouseEnter={e => { e.currentTarget.style.background = task.daysLeft < 0 ? '#FEE2E2' : '#FEF3C7'; e.currentTarget.style.borderColor = task.daysLeft < 0 ? '#F87171' : '#FCD34D'; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = task.daysLeft < 0 ? '#FEF2F2' : '#FFFBEB'; e.currentTarget.style.borderColor = task.daysLeft < 0 ? '#FCA5A5' : '#FDE68A'; }}
+                <div key={task.id} onClick={() => router.push('/dashboard/tasks')}
+                  style={{ padding: '14px 16px', borderRadius: '12px', cursor: 'pointer', transition: 'all 0.2s ease', background: task.daysLeft < 0 ? '#fef2f2' : '#fffbeb', border: `1px solid ${task.daysLeft < 0 ? '#fecaca' : '#fde68a'}`, borderLeft: `4px solid ${task.daysLeft < 0 ? '#ef4444' : '#f59e0b'}` }}
+                  onMouseEnter={e => { e.currentTarget.style.transform = 'translateX(4px)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.transform = 'none'; }}
                 >
-                  <div style={{ width: '100%' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '4px' }}>
-                      <div style={itemTitleStyle}>{task.companyName}</div>
-                      <span style={{ 
-                        fontSize: '11px', fontWeight: 600, padding: '2px 8px', borderRadius: '10px',
-                        background: task.daysLeft < 0 ? '#FEE2E2' : '#FEF3C7',
-                        color: task.daysLeft < 0 ? '#DC2626' : '#D97706'
-                      }}>
-                        {task.daysLeft < 0 ? 'Overdue' : `${task.daysLeft}d left`}
-                      </span>
-                    </div>
-                    <div style={{ fontSize: '13px', color: '#374151', marginBottom: '6px' }}>{task.title}</div>
-                    <div style={{ fontSize: '12px', color: '#6B7280', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <Clock size={12} /> Due: {task.deadline}
-                    </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '6px' }}>
+                    <div style={{ fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>{task.companyName}</div>
+                    <span style={{ fontSize: '11px', fontWeight: 700, padding: '3px 10px', borderRadius: '20px', background: task.daysLeft < 0 ? '#fee2e2' : '#fef3c7', color: task.daysLeft < 0 ? '#dc2626' : '#d97706' }}>
+                      {task.daysLeft < 0 ? `${Math.abs(task.daysLeft)}d overdue` : `${task.daysLeft}d left`}
+                    </span>
                   </div>
+                  <div style={{ fontSize: '13px', color: '#475569', marginBottom: '6px' }}>{task.title}</div>
+                  <div style={{ fontSize: '12px', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '4px' }}><Clock size={12} /> Due: {task.deadline}</div>
                 </div>
               ))
             )}
           </div>
         </div>
 
-
       </div>
     </div>
   );
 }
 
-// -----------------------------------------------------
-// Component & Style Definitions
-// -----------------------------------------------------
+// --- Component & Style Definitions ---
 
 function getStatusColor(status: string) {
   const s = status.toLowerCase();
-  if (s.includes('completed') || s.includes('closed') || s.includes('done')) return '#10B981'; 
-  if (s.includes('review') || s.includes('waiting')) return '#8B5CF6'; 
-  if (s.includes('progress') || s.includes('active')) return '#3B82F6'; 
-  if (s.includes('urgent') || s.includes('overdue')) return '#EF4444'; 
-  return '#F59E0B'; 
+  if (s.includes('completed') || s.includes('closed') || s.includes('done') || s.includes('filed')) return '#10b981';
+  if (s.includes('review') || s.includes('waiting') || s.includes('draft')) return '#8b5cf6';
+  if (s.includes('progress') || s.includes('active') || s.includes('started')) return '#3b82f6';
+  if (s.includes('urgent') || s.includes('overdue') || s.includes('rework')) return '#ef4444';
+  if (s.includes('query') || s.includes('info')) return '#f59e0b';
+  return '#64748b';
 }
 
 function StatCard({ icon, label, value, colorHex, onClick }: { icon: React.ReactNode; label: string; value: number; colorHex: string; onClick?: () => void }) {
   return (
-    <div 
-      onClick={onClick}
-      style={{
-        background: `linear-gradient(135deg, #ffffff 0%, ${colorHex}08 100%)`,
-        border: `1px solid ${colorHex}30`,
-        borderTop: `4px solid ${colorHex}`,
-        borderRadius: '12px',
-        padding: '20px',
-        boxShadow: `0 2px 4px ${colorHex}15`,
-        cursor: onClick ? 'pointer' : 'default',
-        transition: 'all 0.2s ease',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '12px'
-      }}
-      onMouseEnter={e => onClick && (e.currentTarget.style.transform = 'translateY(-2px)', e.currentTarget.style.boxShadow = `0 6px 12px ${colorHex}25`)}
-      onMouseLeave={e => onClick && (e.currentTarget.style.transform = 'none', e.currentTarget.style.boxShadow = `0 2px 4px ${colorHex}15`)}
+    <div onClick={onClick} style={{
+      background: '#ffffff', border: '1px solid #f1f5f9', borderRadius: '18px', padding: '22px 24px',
+      boxShadow: '0 1px 3px rgba(0,0,0,0.04)', cursor: onClick ? 'pointer' : 'default',
+      transition: 'all 0.25s cubic-bezier(0.4,0,0.2,1)', display: 'flex', flexDirection: 'column', gap: '16px',
+      position: 'relative', overflow: 'hidden',
+    }}
+      onMouseEnter={e => { if (!onClick) return; e.currentTarget.style.transform = 'translateY(-4px)'; e.currentTarget.style.boxShadow = `0 12px 28px ${colorHex}18, 0 4px 10px rgba(0,0,0,0.04)`; e.currentTarget.style.borderColor = `${colorHex}40`; }}
+      onMouseLeave={e => { if (!onClick) return; e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.04)'; e.currentTarget.style.borderColor = '#f1f5f9'; }}
     >
+      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '3px', background: `linear-gradient(90deg, ${colorHex}, ${colorHex}88)`, borderRadius: '18px 18px 0 0' }} />
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <div style={{ color: '#6B7280', fontSize: '14px', fontWeight: 500 }}>{label}</div>
-        <div style={{ background: `${colorHex}15`, color: colorHex, padding: '8px', borderRadius: '8px' }}>
-          {icon}
-        </div>
+        <div style={{ color: '#64748b', fontSize: '13px', fontWeight: 600, letterSpacing: '0.02em' }}>{label}</div>
+        <div style={{ background: `${colorHex}10`, color: colorHex, padding: '10px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{icon}</div>
       </div>
-      <div style={{ fontSize: '32px', fontWeight: 700, color: '#111827', lineHeight: 1 }}>{value}</div>
+      <div style={{ fontSize: '36px', fontWeight: 800, color: '#0f172a', lineHeight: 1, letterSpacing: '-1px' }}>{value}</div>
+      {onClick && <div style={{ fontSize: '12px', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 500 }}>View details <ArrowUpRight size={12} /></div>}
     </div>
   );
 }
 
-function EmptyState({ message, icon }: { message: string, icon?: string }) {
+function EmptyState({ message, icon }: { message: string; icon?: string }) {
   return (
-    <div style={{ textAlign: 'center', padding: '40px 20px', color: '#6B7280', background: '#F9FAFB', borderRadius: '8px', border: '1px dashed #E5E7EB' }}>
-      {icon && <div style={{ fontSize: '24px', marginBottom: '8px' }}>{icon}</div>}
-      <div style={{ fontSize: '14px' }}>{message}</div>
+    <div style={{ textAlign: 'center', padding: '40px 20px', color: '#94a3b8', background: '#f8fafc', borderRadius: '12px', border: '1px dashed #e2e8f0' }}>
+      {icon && <div style={{ fontSize: '28px', marginBottom: '10px' }}>{icon}</div>}
+      <div style={{ fontSize: '14px', fontWeight: 500 }}>{message}</div>
     </div>
   );
 }
 
 const panelStyle: React.CSSProperties = {
-  background: '#fff',
-  border: '1px solid #E5E7EB',
-  borderRadius: '16px',
-  padding: '24px',
-  boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-  display: 'flex',
-  flexDirection: 'column',
-  height: '100%'
+  background: '#ffffff', border: '1px solid #f1f5f9', borderRadius: '20px', padding: '24px',
+  boxShadow: '0 1px 3px rgba(0,0,0,0.04)', display: 'flex', flexDirection: 'column', height: '100%',
+  transition: 'box-shadow 0.2s ease',
 };
 
 const panelHeaderStyle: React.CSSProperties = {
-  display: 'flex',
-  justifyContent: 'space-between',
-  alignItems: 'center',
-  marginBottom: '20px'
+  display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px',
 };
 
 const panelTitleStyle: React.CSSProperties = {
-  fontSize: '16px',
-  fontWeight: 600,
-  color: '#111827',
-  margin: 0,
-  display: 'flex',
-  alignItems: 'center',
-  gap: '8px'
+  fontSize: '16px', fontWeight: 700, color: '#0f172a', margin: 0, letterSpacing: '-0.2px',
 };
 
 const badgeStyle: React.CSSProperties = {
-  fontSize: '12px',
-  color: '#6B7280',
-  background: '#F3F4F6',
-  padding: '4px 10px',
-  borderRadius: '12px',
-  fontWeight: 500
+  fontSize: '12px', color: '#64748b', background: '#f1f5f9', padding: '4px 12px', borderRadius: '20px', fontWeight: 600,
 };
 
 const listContainerStyle: React.CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  gap: '12px',
-  maxHeight: '360px',
-  overflowY: 'auto',
-  paddingRight: '4px'
-};
-
-const listItemStyle: React.CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  padding: '16px',
-  border: '1px solid #E5E7EB',
-  borderRadius: '10px',
-  background: '#FAFAFA',
-  cursor: 'pointer',
-  transition: 'all 0.2s ease',
-};
-
-const itemTitleStyle: React.CSSProperties = {
-  fontSize: '14px',
-  fontWeight: 600,
-  color: '#111827',
-  marginBottom: '4px'
-};
-
-const itemSubtitleStyle: React.CSSProperties = {
-  fontSize: '13px',
-  color: '#6B7280',
+  display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '380px', overflowY: 'auto', paddingRight: '4px',
 };

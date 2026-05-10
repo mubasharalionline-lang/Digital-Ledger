@@ -303,7 +303,7 @@ export default function StaffPage() {
                     gap: '6px',
                     marginTop: '4px',
                   }}>
-                    {member.role === 'admin' ? (
+                    {member.role?.toLowerCase() === 'admin' ? (
                       <span style={{
                         display: 'flex',
                         alignItems: 'center',

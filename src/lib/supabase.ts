@@ -62,6 +62,7 @@ export interface Task {
   admin_note?: string;
   task_type_id?: string;
   description?: string;
+  is_daily?: boolean;
   created_at: string;
   // joined fields
   company?: Company;

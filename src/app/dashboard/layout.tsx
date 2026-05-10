@@ -2,14 +2,14 @@
 
 import { useEffect, useState, useCallback, ReactNode, useMemo } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { getSession, clearSession, isAdmin, setSession } from '@/lib/auth';
+import { getSession, clearSession, isAdmin, isSuperAdmin, setSession } from '@/lib/auth';
 import { getTerminology } from '@/lib/terminology';
 import { supabase } from '@/lib/supabase';
 import type { User } from '@/lib/supabase';
 import {
   LayoutDashboard, Building2, ListTodo, Users, LogOut,
   ChevronLeft, ChevronRight, Menu, ChevronDown, Settings,
-  ClipboardList, BarChart3, Edit, Plus, X, Loader2, Globe,
+  ClipboardList, BarChart3, Edit, Plus, X, Loader2, Globe, CalendarDays
 } from 'lucide-react';
 
 interface NavItem { label: string; href: string; icon: ReactNode; adminOnly?: boolean; }
@@ -64,20 +64,58 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const handleAddCountry = async () => {
     if (!newCountryName.trim() || !newCountryCode.trim()) return;
     setAddingCountry(true);
+    const countryName = newCountryName.trim();
+    
     try {
+      // 1. Create the new country
       const { error } = await supabase.from('countries').insert({
-        name: newCountryName.trim(),
+        name: countryName,
         code: newCountryCode.trim().toUpperCase(),
         flag: newCountryFlag || '🌍',
       });
-      if (error) { alert('Error creating country: ' + error.message); }
-      else {
-        setNewCountryName(''); setNewCountryCode(''); setNewCountryFlag('🌍');
-        setShowAddCountry(false);
-        await loadCountries();
-        handleCountrySwitch(newCountryName.trim());
+      
+      if (error) { 
+        alert('Error creating country: ' + error.message); 
+        setAddingCountry(false);
+        return; 
       }
-    } catch { alert('Failed to create country.'); }
+
+      // 2. Clone Statuses from Bahrain
+      const { data: bahrainStatuses } = await supabase.from('statuses').select('*').eq('country', 'Bahrain');
+      if (bahrainStatuses && bahrainStatuses.length > 0) {
+        const clonedStatuses = bahrainStatuses.map(s => ({
+          name: s.name,
+          color: s.color,
+          order_index: s.order_index,
+          active: s.active,
+          country: countryName
+        }));
+        await supabase.from('statuses').insert(clonedStatuses);
+      }
+
+      // 3. Clone Task Types from Bahrain
+      // Note: We added a 'country' column via SQL to ensure complete data isolation.
+      const { data: bahrainTaskTypes } = await supabase.from('task_types').select('*').eq('country', 'Bahrain');
+      if (bahrainTaskTypes && bahrainTaskTypes.length > 0) {
+        const clonedTaskTypes = bahrainTaskTypes.map(t => ({
+          name: t.name,
+          category: t.category,
+          jurisdiction: t.jurisdiction,
+          status_options: t.status_options,
+          description: t.description,
+          active: t.active,
+          country: countryName
+        }));
+        await supabase.from('task_types').insert(clonedTaskTypes);
+      }
+
+      setNewCountryName(''); setNewCountryCode(''); setNewCountryFlag('🌍');
+      setShowAddCountry(false);
+      await loadCountries();
+      handleCountrySwitch(countryName);
+    } catch { 
+      alert('Failed to create country.'); 
+    }
     setAddingCountry(false);
   };
 
@@ -91,6 +129,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       { label: 'Dashboard', href: '/dashboard', icon: <LayoutDashboard size={20} /> },
       { label: 'Companies', href: '/dashboard/companies', icon: <Building2 size={20} />, adminOnly: !canViewCompanies },
       { label: 'Tasks', href: '/dashboard/tasks', icon: <ListTodo size={20} /> },
+      { label: 'Daily Tasks', href: '/dashboard/daily-tasks', icon: <CalendarDays size={20} /> },
       { label: 'Task Types', href: '/dashboard/task-types', icon: <ClipboardList size={20} />, adminOnly: true },
       { label: terms.staffSingular + 's', href: '/dashboard/staff', icon: <Users size={20} />, adminOnly: true },
       { label: 'Reports', href: '/dashboard/reports', icon: <BarChart3 size={20} />, adminOnly: true },
@@ -128,8 +167,8 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           </div>
         </div>
 
-        {/* Country Switcher (Admin) */}
-        {isAdmin(user) && (
+        {/* Country Switcher (Super Admin only) */}
+        {isSuperAdmin(user) && (
           <div style={{ padding: collapsed ? '8px' : '8px 12px', borderBottom: '1px solid var(--border-light)', position: 'relative' }}>
             <button onClick={() => setShowCountryPicker(!showCountryPicker)}
               style={{

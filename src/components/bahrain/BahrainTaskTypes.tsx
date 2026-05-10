@@ -22,7 +22,11 @@ export default function BahrainTaskTypes() {
 
   const loadData = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase.from('task_types').select('*').order('created_at', { ascending: false });
+    const dataCountry = getDataCountry();
+    const { data } = await supabase.from('task_types')
+      .select('*')
+      .eq('country', dataCountry || 'Bahrain')
+      .order('created_at', { ascending: false });
     setTaskTypes(data || []);
     setLoading(false);
   }, []);
@@ -61,6 +65,7 @@ export default function BahrainTaskTypes() {
       }).eq('id', editingId);
       error = res.error;
     } else {
+      const dataCountry = getDataCountry();
       const res = await supabase.from('task_types').insert({
         name: form.name,
         category: form.category,
@@ -68,6 +73,7 @@ export default function BahrainTaskTypes() {
         status_options: form.status_options || null,
         description: form.description || null,
         active: true,
+        country: dataCountry || 'Bahrain'
       });
       error = res.error;
     }

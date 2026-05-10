@@ -119,7 +119,16 @@ export function clearSession() {
 }
 
 export function isAdmin(user: User | null): boolean {
-  return user?.role === 'admin';
+  const role = user?.role?.toLowerCase();
+  const username = user?.username?.toLowerCase();
+  return role === 'admin' || role === 'superadmin' || username === 'admin';
+}
+
+export function isSuperAdmin(user: User | null): boolean {
+  // Define super admin logic. 'admin' username is the default master account.
+  const role = user?.role?.toLowerCase();
+  const username = user?.username?.toLowerCase();
+  return username === 'admin' || role === 'superadmin';
 }
 
 /**
@@ -131,15 +140,15 @@ export function getDataCountry(): string | null {
   const { user, country } = getSession();
   if (!user) return null;
   
-  // Non-admin (partner/staff) always use their own country
-  if (user.role !== 'admin' && user.country && user.country !== 'undefined' && user.country !== 'null') {
-    return user.country;
-  }
-  
-  // Admin uses session-selected country
-  if (country && country !== 'undefined' && country !== 'null') {
+  // Super Admins (Master accounts) can see the session-selected country
+  if (isSuperAdmin(user) && country && country !== 'undefined' && country !== 'null') {
     return country;
   }
   
-  return 'Bahrain'; // Default fallback — Bahrain is the default country
+  // EVERYONE else (including regular Admins) is locked to their own country
+  if (user.country && user.country !== 'undefined' && user.country !== 'null') {
+    return user.country;
+  }
+  
+  return 'Bahrain'; // Default fallback
 }

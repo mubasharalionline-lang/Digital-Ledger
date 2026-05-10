@@ -36,7 +36,7 @@ export default function LoginPage() {
         if (user.country) {
           setSession(user, user.country);
           router.push('/dashboard');
-        } else if (user.role === 'admin') {
+        } else if (user.role?.toLowerCase() === 'admin' || user.username?.toLowerCase() === 'admin') {
           setSession(user, 'Bahrain');
           router.push('/dashboard');
         } else {
