@@ -78,7 +78,7 @@ export default function EditsPage() {
     // For statuses, default to active and include task type linkage
     if (activeTab === 'statuses') {
       insertData.active = true;
-      insertData.task_type_ids = newTaskTypeIds.length > 0 ? newTaskTypeIds : null;
+      insertData.task_type_ids = newTaskTypeIds.length > 0 && newTaskTypeIds.length < taskTypes.length ? newTaskTypeIds : null;
     }
     
     const { error } = await supabase.from(table).insert(insertData);
@@ -100,7 +100,7 @@ export default function EditsPage() {
     
     const updateData: any = { name: editName.trim() };
     if (activeTab === 'statuses') {
-      updateData.task_type_ids = editTaskTypeIds.length > 0 ? editTaskTypeIds : null;
+      updateData.task_type_ids = editTaskTypeIds.length > 0 && editTaskTypeIds.length < taskTypes.length ? editTaskTypeIds : null;
     }
 
     const { error } = await supabase.from(table).update(updateData).eq('id', editingId);
@@ -151,7 +151,8 @@ export default function EditsPage() {
     setEditName(item.name);
     // Normalize IDs: trim whitespace to ensure checkbox matching works
     const ids = (item.task_type_ids || []).map((id: string) => id.trim()).filter(Boolean);
-    setEditTaskTypeIds(ids);
+    // If it's empty (applies to all), check all boxes by default
+    setEditTaskTypeIds(ids.length > 0 ? ids : taskTypes.map(t => t.id));
     setIsAdding(false);
   }
 
@@ -200,7 +201,7 @@ export default function EditsPage() {
               )}
             </h2>
             {!isAdding && (
-              <button className="btn btn-primary" onClick={() => { setIsAdding(true); setNewTaskTypeIds([]); }}>
+              <button className="btn btn-primary" onClick={() => { setIsAdding(true); setNewTaskTypeIds(taskTypes.map(t => t.id)); }}>
                 <Plus size={16} /> Add {activeTab === 'statuses' ? 'Status' : activeTab === 'roles' ? 'Role' : 'Auditor'}
               </button>
             )}
@@ -229,7 +230,7 @@ export default function EditsPage() {
               {activeTab === 'statuses' && (
                 <div style={{ marginTop: '12px' }}>
                   <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>
-                    Link to Task Types <span style={{ fontWeight: 400, color: 'var(--text-tertiary)' }}>(leave empty = applies to all)</span>
+                    Link to Task Types <span style={{ fontWeight: 400, color: 'var(--text-tertiary)' }}>(select all or none = applies to all)</span>
                   </label>
                   <TaskTypeMultiSelect
                     taskTypes={taskTypes}
@@ -295,7 +296,7 @@ export default function EditsPage() {
                       {isStatus && (
                         <div style={{ marginTop: '8px' }}>
                           <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-tertiary)', display: 'block', marginBottom: '4px' }}>
-                            Task Types <span style={{ fontWeight: 400 }}>(empty = all)</span>
+                            Task Types <span style={{ fontWeight: 400 }}>(select all or none = all)</span>
                           </label>
                           <TaskTypeMultiSelect
                             taskTypes={taskTypes}
@@ -421,7 +422,9 @@ function TaskTypeMultiSelect({ taskTypes, selected, onChange }: {
         }}
       >
         {selectedNames.length === 0 ? (
-          <span style={{ color: 'var(--text-tertiary)' }}>All task types (click to link specific types)</span>
+          <span style={{ color: 'var(--text-tertiary)' }}>Applies to all task types</span>
+        ) : selectedNames.length === taskTypes.length ? (
+          <span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>All task types selected</span>
         ) : (
           selectedNames.map((name, i) => (
             <span key={i} style={{
