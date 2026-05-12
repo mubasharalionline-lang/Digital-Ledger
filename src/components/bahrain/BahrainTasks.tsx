@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase';
 import type { Task, Company, User, TaskType, StatusLog, TaskMessage } from '@/lib/supabase';
 import { getDataCountry, getSession, isAdmin } from '@/lib/auth';
 import { BAHRAIN_PRIORITIES, BAHRAIN_STATUSES } from '@/lib/bahrain';
-import { Plus, Eye, Trash2, X, Edit2, MessageCircle, Send } from 'lucide-react';
+import { Plus, Eye, Trash2, X, Edit2, MessageCircle, Send, MoreHorizontal } from 'lucide-react';
 
 export default function BahrainTasks() {
   const { user: currentUser } = getSession();
@@ -17,6 +17,7 @@ export default function BahrainTasks() {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [taskTypes, setTaskTypes] = useState<TaskType[]>([]);
   const [partners, setPartners] = useState<User[]>([]);
+  const [auditors, setAuditors] = useState<any[]>([]);
   const [dynamicStatuses, setDynamicStatuses] = useState<string[]>(BAHRAIN_STATUSES);
   const [loading, setLoading] = useState(true);
   const [notifications, setNotifications] = useState<{id: string, message: string, taskId: string}[]>([]);
@@ -35,7 +36,7 @@ export default function BahrainTasks() {
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [newTask, setNewTask] = useState({
-    company_id: '', task_type_id: '', task_type_ids: [] as string[], priority: 'Medium', deadline: '', description: '', assigned_to: '', assigned_partners: [] as string[]
+    company_id: '', task_type_id: '', task_type_ids: [] as string[], priority: 'Medium', status: '', auditor_id: '', deadline: '', description: '', assigned_to: '', assigned_partners: [] as string[]
   });
 
   // Task Detail modal
@@ -45,66 +46,70 @@ export default function BahrainTasks() {
   const [updateStatus, setUpdateStatus] = useState('');
   const [updateBy, setUpdateBy] = useState('');
   const [updateRemarks, setUpdateRemarks] = useState('');
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
   const dataCountry = getDataCountry();
 
   const loadData = useCallback(async () => {
-    // Try to load from cache first for instant UI response
     const cacheKey = 'tasks_data_cache';
     const cacheTimeKey = 'tasks_data_time';
     const cachedData = sessionStorage.getItem(cacheKey);
     const cacheTime = sessionStorage.getItem(cacheTimeKey);
     
-    let useCache = false;
+    let hadCache = false;
 
+    // Show cached data instantly for zero-wait UI
     if (cachedData && cacheTime) {
-      const isFresh = Date.now() - parseInt(cacheTime) < 5 * 60 * 1000; // 5 mins TTL
-      if (isFresh) {
-        try {
-          const parsed = JSON.parse(cachedData);
-          setCompanies(parsed.companies);
-          setTasks(parsed.tasks);
-          setTaskTypes(parsed.taskTypes);
-          setPartners(parsed.partners);
-          setLoading(false);
-          useCache = true;
-        } catch (e) {}
-      }
+      const age = Date.now() - parseInt(cacheTime);
+      try {
+        const parsed = JSON.parse(cachedData);
+        setCompanies(parsed.companies || []);
+        setTasks(parsed.tasks || []);
+        setTaskTypes(parsed.taskTypes || []);
+        setPartners(parsed.partners || []);
+        if (parsed.auditors) setAuditors(parsed.auditors);
+        if (parsed.dynamicStatuses && parsed.dynamicStatuses.length > 0) {
+          setDynamicStatuses(parsed.dynamicStatuses.sort((a: string, b: string) => a.localeCompare(b)));
+        }
+        setLoading(false);
+        hadCache = true;
+        // If cache is fresh (< 2 min), skip network entirely
+        if (age < 2 * 60 * 1000) return;
+      } catch (e) {}
     }
 
-    if (useCache) return; // Skip expensive DB queries if cache is fresh!
-
+    // Fetch fresh data (runs in background if we had cache)
     try {
       let usersQuery = supabase.from('users').select('*').order('created_at', { ascending: false });
       if (dataCountry) {
         usersQuery = usersQuery.eq('country', dataCountry);
       }
 
-      // Fire all independent queries simultaneously
-      const [compsRes, ttRes, usersRes, statusRes] = await Promise.all([
+      const [compsRes, ttRes, usersRes, statusRes, audRes] = await Promise.all([
         supabase.from('companies').select('*').eq('country', dataCountry || 'Bahrain'),
         supabase.from('task_types').select('*').eq('active', true).eq('country', dataCountry || 'Bahrain'),
         usersQuery,
         dataCountry 
           ? supabase.from('statuses').select('name, active').eq('country', dataCountry) 
-          : supabase.from('statuses').select('name, active')
+          : supabase.from('statuses').select('name, active'),
+        dataCountry
+          ? supabase.from('auditors').select('*').eq('country', dataCountry).order('name')
+          : supabase.from('auditors').select('*').order('name')
       ]);
 
       const companyList = compsRes.data || [];
       const ttList = ttRes.data || [];
       const usersList = usersRes.data || [];
-      // Only include active statuses (active !== false handles missing column gracefully)
+      const audList = audRes.data || [];
       const dbStatuses = statusRes.data
         ?.filter(s => s.active !== false)
         .map(s => s.name) || [];
       
-      if (dbStatuses.length > 0) {
-        setDynamicStatuses([...new Set(dbStatuses)] as string[]);
-      } else {
-        setDynamicStatuses(BAHRAIN_STATUSES);
-      }
+      const resolvedStatuses = dbStatuses.length > 0
+        ? [...new Set(dbStatuses)].sort((a, b) => a.localeCompare(b)) as string[]
+        : [...BAHRAIN_STATUSES].sort((a, b) => a.localeCompare(b));
+      setDynamicStatuses(resolvedStatuses);
 
-      // Fetch tasks (depends on companyIds)
       const companyIds = companyList.map(c => c.id);
       let taskList: Task[] = [];
       if (companyIds.length > 0) {
@@ -115,16 +120,18 @@ export default function BahrainTasks() {
       setCompanies(companyList);
       setTaskTypes(ttList);
       setPartners(usersList);
+      setAuditors(audList);
       setTasks(taskList);
 
-      // Save to cache
       sessionStorage.setItem(cacheKey, JSON.stringify({
         companies: companyList,
         taskTypes: ttList,
         partners: usersList,
-        tasks: taskList
+        auditors: audList,
+        tasks: taskList,
+        dynamicStatuses: resolvedStatuses
       }));
-      sessionStorage.setItem('tasks_data_time', Date.now().toString());
+      sessionStorage.setItem(cacheTimeKey, Date.now().toString());
 
     } catch (err) {
       console.error('Load error:', err);
@@ -133,6 +140,14 @@ export default function BahrainTasks() {
   }, [dataCountry]);
 
   useEffect(() => { loadData(); }, [loadData]);
+
+  // Close action menu when clicking outside
+  useEffect(() => {
+    if (!openMenuId) return;
+    const handleClick = () => setOpenMenuId(null);
+    document.addEventListener('click', handleClick);
+    return () => document.removeEventListener('click', handleClick);
+  }, [openMenuId]);
 
   // Filter tasks
   const filtered = tasks.filter(t => {
@@ -148,12 +163,12 @@ export default function BahrainTasks() {
     }
     // Task Type filter
     if (filterTaskType) {
-      const ttIds = t.task_type_id ? t.task_type_id.split(',').map(s => s.trim()).filter(Boolean) : [];
+      const ttIds = t.task_type_ids && t.task_type_ids.length > 0 ? t.task_type_ids : (t.task_type_id ? t.task_type_id.split(',').map(s => s.trim()).filter(Boolean) : []);
       if (!ttIds.includes(filterTaskType)) return false;
     }
     if (search) {
       const s = search.toLowerCase();
-      const ttIds = t.task_type_id ? t.task_type_id.split(',').map(s => s.trim()).filter(Boolean) : [];
+      const ttIds = t.task_type_ids && t.task_type_ids.length > 0 ? t.task_type_ids : (t.task_type_id ? t.task_type_id.split(',').map(s => s.trim()).filter(Boolean) : []);
       const comp = companies.find(c => c.id === t.company_id);
       const matchTitle = t.title?.toLowerCase().includes(s);
       const matchDesc = t.description?.toLowerCase().includes(s);
@@ -242,12 +257,14 @@ export default function BahrainTasks() {
 
   function openEditTask(task: Task) {
     setEditingTaskId(task.id);
-    const existingTypeIds = task.task_type_id ? task.task_type_id.split(',').map(s => s.trim()).filter(Boolean) : [];
+    const existingTypeIds = task.task_type_ids && task.task_type_ids.length > 0 ? task.task_type_ids : (task.task_type_id ? task.task_type_id.split(',').map(s => s.trim()).filter(Boolean) : []);
     setNewTask({
       company_id: task.company_id || '',
       task_type_id: task.task_type_id || '',
       task_type_ids: existingTypeIds,
       priority: task.priority || 'Medium',
+      status: task.status || '',
+      auditor_id: task.auditor_id || '',
       deadline: task.deadline || '',
       description: task.description || '',
       assigned_to: task.assigned_to || '',
@@ -282,6 +299,18 @@ export default function BahrainTasks() {
     setTasks(prev => prev.map(t => t.id === taskId ? { ...t, assigned_to: assignValue || '', assigned_partners: assignValue ? [assignValue] : [] } : t));
   }
 
+  // Inline auditor assignment
+  async function handleAssignAuditor(taskId: string, auditorId: string) {
+    const assignValue = auditorId && auditorId.length > 0 ? auditorId : null;
+    const { data, error } = await supabase.from('tasks').update({ auditor_id: assignValue }).eq('id', taskId).select();
+    if (error) { console.error('Assign auditor error:', error); alert('Error assigning auditor: ' + error.message); return; }
+    if (!data || data.length === 0) {
+      alert('Assignment blocked by Supabase Row Level Security (RLS).');
+      return;
+    }
+    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, auditor_id: assignValue } : t));
+  }
+
   // Save new task
   async function saveTask() {
     const typeIds = newTask.task_type_ids || [];
@@ -292,7 +321,7 @@ export default function BahrainTasks() {
 
     // Use the first selected task type for backward-compatible fields
     const firstTt = taskTypes.find(t => t.id === typeIds[0]);
-    const firstStatus = firstTt?.status_options ? firstTt.status_options.split(',')[0].trim() : 'Not Started';
+    const firstStatus = newTask.status || (firstTt?.status_options ? firstTt.status_options.split(',')[0].trim() : 'Not Started');
     const assignArray = newTask.assigned_partners || [];
     const assignTo = assignArray.length > 0 ? assignArray[0] : null;
     const desc = newTask.description && newTask.description.length > 0 ? newTask.description : null;
@@ -306,8 +335,11 @@ export default function BahrainTasks() {
       const { data, error } = await supabase.from('tasks').update({
         title: combinedTitle,
         company_id: newTask.company_id,
-        task_type_id: typeIds.join(','),
+        task_type_id: primaryTtId,
+        task_type_ids: typeIds,
         priority: newTask.priority,
+        status: firstStatus,
+        auditor_id: newTask.auditor_id || null,
         deadline: newTask.deadline,
         description: desc,
         assigned_to: assignTo,
@@ -319,13 +351,15 @@ export default function BahrainTasks() {
       const { data, error } = await supabase.from('tasks').insert({
         title: combinedTitle,
         company_id: newTask.company_id,
-        task_type_id: typeIds.join(','),
+        task_type_id: primaryTtId,
+        task_type_ids: typeIds,
         priority: newTask.priority,
         deadline: newTask.deadline,
         description: desc,
         assigned_to: assignTo,
         assigned_partners: assignArray,
         status: firstStatus,
+        auditor_id: newTask.auditor_id || null,
       }).select().single();
       resultError = error;
       resultData = data;
@@ -333,7 +367,7 @@ export default function BahrainTasks() {
 
     if (resultError) { console.error('Save task error:', resultError); alert('Error: ' + resultError.message); return; }
 
-    // Status log for new tasks
+    // Status log for new tasks or changed status on edit
     if (!editingTaskId) {
       const { user } = getSession();
       await supabase.from('status_log').insert({
@@ -342,17 +376,27 @@ export default function BahrainTasks() {
         updated_by: user?.id || null,
         remarks: 'Task created',
       });
+    } else {
+      const oldTask = tasks.find(t => t.id === editingTaskId);
+      if (oldTask && oldTask.status !== firstStatus) {
+        const { user } = getSession();
+        await supabase.from('status_log').insert({
+          task_id: editingTaskId,
+          status: firstStatus,
+          updated_by: user?.id || null,
+          remarks: `Status updated via Edit Form`,
+        });
+      }
     }
 
     setShowTaskModal(false);
     setEditingTaskId(null);
-    setNewTask({ company_id: '', task_type_id: '', task_type_ids: [], priority: 'Medium', deadline: '', description: '', assigned_to: '', assigned_partners: [] });
+    setNewTask({ company_id: '', task_type_id: '', task_type_ids: [], priority: 'Medium', status: '', auditor_id: '', deadline: '', description: '', assigned_to: '', assigned_partners: [] });
     
     sessionStorage.removeItem('tasks_data_time');
     sessionStorage.removeItem('dashboard_data_time_v2');
     
     loadData();
-    alert(editingTaskId ? 'Task updated successfully!' : 'Task created successfully!');
   }
 
   // View task detail
@@ -457,7 +501,6 @@ export default function BahrainTasks() {
     });
     if (e2) console.error('Log error:', e2);
 
-    alert('Status updated!');
     setDetailTask(null);
     sessionStorage.removeItem('tasks_data_time');
     sessionStorage.removeItem('dashboard_data_time_v2');
@@ -599,7 +642,7 @@ export default function BahrainTasks() {
         </div>
         {isAdminUser && (
           <button
-            onClick={() => { setEditingTaskId(null); setNewTask({ company_id: '', task_type_id: '', task_type_ids: [], priority: 'Medium', deadline: '', description: '', assigned_to: '', assigned_partners: [] }); setShowTaskModal(true); }}
+            onClick={() => { setEditingTaskId(null); setNewTask({ company_id: '', task_type_id: '', task_type_ids: [], priority: 'Medium', status: '', auditor_id: '', deadline: '', description: '', assigned_to: '', assigned_partners: [] }); setShowTaskModal(true); }}
             style={{
               display: 'flex', alignItems: 'center', gap: '8px',
               padding: '12px 24px', background: '#ffffff', color: '#0f172a',
@@ -615,7 +658,7 @@ export default function BahrainTasks() {
       </div>
 
       {/* Filters */}
-      <div style={{ display: 'flex', gap: '10px', marginBottom: '24px', flexWrap: 'wrap', padding: '18px 22px', background: '#ffffff', borderRadius: '16px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+      <div style={{ display: 'flex', gap: '14px', marginBottom: '28px', flexWrap: 'wrap', padding: '20px', background: 'rgba(255, 255, 255, 0.65)', backdropFilter: 'blur(10px)', borderRadius: '18px', border: '1px solid rgba(255,255,255,0.8)', boxShadow: '0 4px 20px rgba(0,0,0,0.03)' }}>
         <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={filterStyle}>
           <option value="">All Status</option>
           {(() => {
@@ -661,93 +704,113 @@ export default function BahrainTasks() {
       </div>
 
       {/* Tasks Table */}
-      <div style={{ overflowX: 'auto', borderRadius: '16px', boxShadow: '0 1px 3px rgba(0,0,0,0.04), 0 4px 16px rgba(0,0,0,0.03)', border: '1px solid #e2e8f0' }}>
+      <div style={{ overflowX: 'auto', borderRadius: '18px', boxShadow: '0 8px 32px rgba(0,0,0,0.05)', border: '1px solid rgba(226, 232, 240, 0.8)', background: '#ffffff' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', background: '#ffffff' }}>
           <thead>
             <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
-              {['Task ID', 'Company', 'Task Type', 'Description', 'Priority', 'Due Date', 'Status', 'Assigned To', 'Actions'].map(h => (
-                <th key={h} style={{ padding: '14px 14px', textAlign: 'left', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.6px', color: '#64748b' }}>{h}</th>
+              {['ID', 'Company', 'Task Type', 'Priority', 'Due', 'Status', 'Auditor', 'Assigned To', ''].map(h => (
+                <th key={h} style={{ padding: '11px 10px', textAlign: 'left', fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', color: '#64748b', whiteSpace: 'nowrap' }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 ? (
-              <tr><td colSpan={9} style={{ textAlign: 'center', padding: '40px', color: '#7F8C8D' }}>No tasks found</td></tr>
+              <tr><td colSpan={9} style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>No tasks found</td></tr>
             ) : filtered.map(task => {
               const company = companies.find(c => c.id === task.company_id);
-              const ttIds = task.task_type_id ? task.task_type_id.split(',').map(s => s.trim()).filter(Boolean) : [];
+              const ttIds = task.task_type_ids && task.task_type_ids.length > 0 ? task.task_type_ids : (task.task_type_id ? task.task_type_id.split(',').map(s => s.trim()).filter(Boolean) : []);
               const ttNames = ttIds.map(id => taskTypes.find(t => t.id === id)?.name).filter(Boolean);
-              const primaryTt = taskTypes.find(t => t.id === ttIds[0]);
-              // Always use dynamic statuses from the Edits section; include task's current status if deactivated
               const statusOptions = [...dynamicStatuses];
-              if (task.status && !statusOptions.includes(task.status)) statusOptions.unshift(task.status);
+              if (task.status && !statusOptions.includes(task.status)) {
+                statusOptions.push(task.status);
+                statusOptions.sort((a, b) => a.localeCompare(b));
+              }
               const pc = priorityColor(task.priority);
+              const isMenuOpen = openMenuId === task.id;
 
               return (
-                <tr key={task.id} style={{ borderBottom: '1px solid #f1f5f9', transition: 'background 0.15s ease' }} onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                  <td style={cellStyle}><strong>#{task.id.slice(0, 6)}</strong></td>
-                  <td style={cellStyle}>{company?.company_name || 'Unknown'}</td>
-                  <td style={cellStyle}>
+                <tr key={task.id} style={{ borderBottom: '1px solid #f1f5f9', transition: 'background 0.15s ease' }} onMouseEnter={e => e.currentTarget.style.background = '#fafbfc'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                  <td style={compactCell}><span style={{ fontWeight: 600, color: '#475569', fontSize: '12px' }}>#{task.id.slice(0, 6)}</span></td>
+                  <td style={compactCell}><span style={{ fontWeight: 500, fontSize: '12px', color: '#1e293b', maxWidth: '130px', display: 'inline-block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{company?.company_name || 'Unknown'}</span></td>
+                  <td style={compactCell}>
                     {ttNames.length > 0 ? (
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px' }}>
                         {ttNames.map((name, i) => (
-                          <span key={i} style={{ padding: '2px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: 600, background: '#EBF5FB', color: '#2980B9', border: '1px solid #AED6F1' }}>{name}</span>
+                          <span key={i} style={{ padding: '2px 6px', borderRadius: '10px', fontSize: '10px', fontWeight: 600, background: '#EBF5FB', color: '#2980B9', border: '1px solid #AED6F1', whiteSpace: 'nowrap' }}>{name}</span>
                         ))}
                       </div>
-                    ) : task.title}
+                    ) : <span style={{ fontSize: '11px', color: '#94a3b8' }}>—</span>}
                   </td>
-                  <td style={{ ...cellStyle, maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{task.description || '-'}</td>
-                  <td style={cellStyle}>
-                    <span style={{ padding: '4px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: 600, background: pc.bg, color: pc.color }}>{task.priority}</span>
+                  <td style={compactCell}>
+                    <span style={{ padding: '3px 8px', borderRadius: '20px', fontSize: '10px', fontWeight: 700, background: pc.bg, color: pc.color, whiteSpace: 'nowrap' }}>{task.priority}</span>
                   </td>
-                  <td style={cellStyle}>{task.deadline}</td>
-                  <td style={cellStyle}>
-                    {canUpdateStatus ? (
-                      (() => {
-                        const sc = statusColor(task.status);
-                        return (
-                          <select
-                            value={task.status}
-                            onChange={e => handleStatusChange(task.id, e.target.value)}
-                            style={{ ...dropdownStyle, background: sc.bg, color: sc.color, border: `1.5px solid ${sc.border}`, fontWeight: 600, fontSize: '12px' }}
-                          >
-                            {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
-                          </select>
-                        );
-                      })()
+                  <td style={compactCell}><span style={{ fontSize: '12px', color: '#475569', whiteSpace: 'nowrap' }}>{task.deadline || '—'}</span></td>
+                  <td style={compactCell}>
+                    {canUpdateStatus ? (() => {
+                      const sc = statusColor(task.status);
+                      return (
+                        <select value={task.status} onChange={e => handleStatusChange(task.id, e.target.value)}
+                          style={{ padding: '5px 6px', borderRadius: '8px', border: `1px solid ${sc.border}`, background: sc.bg, color: sc.color, fontWeight: 600, fontSize: '11px', cursor: 'pointer', outline: 'none', minWidth: '120px' }}>
+                          {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                      );
+                    })() : (() => {
+                      const sc = statusColor(task.status);
+                      return <span style={{ padding: '3px 8px', borderRadius: '20px', fontSize: '11px', fontWeight: 600, background: sc.bg, color: sc.color, border: `1px solid ${sc.border}`, whiteSpace: 'nowrap' }}>{task.status}</span>;
+                    })()}
+                  </td>
+                  <td style={compactCell}>
+                    {isAdminUser ? (
+                      <select value={task.auditor_id || ''} onChange={e => handleAssignAuditor(task.id, e.target.value)}
+                        style={{ padding: '5px 6px', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#f8fafc', fontSize: '11px', color: '#334155', minWidth: '110px', cursor: 'pointer', outline: 'none', fontWeight: 500 }}>
+                        <option value="">No Auditor</option>
+                        {auditors.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                      </select>
                     ) : (
-                      (() => {
-                        const sc = statusColor(task.status);
-                        return <span style={{ padding: '5px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: 600, background: sc.bg, color: sc.color, border: `1px solid ${sc.border}` }}>{task.status}</span>;
-                      })()
+                      <span style={{ fontSize: '12px', color: '#475569', fontWeight: 500 }}>{auditors.find(a => a.id === task.auditor_id)?.name || '—'}</span>
                     )}
                   </td>
-                  <td style={cellStyle}>
+                  <td style={compactCell}>
                     {isAdminUser ? (
-                      <select
-                        value={task.assigned_to || ''}
-                        onChange={e => handleAssign(task.id, e.target.value)}
-                        style={dropdownStyle}
-                      >
+                      <select value={task.assigned_to || ''} onChange={e => handleAssign(task.id, e.target.value)}
+                        style={{ padding: '5px 6px', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#f8fafc', fontSize: '11px', color: '#334155', minWidth: '110px', cursor: 'pointer', outline: 'none', fontWeight: 500 }}>
                         <option value="">Unassigned</option>
                         {partners.map(p => <option key={p.id} value={p.id}>{p.username}</option>)}
                       </select>
                     ) : (
-                      <span>
+                      <span style={{ fontSize: '12px' }}>
                         {(task.assigned_partners && task.assigned_partners.length > 0) 
                           ? task.assigned_partners.map(id => partners.find(p => p.id === id)?.username).filter(Boolean).join(', ') 
                           : (partners.find(p => p.id === task.assigned_to)?.username || 'Unassigned')}
                       </span>
                     )}
                   </td>
-                  <td style={{ ...cellStyle, display: 'flex', gap: '6px' }}>
-                    <button onClick={() => viewDetail(task.id)} style={btnSmStyle('#5DADE2')} title="View Details"><Eye size={14} /></button>
-                    <button onClick={() => openChat(task)} style={btnSmStyle('#8E44AD')} title="Chat / Messages"><MessageCircle size={14} /></button>
-                    {isAdminUser && (
-                      <>
-                        <button onClick={() => openEditTask(task)} style={btnSmStyle('#F39C12')} title="Edit Task"><Edit2 size={14} /></button>
-                        <button onClick={() => deleteTask(task.id)} style={btnSmStyle('#E74C3C')} title="Delete Task"><Trash2 size={14} /></button>
-                      </>
+                  <td style={{ ...compactCell, position: 'relative', width: '40px' }}>
+                    <button onClick={e => { e.stopPropagation(); setOpenMenuId(isMenuOpen ? null : task.id); }}
+                      style={{ background: isMenuOpen ? '#f1f5f9' : 'transparent', border: 'none', cursor: 'pointer', borderRadius: '8px', padding: '5px', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.15s' }}
+                      onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'}
+                      onMouseLeave={e => { if (!isMenuOpen) e.currentTarget.style.background = 'transparent'; }}>
+                      <MoreHorizontal size={16} color="#64748b" />
+                    </button>
+                    {isMenuOpen && (
+                      <div style={{ position: 'absolute', top: '100%', right: 0, background: '#fff', borderRadius: '12px', boxShadow: '0 8px 30px rgba(0,0,0,0.12)', border: '1px solid #e2e8f0', zIndex: 50, minWidth: '155px', overflow: 'hidden' }}
+                        onClick={e => e.stopPropagation()}>
+                        <button onClick={() => { viewDetail(task.id); setOpenMenuId(null); }} style={menuItemStyle}>
+                          <Eye size={14} color="#3b82f6" /> View Details
+                        </button>
+                        <button onClick={() => { openChat(task); setOpenMenuId(null); }} style={menuItemStyle}>
+                          <MessageCircle size={14} color="#8b5cf6" /> Messages
+                        </button>
+                        {isAdminUser && (<>
+                          <button onClick={() => { openEditTask(task); setOpenMenuId(null); }} style={menuItemStyle}>
+                            <Edit2 size={14} color="#f59e0b" /> Edit Task
+                          </button>
+                          <div style={{ height: '1px', background: '#f1f5f9', margin: '2px 0' }} />
+                          <button onClick={() => { deleteTask(task.id); setOpenMenuId(null); }} style={{ ...menuItemStyle, color: '#ef4444' }}>
+                            <Trash2 size={14} color="#ef4444" /> Delete
+                          </button>
+                        </>)}
+                      </div>
                     )}
                   </td>
                 </tr>
@@ -803,6 +866,18 @@ export default function BahrainTasks() {
                 {BAHRAIN_PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
               </select>
             </FormField>
+            <FormField label="Status">
+              <select value={newTask.status} onChange={e => setNewTask(p => ({ ...p, status: e.target.value }))} style={inputStyle}>
+                <option value="">Default (Auto)</option>
+                {dynamicStatuses.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </FormField>
+            <FormField label="Auditor">
+              <select value={newTask.auditor_id} onChange={e => setNewTask(p => ({ ...p, auditor_id: e.target.value }))} style={inputStyle}>
+                <option value="">Select Auditor</option>
+                {auditors.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+              </select>
+            </FormField>
             <FormField label="Due Date *">
               <input type="date" value={newTask.deadline} onChange={e => setNewTask(p => ({ ...p, deadline: e.target.value }))} style={inputStyle} />
             </FormField>
@@ -835,10 +910,11 @@ export default function BahrainTasks() {
           }}>
             <div><strong>Company:</strong> {detailCompany?.company_name || 'Unknown'}</div>
             <div><strong>Type:</strong> {(() => {
-              const ids = detailTask.task_type_id ? detailTask.task_type_id.split(',').map(s => s.trim()).filter(Boolean) : [];
+              const ids = detailTask.task_type_ids && detailTask.task_type_ids.length > 0 ? detailTask.task_type_ids : (detailTask.task_type_id ? detailTask.task_type_id.split(',').map(s => s.trim()).filter(Boolean) : []);
               const names = ids.map(id => taskTypes.find(t => t.id === id)?.name).filter(Boolean);
               return names.length > 0 ? names.join(', ') : detailTask.title;
             })()}</div>
+            <div><strong>Auditor:</strong> {auditors.find(a => a.id === detailTask.auditor_id)?.name || 'None'}</div>
             <div><strong>Priority:</strong> <span style={{ padding: '3px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: 600, background: priorityColor(detailTask.priority).bg, color: '#fff' }}>{detailTask.priority}</span></div>
             <div><strong>Status:</strong> <span style={{ padding: '3px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: 600, background: '#D6EAF8', color: '#3498DB' }}>{detailTask.status}</span></div>
             <div><strong>Due Date:</strong> {detailTask.deadline}</div>
@@ -1093,24 +1169,35 @@ function FormField({ label, children }: { label: string; children: React.ReactNo
 }
 
 const filterStyle: React.CSSProperties = {
-  padding: '10px 14px', border: '1.5px solid #e2e8f0', borderRadius: '10px', fontSize: '13px',
-  background: '#ffffff', color: '#334155', outline: 'none', transition: 'all 0.15s ease',
+  padding: '10px 16px', border: '1px solid #cbd5e1', borderRadius: '12px', fontSize: '13px',
+  background: '#ffffff', color: '#334155', outline: 'none', transition: 'all 0.2s ease',
+  boxShadow: '0 2px 4px rgba(0,0,0,0.02)', fontWeight: 500
+};
+
+const compactCell: React.CSSProperties = {
+  padding: '10px 10px', fontSize: '12px', verticalAlign: 'middle', color: '#334155',
 };
 
 const cellStyle: React.CSSProperties = {
-  padding: '14px 14px', fontSize: '13px', verticalAlign: 'middle', color: '#334155',
+  padding: '10px 10px', fontSize: '12px', verticalAlign: 'middle', color: '#334155',
 };
 
 const dropdownStyle: React.CSSProperties = {
-  padding: '8px 10px', border: '1.5px solid #e2e8f0', borderRadius: '8px', fontSize: '12px',
-  width: '100%', cursor: 'pointer', background: '#ffffff', color: '#334155', outline: 'none',
-  transition: 'border-color 0.15s ease',
+  padding: '5px 6px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '11px',
+  width: '100%', minWidth: '120px', cursor: 'pointer', background: '#f8fafc', color: '#334155', outline: 'none',
+  transition: 'all 0.2s ease', fontWeight: 500,
 };
 
 const inputStyle: React.CSSProperties = {
-  padding: '11px 14px', border: '1.5px solid #e2e8f0', borderRadius: '10px', fontSize: '14px',
+  padding: '12px 16px', border: '1px solid #cbd5e1', borderRadius: '12px', fontSize: '14px',
   width: '100%', background: '#ffffff', color: '#0f172a', outline: 'none',
-  transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
+  transition: 'border-color 0.2s ease, box-shadow 0.2s ease',
+};
+
+const menuItemStyle: React.CSSProperties = {
+  display: 'flex', alignItems: 'center', gap: '10px', width: '100%', padding: '10px 14px',
+  background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '13px',
+  color: '#334155', fontWeight: 500, transition: 'background 0.1s ease', textAlign: 'left',
 };
 
 function btnSmStyle(bg: string): React.CSSProperties {

@@ -61,6 +61,8 @@ export interface Task {
   deadline: string;
   admin_note?: string;
   task_type_id?: string;
+  task_type_ids?: string[];
+  auditor_id?: string | null;
   description?: string;
   is_daily?: boolean;
   repeat_daily?: boolean;
@@ -80,6 +82,13 @@ export interface TaskType {
   status_options?: string;
   description?: string;
   active: boolean;
+  created_at: string;
+}
+
+export interface Auditor {
+  id: string;
+  name: string;
+  country?: string;
   created_at: string;
 }
 

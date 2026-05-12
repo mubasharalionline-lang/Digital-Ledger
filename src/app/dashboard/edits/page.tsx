@@ -7,11 +7,12 @@ import { getSession, isAdmin, getDataCountry } from '@/lib/auth';
 import { Plus, Trash2, Edit2, Loader2, Save, X, ToggleLeft, ToggleRight } from 'lucide-react';
 
 export default function EditsPage() {
-  const [activeTab, setActiveTab] = useState<'statuses' | 'roles'>('statuses');
+  const [activeTab, setActiveTab] = useState<'statuses' | 'roles' | 'auditors'>('statuses');
   const [loading, setLoading] = useState(true);
   
   const [statuses, setStatuses] = useState<any[]>([]);
   const [roles, setRoles] = useState<any[]>([]);
+  const [auditors, setAuditors] = useState<any[]>([]);
   
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
@@ -37,16 +38,19 @@ export default function EditsPage() {
     try {
       let statusQuery = supabase.from('statuses').select('*').order('created_at', { ascending: true });
       let rolesQuery = supabase.from('roles').select('*').order('created_at', { ascending: true });
+      let auditorsQuery = supabase.from('auditors').select('*').order('created_at', { ascending: true });
       
       if (country) {
         statusQuery = statusQuery.eq('country', country);
         rolesQuery = rolesQuery.eq('country', country);
+        auditorsQuery = auditorsQuery.eq('country', country);
       }
       
-      const [statusRes, rolesRes] = await Promise.all([statusQuery, rolesQuery]);
+      const [statusRes, rolesRes, auditorsRes] = await Promise.all([statusQuery, rolesQuery, auditorsQuery]);
       
       if (!statusRes.error) setStatuses(statusRes.data || []);
       if (!rolesRes.error) setRoles(rolesRes.data || []);
+      if (!auditorsRes.error) setAuditors(auditorsRes.data || []);
     } catch (e) {
       console.log('Error loading data, tables might not exist yet.');
     }
@@ -57,7 +61,7 @@ export default function EditsPage() {
   async function handleAdd() {
     if (!newName.trim()) return;
     const country = getDataCountry();
-    const table = activeTab === 'statuses' ? 'statuses' : 'roles';
+    const table = activeTab === 'statuses' ? 'statuses' : activeTab === 'roles' ? 'roles' : 'auditors';
     
     const insertData: any = {
       name: newName.trim(),
@@ -82,7 +86,7 @@ export default function EditsPage() {
 
   async function handleSaveEdit() {
     if (!editName.trim() || !editingId) return;
-    const table = activeTab === 'statuses' ? 'statuses' : 'roles';
+    const table = activeTab === 'statuses' ? 'statuses' : activeTab === 'roles' ? 'roles' : 'auditors';
     
     const { error } = await supabase.from(table).update({
       name: editName.trim()
@@ -113,7 +117,7 @@ export default function EditsPage() {
 
   async function handleDelete(id: string) {
     if (!confirm('Are you sure you want to delete this item?')) return;
-    const table = activeTab === 'statuses' ? 'statuses' : 'roles';
+    const table = activeTab === 'statuses' ? 'statuses' : activeTab === 'roles' ? 'roles' : 'auditors';
     
     const { error } = await supabase.from(table).delete().eq('id', id);
     if (error) alert('Error deleting: ' + error.message);
@@ -128,7 +132,7 @@ export default function EditsPage() {
     sessionStorage.removeItem('dashboard_data_time_v2');
   }
 
-  const activeData = activeTab === 'statuses' ? statuses : roles;
+  const activeData = activeTab === 'statuses' ? statuses : activeTab === 'roles' ? roles : auditors;
 
   return (
     <div className="animate-fadeIn">
@@ -176,13 +180,29 @@ export default function EditsPage() {
           >
             Role Management
           </button>
+          <button
+            onClick={() => { setActiveTab('auditors'); setIsAdding(false); setEditingId(null); }}
+            style={{
+              padding: '16px 24px',
+              border: 'none',
+              background: activeTab === 'auditors' ? 'var(--bg-primary)' : 'transparent',
+              borderBottom: activeTab === 'auditors' ? '2px solid var(--accent)' : '2px solid transparent',
+              color: activeTab === 'auditors' ? 'var(--accent)' : 'var(--text-secondary)',
+              fontWeight: activeTab === 'auditors' ? 600 : 500,
+              fontSize: '15px',
+              cursor: 'pointer',
+              transition: 'all 0.2s'
+            }}
+          >
+            Auditor Management
+          </button>
         </div>
 
         <div style={{ padding: '24px' }}>
           {/* Header & Add Button */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
             <h2 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--text-primary)' }}>
-              {activeTab === 'statuses' ? 'Statuses' : 'Roles'}
+              {activeTab === 'statuses' ? 'Statuses' : activeTab === 'roles' ? 'Roles' : 'Auditors'}
               {activeTab === 'statuses' && (
                 <span style={{ fontSize: '13px', fontWeight: 400, color: 'var(--text-tertiary)', marginLeft: '8px' }}>
                   ({statuses.filter(s => s.active !== false).length} active / {statuses.length} total)
@@ -191,7 +211,7 @@ export default function EditsPage() {
             </h2>
             {!isAdding && (
               <button className="btn btn-primary" onClick={() => setIsAdding(true)}>
-                <Plus size={16} /> Add {activeTab === 'statuses' ? 'Status' : 'Role'}
+                <Plus size={16} /> Add {activeTab === 'statuses' ? 'Status' : activeTab === 'roles' ? 'Role' : 'Auditor'}
               </button>
             )}
           </div>
@@ -202,7 +222,7 @@ export default function EditsPage() {
               <input
                 className="input"
                 autoFocus
-                placeholder={`Enter new ${activeTab === 'statuses' ? 'status' : 'role'} name...`}
+                placeholder={`Enter new ${activeTab === 'statuses' ? 'status' : activeTab === 'roles' ? 'role' : 'auditor'} name...`}
                 value={newName}
                 onChange={e => setNewName(e.target.value)}
                 style={{ flex: 1, margin: 0 }}
@@ -224,7 +244,7 @@ export default function EditsPage() {
             </div>
           ) : activeData.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-tertiary)' }}>
-              No {activeTab === 'statuses' ? 'statuses' : 'roles'} found. Click &quot;Add&quot; to create one.
+              No {activeTab === 'statuses' ? 'statuses' : activeTab === 'roles' ? 'roles' : 'auditors'} found. Click &quot;Add&quot; to create one.
               <div style={{ marginTop: '10px', fontSize: '13px', color: 'var(--danger)' }}>
                 Note: You may need to run the database SQL script if you see this right after the feature was added.
               </div>

@@ -85,7 +85,6 @@ export default function BahrainTaskTypes() {
     setEditingId(null);
     setForm({ name: '', category: 'Tax Filing', jurisdiction: 'All', status_options: '', description: '' });
     loadData();
-    alert(editingId ? 'Task Type updated!' : 'Task Type added!');
   }
 
   async function toggle(id: string, current: boolean) {

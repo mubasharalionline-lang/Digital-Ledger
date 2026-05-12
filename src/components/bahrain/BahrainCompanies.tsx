@@ -12,9 +12,7 @@ export default function BahrainCompanies() {
   const [showModal, setShowModal] = useState(false);
   const dataCountry = getDataCountry();
 
-  const [form, setForm] = useState({
-    name: '', country: dataCountry || 'Bahrain', tax_registration: '', industry: '', fy_end: '', compliance_type: '',
-  });
+  const [form, setForm] = useState({ name: '', country: dataCountry || 'Bahrain', tax_registration: '', industry: '', compliance_type: '' });
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -50,7 +48,6 @@ export default function BahrainCompanies() {
       country: companyCountry,
       tax_registration: form.tax_registration || null,
       industry: form.industry || null,
-      fy_end: form.fy_end || null,
       compliance_type: form.compliance_type || null,
       notes: '',
       status: 'Active',
@@ -61,9 +58,8 @@ export default function BahrainCompanies() {
     sessionStorage.removeItem('tasks_data_time');
     
     setShowModal(false);
-    setForm({ name: '', country: dataCountry || 'Bahrain', tax_registration: '', industry: '', fy_end: '', compliance_type: '' });
+    setForm({ name: '', country: dataCountry || 'Bahrain', tax_registration: '', industry: '', compliance_type: '' });
     loadData();
-    alert('Company added!');
   }
 
   async function remove(id: string) {
@@ -97,7 +93,7 @@ export default function BahrainCompanies() {
         <table style={{ width: '100%', borderCollapse: 'collapse', background: 'var(--bg-card, #fff)' }}>
           <thead>
             <tr style={{ background: '#2E4053', color: 'white' }}>
-              {['ID', 'Company Name', 'Country', 'Tax Registration', 'Industry', 'FY End', 'Status', 'Actions'].map(h => (
+              {['ID', 'Company Name', 'Country', 'Tax Registration', 'Industry', 'Status', 'Actions'].map(h => (
                 <th key={h} style={{ padding: '14px 12px', textAlign: 'left', fontSize: '12px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{h}</th>
               ))}
             </tr>
@@ -112,7 +108,6 @@ export default function BahrainCompanies() {
                 <td style={cell}>{c.country}</td>
                 <td style={cell}>{c.tax_registration || '-'}</td>
                 <td style={cell}>{c.industry || '-'}</td>
-                <td style={cell}>{c.fy_end || '-'}</td>
                 <td style={cell}>
                   <span style={{ padding: '4px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: 600, background: '#D5F4E6', color: '#27AE60' }}>
                     {c.status || 'Active'}
@@ -161,9 +156,6 @@ export default function BahrainCompanies() {
                 </Field>
                 <Field label="Industry">
                   <input value={form.industry} onChange={e => setForm(p => ({ ...p, industry: e.target.value }))} style={inpStyle} />
-                </Field>
-                <Field label="Financial Year End">
-                  <input value={form.fy_end} onChange={e => setForm(p => ({ ...p, fy_end: e.target.value }))} placeholder="e.g., 31-Dec" style={inpStyle} />
                 </Field>
                 <Field label="Compliance Type">
                   <input value={form.compliance_type} onChange={e => setForm(p => ({ ...p, compliance_type: e.target.value }))} placeholder="e.g., VAT, Corporate Tax" style={inpStyle} />
