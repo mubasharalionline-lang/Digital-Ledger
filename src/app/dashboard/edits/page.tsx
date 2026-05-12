@@ -149,7 +149,9 @@ export default function EditsPage() {
   function startEdit(item: any) {
     setEditingId(item.id);
     setEditName(item.name);
-    setEditTaskTypeIds(item.task_type_ids || []);
+    // Normalize IDs: trim whitespace to ensure checkbox matching works
+    const ids = (item.task_type_ids || []).map((id: string) => id.trim()).filter(Boolean);
+    setEditTaskTypeIds(ids);
     setIsAdding(false);
   }
 
@@ -257,7 +259,7 @@ export default function EditsPage() {
                 const isActive = item.active !== false;
                 const isStatus = activeTab === 'statuses';
                 const linkedTTNames = isStatus && item.task_type_ids && item.task_type_ids.length > 0
-                  ? item.task_type_ids.map((id: string) => taskTypes.find(t => t.id === id)?.name).filter(Boolean)
+                  ? item.task_type_ids.map((id: string) => taskTypes.find(t => t.id === id.trim())?.name).filter(Boolean)
                   : [];
                 
                 return (
