@@ -19,6 +19,7 @@ export default function BahrainTasks() {
   const [partners, setPartners] = useState<User[]>([]);
   const [auditors, setAuditors] = useState<any[]>([]);
   const [dynamicStatuses, setDynamicStatuses] = useState<string[]>(BAHRAIN_STATUSES);
+  const [statusObjects, setStatusObjects] = useState<{name: string; task_type_ids: string[] | null}[]>([]);
   const [loading, setLoading] = useState(true);
   const [notifications, setNotifications] = useState<{id: string, message: string, taskId: string}[]>([]);
 
@@ -71,6 +72,7 @@ export default function BahrainTasks() {
         if (parsed.dynamicStatuses && parsed.dynamicStatuses.length > 0) {
           setDynamicStatuses(parsed.dynamicStatuses.sort((a: string, b: string) => a.localeCompare(b)));
         }
+        if (parsed.statusObjects) setStatusObjects(parsed.statusObjects);
         setLoading(false);
         hadCache = true;
         // If cache is fresh (< 2 min), skip network entirely
@@ -90,8 +92,8 @@ export default function BahrainTasks() {
         supabase.from('task_types').select('*').eq('active', true).eq('country', dataCountry || 'Bahrain'),
         usersQuery,
         dataCountry 
-          ? supabase.from('statuses').select('name, active').eq('country', dataCountry) 
-          : supabase.from('statuses').select('name, active'),
+          ? supabase.from('statuses').select('name, active, task_type_ids').eq('country', dataCountry) 
+          : supabase.from('statuses').select('name, active, task_type_ids'),
         dataCountry
           ? supabase.from('auditors').select('*').eq('country', dataCountry).order('name')
           : supabase.from('auditors').select('*').order('name')
@@ -101,14 +103,17 @@ export default function BahrainTasks() {
       const ttList = ttRes.data || [];
       const usersList = usersRes.data || [];
       const audList = audRes.data || [];
-      const dbStatuses = statusRes.data
-        ?.filter(s => s.active !== false)
-        .map(s => s.name) || [];
+      const activeStatuses = statusRes.data?.filter(s => s.active !== false) || [];
+      const dbStatuses = activeStatuses.map(s => s.name);
       
       const resolvedStatuses = dbStatuses.length > 0
         ? [...new Set(dbStatuses)].sort((a, b) => a.localeCompare(b)) as string[]
         : (!dataCountry || dataCountry === 'Bahrain' ? [...BAHRAIN_STATUSES].sort((a, b) => a.localeCompare(b)) : []);
       setDynamicStatuses(resolvedStatuses);
+
+      // Store full status objects for task-type filtering
+      const sObjs = activeStatuses.map(s => ({ name: s.name, task_type_ids: s.task_type_ids || null }));
+      setStatusObjects(sObjs);
 
       const companyIds = companyList.map(c => c.id);
       let taskList: Task[] = [];
@@ -129,7 +134,8 @@ export default function BahrainTasks() {
         partners: usersList,
         auditors: audList,
         tasks: taskList,
-        dynamicStatuses: resolvedStatuses
+        dynamicStatuses: resolvedStatuses,
+        statusObjects: sObjs
       }));
       sessionStorage.setItem(cacheTimeKey, Date.now().toString());
 
@@ -722,7 +728,7 @@ export default function BahrainTasks() {
               const company = companies.find(c => c.id === task.company_id);
               const ttIds = task.task_type_ids && task.task_type_ids.length > 0 ? task.task_type_ids : (task.task_type_id ? task.task_type_id.split(',').map(s => s.trim()).filter(Boolean) : []);
               const ttNames = ttIds.map(id => taskTypes.find(t => t.id === id)?.name).filter(Boolean);
-              const statusOptions = [...dynamicStatuses];
+              const statusOptions = getStatusesForTask(ttIds, statusObjects, dynamicStatuses);
               if (task.status && !statusOptions.includes(task.status)) {
                 statusOptions.push(task.status);
                 statusOptions.sort((a, b) => a.localeCompare(b));
@@ -874,7 +880,7 @@ export default function BahrainTasks() {
             <FormField label="Status">
               <select value={newTask.status} onChange={e => setNewTask(p => ({ ...p, status: e.target.value }))} style={inputStyle}>
                 <option value="">Default (Auto)</option>
-                {dynamicStatuses.map(s => <option key={s} value={s}>{s}</option>)}
+                {getStatusesForTask(newTask.task_type_ids, statusObjects, dynamicStatuses).map(s => <option key={s} value={s}>{s}</option>)}
               </select>
             </FormField>
             <FormField label="Auditor">
@@ -959,7 +965,12 @@ export default function BahrainTasks() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
                 <FormField label="New Status">
                   <select value={updateStatus} onChange={e => setUpdateStatus(e.target.value)} style={inputStyle}>
-                    {dynamicStatuses.map(s => <option key={s} value={s}>{s}</option>)}
+                    {(() => {
+                      const dttIds = detailTask?.task_type_ids && detailTask.task_type_ids.length > 0
+                        ? detailTask.task_type_ids
+                        : (detailTask?.task_type_id ? detailTask.task_type_id.split(',').map(s => s.trim()).filter(Boolean) : []);
+                      return getStatusesForTask(dttIds, statusObjects, dynamicStatuses).map(s => <option key={s} value={s}>{s}</option>);
+                    })()}
                   </select>
                 </FormField>
                 <FormField label="Updated By">
@@ -1162,6 +1173,31 @@ function Modal({ title, children, onClose }: { title: string; children: React.Re
       </div>
     </div>
   );
+}
+
+// Helper: get statuses relevant for a specific task's task type(s)
+// Statuses with null task_type_ids are "universal" (show for all tasks)
+// Statuses with specific task_type_ids only show for tasks with matching types
+function getStatusesForTask(
+  taskTypeIds: string[],
+  statusObjects: {name: string; task_type_ids: string[] | null}[],
+  fallbackStatuses: string[]
+): string[] {
+  // If no status objects loaded yet, return all statuses
+  if (statusObjects.length === 0) return [...fallbackStatuses];
+  
+  // If task has no task type selected, show all statuses
+  if (!taskTypeIds || taskTypeIds.length === 0) {
+    return [...new Set(statusObjects.map(s => s.name))].sort((a, b) => a.localeCompare(b));
+  }
+  
+  // Filter: show statuses that are universal (null) OR linked to any of the task's types
+  const filtered = statusObjects.filter(s => {
+    if (!s.task_type_ids || s.task_type_ids.length === 0) return true; // universal
+    return s.task_type_ids.some(id => taskTypeIds.includes(id));
+  });
+  
+  return [...new Set(filtered.map(s => s.name))].sort((a, b) => a.localeCompare(b));
 }
 
 function FormField({ label, children }: { label: string; children: React.ReactNode }) {
