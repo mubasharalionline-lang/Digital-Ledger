@@ -356,11 +356,17 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           .mobile-header { display: flex !important; }
           .sidebar { transform: translateX(-100%); width: 260px !important; }
           .sidebar.mobile-open { transform: translateX(0); }
-          .main-content { margin-left: 0 !important; padding: 72px 16px 24px 16px !important; }
+          .main-content { margin-left: 0 !important; padding: 68px 12px 24px 12px !important; max-width: 100% !important; }
           .card { padding: 16px !important; }
           .table-container { width: 100%; overflow-x: auto; }
           .dashboard-summary-grid { grid-template-columns: 1fr !important; }
-          .modal-content { max-height: 95vh !important; margin: 16px; width: auto !important; }
+          .modal-content { max-height: 95vh !important; margin: 8px; width: auto !important; max-width: 100% !important; }
+          .dashboard-panels-grid { grid-template-columns: 1fr !important; min-width: 0 !important; }
+          .dashboard-stats-grid { grid-template-columns: repeat(2, 1fr) !important; gap: 10px !important; }
+        }
+        @media (max-width: 420px) {
+          .main-content { padding: 64px 8px 20px 8px !important; }
+          .dashboard-stats-grid { grid-template-columns: 1fr !important; }
         }
       `}</style>
     </div>

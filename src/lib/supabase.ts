@@ -63,6 +63,8 @@ export interface Task {
   task_type_id?: string;
   description?: string;
   is_daily?: boolean;
+  repeat_daily?: boolean;
+  country?: string;
   created_at: string;
   // joined fields
   company?: Company;

@@ -15,6 +15,9 @@ import {
   ArrowUpRight,
   BarChart3,
   CalendarDays,
+  Repeat,
+  CheckCircle2,
+  Loader2,
 } from 'lucide-react';
 
 interface UrgentClient {
@@ -48,6 +51,7 @@ export default function BahrainDashboard() {
   const [statusCounts, setStatusCounts] = useState<Record<string, number>>({});
   const [upcomingTasks, setUpcomingTasks] = useState<(Task & { companyName: string; daysLeft: number })[]>([]);
   const [partnerWorkloads, setPartnerWorkloads] = useState<PartnerWorkload[]>([]);
+  const [dailyTaskStats, setDailyTaskStats] = useState<{ total: number; pending: number; completed: number; repeatCount: number; statusBreakdown: Record<string, number> }>({ total: 0, pending: 0, completed: 0, repeatCount: 0, statusBreakdown: {} });
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
@@ -66,6 +70,7 @@ export default function BahrainDashboard() {
           const parsed = JSON.parse(cachedData);
           setTotalTasks(parsed.totalTasks);
           setTotalDailyTasks(parsed.totalDailyTasks || 0);
+          if (parsed.dailyTaskStats) setDailyTaskStats(parsed.dailyTaskStats);
           setTotalCompanies(parsed.totalCompanies);
           setActivePartners(parsed.activePartners);
           setOverdueTasks(parsed.overdueTasks);
@@ -114,12 +119,26 @@ export default function BahrainDashboard() {
       const newTotalTasks = taskList.length;
       setTotalTasks(newTotalTasks);
 
-      // Fetch daily tasks
-      const { count: dailyCount } = await supabase.from('tasks')
-        .select('*', { count: 'exact', head: true })
+      // Fetch daily tasks with full data for statistics
+      const taskCountry = dataCountry || 'Bahrain';
+      const dailyQuery = supabase.from('tasks')
+        .select('*')
         .eq('is_daily', true)
-        .eq('country', dataCountry || 'Bahrain');
-      setTotalDailyTasks(dailyCount || 0);
+        .or(`country.eq.${taskCountry},country.is.null`);
+
+      const { data: dailyTasks } = await dailyQuery;
+      const dailyList = dailyTasks || [];
+      setTotalDailyTasks(dailyList.length);
+
+      // Compute daily task stats
+      const completedStatuses = ['completed', 'closed', 'done', 'filed'];
+      const pendingCount = dailyList.filter(t => !completedStatuses.includes(t.status?.toLowerCase() || '')).length;
+      const completedCount = dailyList.filter(t => completedStatuses.includes(t.status?.toLowerCase() || '')).length;
+      const repeatCount = dailyList.filter(t => t.repeat_daily === true).length;
+      const statusBreakdown: Record<string, number> = {};
+      dailyList.forEach(t => { statusBreakdown[t.status || 'Unknown'] = (statusBreakdown[t.status || 'Unknown'] || 0) + 1; });
+      const newDailyStats = { total: dailyList.length, pending: pendingCount, completed: completedCount, repeatCount, statusBreakdown };
+      setDailyTaskStats(newDailyStats);
 
       // Overdue count
       const today = new Date();
@@ -221,7 +240,8 @@ export default function BahrainDashboard() {
       const serializableTaskTypeStats = newTaskTypeStats.map(s => ({ ...s, companies: Array.from(s.companies) }));
       sessionStorage.setItem(cacheKey, JSON.stringify({
         totalTasks: newTotalTasks,
-        totalDailyTasks: dailyCount || 0,
+        totalDailyTasks: dailyList.length,
+        dailyTaskStats: newDailyStats,
         totalCompanies: newTotalCompanies,
         activePartners: (usersRes.data || []).length,
         overdueTasks: newOverdueTasks,
@@ -268,7 +288,7 @@ export default function BahrainDashboard() {
       </div>
 
       {/* Stats Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '32px' }}>
+      <div className="dashboard-stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '32px' }}>
         <StatCard icon={<ListTodo size={22} />} label="Total Tasks" value={totalTasks} colorHex="#3b82f6" onClick={() => router.push('/dashboard/tasks')} />
         <StatCard icon={<AlertTriangle size={22} />} label="Overdue" value={overdueTasks} colorHex="#ef4444" onClick={() => router.push('/dashboard/tasks')} />
         {isAdmin(getSession().user) && (
@@ -280,7 +300,8 @@ export default function BahrainDashboard() {
         )}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '20px' }}>
+      <div className="dashboard-panels-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '20px' }}>
+
         
         {/* Urgent Clients */}
         <div style={panelStyle}>
@@ -297,18 +318,29 @@ export default function BahrainDashboard() {
             ) : (
               urgentClients.map(({ company, tasks, overdueCount }) => (
                 <div key={company.id} onClick={() => router.push(`/dashboard/tasks?company=${company.id}`)}
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', border: '1px solid #fecaca', borderLeft: '4px solid #ef4444', borderRadius: '12px', background: '#fef2f2', cursor: 'pointer', transition: 'all 0.2s ease' }}
-                  onMouseEnter={e => { e.currentTarget.style.background = '#fee2e2'; e.currentTarget.style.transform = 'translateX(4px)'; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = '#fef2f2'; e.currentTarget.style.transform = 'none'; }}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px', border: '1px solid #f1f5f9', borderRadius: '16px', background: '#ffffff', cursor: 'pointer', transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)', position: 'relative', overflow: 'hidden', flexShrink: 0 }}
+                  onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 12px 24px -8px rgba(239, 68, 68, 0.15)'; e.currentTarget.style.borderColor = '#fca5a5'; }}
+                  onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.borderColor = '#f1f5f9'; }}
                 >
-                  <div>
-                    <div style={{ fontSize: '14px', fontWeight: 600, color: '#0f172a', marginBottom: '4px' }}>{company.company_name}</div>
-                    <div style={{ fontSize: '12px', color: '#64748b' }}>
-                      <span style={{ color: '#ef4444', fontWeight: 600 }}>{tasks.length} task{tasks.length > 1 ? 's' : ''}</span>
-                      {overdueCount > 0 && <span style={{ color: '#b91c1c' }}> · {overdueCount} overdue</span>}
+                  <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '4px', background: 'linear-gradient(to bottom, #ef4444, #f87171)' }} />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                    <div style={{ width: '42px', height: '42px', borderRadius: '12px', background: '#fef2f2', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <AlertTriangle size={20} strokeWidth={2.5} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '15px', fontWeight: 700, color: '#0f172a', marginBottom: '4px', letterSpacing: '-0.01em' }}>{company.company_name}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: 500, flexWrap: 'wrap' }}>
+                        <span style={{ color: '#ef4444', background: '#fef2f2', padding: '2px 8px', borderRadius: '6px' }}>{tasks.length} task{tasks.length > 1 ? 's' : ''}</span>
+                        {overdueCount > 0 && <span style={{ color: '#b91c1c', display: 'flex', alignItems: 'center', gap: '4px' }}><div style={{ width: '4px', height: '4px', borderRadius: '50%', background: '#b91c1c' }}/> {overdueCount} overdue</span>}
+                      </div>
                     </div>
                   </div>
-                  <ChevronRight size={16} color="#94a3b8" />
+                  <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', transition: 'all 0.2s ease' }}
+                    onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'}
+                    onMouseLeave={e => e.currentTarget.style.background = '#f8fafc'}
+                  >
+                    <ChevronRight size={18} />
+                  </div>
                 </div>
               ))
             )}
@@ -330,20 +362,31 @@ export default function BahrainDashboard() {
                 const c = colors[idx % colors.length];
                 return (
                 <div key={taskType.id} onClick={() => router.push(`/dashboard/tasks?search=${encodeURIComponent(taskType.name)}`)}
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', cursor: 'pointer', background: '#ffffff', borderRadius: '12px', border: '1px solid #f1f5f9', transition: 'all 0.2s ease' }}
-                  onMouseEnter={e => { e.currentTarget.style.background = '#f8fafc'; e.currentTarget.style.borderColor = c; e.currentTarget.style.transform = 'translateX(4px)'; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = '#ffffff'; e.currentTarget.style.borderColor = '#f1f5f9'; e.currentTarget.style.transform = 'none'; }}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px', cursor: 'pointer', background: '#ffffff', borderRadius: '16px', border: '1px solid #f1f5f9', transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)', flexShrink: 0 }}
+                  onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = `0 12px 24px -8px ${c}30`; e.currentTarget.style.borderColor = `${c}50`; }}
+                  onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.borderColor = '#f1f5f9'; }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <div style={{ width: '38px', height: '38px', borderRadius: '10px', background: `${c}12`, color: c, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', fontWeight: 800 }}>{idx + 1}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                    <div style={{ width: '46px', height: '46px', borderRadius: '14px', background: `linear-gradient(135deg, ${c}15, ${c}05)`, border: `1px solid ${c}20`, color: c, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', fontWeight: 800, flexShrink: 0 }}>{idx + 1}</div>
                     <div>
-                      <div style={{ fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>{taskType.name}</div>
-                      <div style={{ fontSize: '12px', color: '#94a3b8' }}>{companies.size} {companies.size === 1 ? 'company' : 'companies'}</div>
+                      <div style={{ fontSize: '15px', fontWeight: 700, color: '#0f172a', letterSpacing: '-0.01em', marginBottom: '2px' }}>{taskType.name}</div>
+                      <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', background: '#cbd5e1' }} />
+                        {companies.size} {companies.size === 1 ? 'company' : 'companies'}
+                      </div>
                     </div>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <span style={{ fontSize: '18px', fontWeight: 800, color: c }}>{count}</span>
-                    <ChevronRight size={16} color="#D1D5DB" />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                      <span style={{ fontSize: '20px', fontWeight: 800, color: c, lineHeight: 1 }}>{count}</span>
+                      <span style={{ fontSize: '11px', fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginTop: '4px' }}>Tasks</span>
+                    </div>
+                    <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', transition: 'all 0.2s ease' }}
+                      onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'}
+                      onMouseLeave={e => e.currentTarget.style.background = '#f8fafc'}
+                    >
+                      <ChevronRight size={18} />
+                    </div>
                   </div>
                 </div>
               )})}
@@ -395,6 +438,77 @@ export default function BahrainDashboard() {
                   </div>
                 );
               })}
+            </div>
+          </div>
+        )}
+
+        {/* Daily Task Statistics Panel — Position 4 */}
+        {isAdmin(getSession().user) && (
+          <div style={panelStyle}>
+            <div style={panelHeaderStyle}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ background: '#f5f3ff', color: '#8b5cf6', width: '36px', height: '36px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><CalendarDays size={18} /></div>
+                <h3 style={{ ...panelTitleStyle, margin: 0 }}>Daily Tasks</h3>
+              </div>
+              <span style={badgeStyle}>{dailyTaskStats.total} total</span>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div className="daily-stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px' }}>
+                <div style={{ padding: '14px 12px', background: '#f8fafc', borderRadius: '12px', textAlign: 'center', border: '1px solid #f1f5f9' }}>
+                  <div style={{ fontSize: '22px', fontWeight: 800, color: '#8b5cf6', lineHeight: 1 }}>{dailyTaskStats.total}</div>
+                  <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 600, marginTop: '4px', textTransform: 'uppercase', letterSpacing: '0.3px' }}>Total</div>
+                </div>
+                <div style={{ padding: '14px 12px', background: '#fffbeb', borderRadius: '12px', textAlign: 'center', border: '1px solid #fde68a40' }}>
+                  <div style={{ fontSize: '22px', fontWeight: 800, color: '#d97706', lineHeight: 1 }}>{dailyTaskStats.pending}</div>
+                  <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 600, marginTop: '4px', textTransform: 'uppercase', letterSpacing: '0.3px' }}>Active</div>
+                </div>
+                <div style={{ padding: '14px 12px', background: '#ecfdf5', borderRadius: '12px', textAlign: 'center', border: '1px solid #a7f3d040' }}>
+                  <div style={{ fontSize: '22px', fontWeight: 800, color: '#059669', lineHeight: 1 }}>{dailyTaskStats.completed}</div>
+                  <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 600, marginTop: '4px', textTransform: 'uppercase', letterSpacing: '0.3px' }}>Done</div>
+                </div>
+                <div style={{ padding: '14px 12px', background: '#f5f3ff', borderRadius: '12px', textAlign: 'center', border: '1px solid #ddd6fe40' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+                    <Repeat size={14} color="#7c3aed" />
+                    <span style={{ fontSize: '22px', fontWeight: 800, color: '#7c3aed', lineHeight: 1 }}>{dailyTaskStats.repeatCount}</span>
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 600, marginTop: '4px', textTransform: 'uppercase', letterSpacing: '0.3px' }}>Repeat</div>
+                </div>
+              </div>
+              {dailyTaskStats.total > 0 && (
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                    <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 600 }}>Completion Rate</span>
+                    <span style={{ fontSize: '14px', fontWeight: 800, color: '#059669' }}>{Math.round((dailyTaskStats.completed / dailyTaskStats.total) * 100)}%</span>
+                  </div>
+                  <div style={{ background: '#f1f5f9', height: '10px', borderRadius: '5px', overflow: 'hidden' }}>
+                    <div style={{ width: `${(dailyTaskStats.completed / dailyTaskStats.total) * 100}%`, height: '100%', background: 'linear-gradient(90deg, #10b981, #059669)', borderRadius: '5px', transition: 'width 1s ease-out', minWidth: dailyTaskStats.completed > 0 ? '4px' : '0px' }} />
+                  </div>
+                </div>
+              )}
+              {Object.keys(dailyTaskStats.statusBreakdown).length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {Object.entries(dailyTaskStats.statusBreakdown).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([status, count]) => {
+                    const pct = dailyTaskStats.total > 0 ? (count / dailyTaskStats.total * 100) : 0;
+                    const barColor = getStatusColor(status);
+                    return (
+                      <div key={status} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div style={{ width: '90px', fontSize: '12px', color: '#475569', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{status}</div>
+                        <div style={{ flex: 1, background: '#f1f5f9', height: '8px', borderRadius: '4px', overflow: 'hidden' }}>
+                          <div style={{ width: `${pct}%`, height: '100%', background: `linear-gradient(90deg, ${barColor}, ${barColor}bb)`, borderRadius: '4px', transition: 'width 1s ease-out', minWidth: count > 0 ? '3px' : '0px' }} />
+                        </div>
+                        <div style={{ minWidth: '28px', textAlign: 'center', fontSize: '12px', fontWeight: 700, color: barColor }}>{count}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              <div onClick={() => router.push('/dashboard/daily-tasks')}
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '10px', borderRadius: '10px', background: '#f5f3ff', color: '#7c3aed', fontSize: '13px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s ease', border: '1px solid #ddd6fe40' }}
+                onMouseEnter={e => { e.currentTarget.style.background = '#ede9fe'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = '#f5f3ff'; e.currentTarget.style.transform = 'none'; }}
+              >
+                View All Daily Tasks <ArrowUpRight size={14} />
+              </div>
             </div>
           </div>
         )}

@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import type { Task, User, StatusLog, TaskMessage } from '@/lib/supabase';
 import { getSession, isAdmin, getDataCountry } from '@/lib/auth';
-import { Plus, X, Eye, Edit2, MessageCircle, Send, CheckCircle2, Search, Filter } from 'lucide-react';
+import { Plus, X, Eye, Edit2, MessageCircle, Send, CheckCircle2, Search, Filter, Repeat, Trash2 } from 'lucide-react';
 import { useRef } from 'react';
 
 // Fixed array of statuses so it alphabetically sorts correctly
@@ -47,7 +47,7 @@ export default function BahrainDailyTasks() {
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [newTask, setNewTask] = useState({
-    title: '', priority: 'Medium', deadline: '', description: '', assigned_to: '', assigned_partners: [] as string[]
+    title: '', priority: 'Medium', deadline: '', description: '', assigned_to: '', assigned_partners: [] as string[], repeat_daily: false
   });
 
   const [detailTask, setDetailTask] = useState<Task | null>(null);
@@ -75,7 +75,7 @@ export default function BahrainDailyTasks() {
       const tasksQuery = supabase.from('tasks')
         .select('*')
         .eq('is_daily', true)
-        .eq('country', dataCountry || 'Bahrain');
+        .or(`country.eq.${dataCountry || 'Bahrain'},country.is.null`);
 
       const [usersRes, statusRes, tasksRes] = await Promise.all([
         usersQuery, statusQuery, tasksQuery
@@ -151,30 +151,56 @@ export default function BahrainDailyTasks() {
     
     const taskCountry = dataCountry || 'Bahrain';
     
-    if (editingTaskId) {
-      await supabase.from('tasks').update({
-        title: newTask.title,
-        priority: newTask.priority,
-        deadline: newTask.deadline || null,
-        description: newTask.description,
-        assigned_to: newTask.assigned_to || null,
-        assigned_partners: newTask.assigned_partners,
-      }).eq('id', editingTaskId);
-    } else {
-      await supabase.from('tasks').insert({
-        title: newTask.title,
-        priority: newTask.priority,
-        status: 'Pending',
-        deadline: newTask.deadline || null,
-        description: newTask.description,
-        assigned_to: newTask.assigned_to || null,
-        assigned_partners: newTask.assigned_partners,
-        country: taskCountry,
-        is_daily: true,
-      });
+    try {
+      if (editingTaskId) {
+        const { error } = await supabase.from('tasks').update({
+          title: newTask.title,
+          priority: newTask.priority,
+          deadline: newTask.deadline || null,
+          description: newTask.description,
+          assigned_to: newTask.assigned_to || null,
+          assigned_partners: newTask.assigned_partners,
+          repeat_daily: newTask.repeat_daily,
+          is_daily: true,
+          country: taskCountry,
+        }).eq('id', editingTaskId);
+        if (error) { console.error('Update error:', error); alert('Failed to update task: ' + error.message); return; }
+      } else {
+        const { error } = await supabase.from('tasks').insert({
+          title: newTask.title,
+          priority: newTask.priority,
+          status: 'Pending',
+          deadline: newTask.deadline || null,
+          description: newTask.description,
+          assigned_to: newTask.assigned_to || null,
+          assigned_partners: newTask.assigned_partners,
+          repeat_daily: newTask.repeat_daily,
+          country: taskCountry,
+          is_daily: true,
+        });
+        if (error) { console.error('Insert error:', error); alert('Failed to create task: ' + error.message); return; }
+      }
+      setShowTaskModal(false);
+      setEditingTaskId(null);
+      await loadData();
+    } catch (err) {
+      console.error('Save task error:', err);
+      alert('An unexpected error occurred while saving the task.');
     }
-    setShowTaskModal(false);
-    loadData();
+  }
+
+  async function deleteTask(id: string) {
+    if (!confirm('Are you sure you want to delete this daily task? This cannot be undone.')) return;
+    try {
+      await supabase.from('task_messages').delete().eq('task_id', id);
+      await supabase.from('status_logs').delete().eq('task_id', id);
+      const { error } = await supabase.from('tasks').delete().eq('id', id);
+      if (error) { alert('Failed to delete: ' + error.message); return; }
+      await loadData();
+    } catch (err) {
+      console.error('Delete error:', err);
+      alert('An error occurred while deleting the task.');
+    }
   }
 
   async function viewDetail(id: string) {
@@ -234,7 +260,7 @@ export default function BahrainDailyTasks() {
   if (loading) return <div style={{ padding: '40px', textAlign: 'center', color: '#7F8C8D' }}>Loading daily tasks...</div>;
 
   return (
-    <div style={{ padding: '20px' }}>
+    <div style={{ padding: '0' }}>
       {/* Notifications */}
       <div style={{ position: 'fixed', top: '20px', right: '20px', zIndex: 9999, display: 'flex', flexDirection: 'column', gap: '10px' }}>
         {notifications.map(n => (
@@ -246,14 +272,14 @@ export default function BahrainDailyTasks() {
         ))}
       </div>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '28px', padding: '28px 32px', background: 'linear-gradient(135deg, #4c1d95 0%, #6d28d9 50%, #7c3aed 100%)', borderRadius: '20px', boxShadow: '0 4px 20px rgba(109,40,217,0.2)' }}>
+      <div className="daily-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '28px', padding: '28px 32px', background: 'linear-gradient(135deg, #4c1d95 0%, #6d28d9 50%, #7c3aed 100%)', borderRadius: '20px', boxShadow: '0 4px 20px rgba(109,40,217,0.2)' }}>
         <div>
           <h2 style={{ color: '#ffffff', fontSize: '24px', fontWeight: 700, margin: 0, letterSpacing: '-0.5px' }}>Daily Tasks</h2>
           <p style={{ color: '#c4b5fd', fontSize: '14px', margin: '6px 0 0 0' }}>General day-to-day work tasks — not linked to any company</p>
         </div>
         {isAdminUser && (
-          <button onClick={() => { setEditingTaskId(null); setNewTask({ title: '', priority: 'Medium', deadline: '', description: '', assigned_to: '', assigned_partners: [] }); setShowTaskModal(true); }}
-            style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 24px', background: '#ffffff', color: '#4c1d95', border: 'none', borderRadius: '12px', cursor: 'pointer', fontWeight: 600, fontSize: '14px', boxShadow: '0 4px 14px rgba(0,0,0,0.15)', transition: 'all 0.2s ease' }}
+          <button onClick={() => { setEditingTaskId(null); setNewTask({ title: '', priority: 'Medium', deadline: '', description: '', assigned_to: '', assigned_partners: [], repeat_daily: false }); setShowTaskModal(true); }}
+            style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 24px', background: '#ffffff', color: '#4c1d95', border: 'none', borderRadius: '12px', cursor: 'pointer', fontWeight: 600, fontSize: '14px', boxShadow: '0 4px 14px rgba(0,0,0,0.15)', transition: 'all 0.2s ease', whiteSpace: 'nowrap' }}
             onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 6px 20px rgba(0,0,0,0.2)'; }}
             onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 4px 14px rgba(0,0,0,0.15)'; }}>
             <Plus size={16} /> New Daily Task
@@ -262,7 +288,7 @@ export default function BahrainDailyTasks() {
       </div>
 
       {/* Filters */}
-      <div style={{ display: 'flex', gap: '10px', marginBottom: '24px', flexWrap: 'wrap', background: '#ffffff', padding: '18px 22px', borderRadius: '16px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+      <div className="filter-bar-mobile" style={{ display: 'flex', gap: '10px', marginBottom: '24px', flexWrap: 'wrap', background: '#ffffff', padding: '18px 22px', borderRadius: '16px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--bg-tertiary)', padding: '8px 12px', borderRadius: '8px', flex: '1 1 200px' }}>
           <Search size={16} color="#7F8C8D" />
           <input placeholder="Search title or description..." value={search} onChange={e => setSearch(e.target.value)} style={{ border: 'none', background: 'transparent', outline: 'none', width: '100%', fontSize: '13px', color: 'var(--text-primary)' }} />
@@ -289,7 +315,7 @@ export default function BahrainDailyTasks() {
       </div>
 
       {/* Table */}
-      <div style={{ overflowX: 'auto', borderRadius: '16px', boxShadow: '0 1px 3px rgba(0,0,0,0.04), 0 4px 16px rgba(0,0,0,0.03)', border: '1px solid #e2e8f0' }}>
+      <div className="responsive-table-wrap" style={{ overflowX: 'auto', borderRadius: '16px', boxShadow: '0 1px 3px rgba(0,0,0,0.04), 0 4px 16px rgba(0,0,0,0.03)', border: '1px solid #e2e8f0' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', background: '#ffffff' }}>
           <thead>
             <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
@@ -307,9 +333,18 @@ export default function BahrainDailyTasks() {
               <tr><td colSpan={7} style={{ textAlign: 'center', padding: '40px', color: '#7F8C8D' }}>No daily tasks found.</td></tr>
             ) : sortedTasks.map(task => (
               <tr key={task.id} style={{ borderBottom: '1px solid #f1f5f9', transition: 'background 0.15s ease' }} onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                <td style={tdStyle}>{task.id.slice(0, 6)}</td>
-                <td style={tdStyle}><strong>{task.title}</strong></td>
-                <td style={tdStyle}>
+                <td data-label="ID" style={tdStyle}>{task.id.slice(0, 6)}</td>
+                <td data-label="" style={tdStyle}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                    <strong>{task.title}</strong>
+                    {task.repeat_daily && (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', padding: '2px 8px', borderRadius: '20px', fontSize: '10px', fontWeight: 700, background: 'linear-gradient(135deg, #7c3aed20, #6d28d920)', color: '#7c3aed', border: '1px solid #7c3aed30', letterSpacing: '0.3px', textTransform: 'uppercase' }}>
+                        <Repeat size={10} /> Repeat
+                      </span>
+                    )}
+                  </div>
+                </td>
+                <td data-label="Assigned" style={tdStyle}>
                   {task.assigned_to ? partners.find(p => p.id === task.assigned_to)?.username : 'Unassigned'}
                   {task.assigned_partners && task.assigned_partners.length > 0 && (
                     <span style={{ display: 'block', fontSize: '11px', color: '#7F8C8D', marginTop: '2px' }}>
@@ -317,23 +352,26 @@ export default function BahrainDailyTasks() {
                     </span>
                   )}
                 </td>
-                <td style={tdStyle}>
+                <td data-label="Priority" style={tdStyle}>
                   <span style={{ padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 600, background: task.priority === 'High' ? '#FADBD8' : task.priority === 'Medium' ? '#FCF3CF' : '#D5F5E3', color: task.priority === 'High' ? '#E74C3C' : task.priority === 'Medium' ? '#F39C12' : '#27AE60' }}>
                     {task.priority}
                   </span>
                 </td>
-                <td style={tdStyle}>
+                <td data-label="Status" style={tdStyle}>
                   <span style={{ padding: '4px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: 600, background: '#E8F8F5', color: '#117A65' }}>
                     {task.status}
                   </span>
                 </td>
-                <td style={tdStyle}>{task.deadline || '-'}</td>
-                <td style={tdStyle}>
-                  <div style={{ display: 'flex', gap: '6px' }}>
+                <td data-label="Deadline" style={tdStyle}>{task.deadline || '-'}</td>
+                <td data-label="" style={tdStyle}>
+                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                     <button onClick={() => viewDetail(task.id)} style={btnSmStyle('#5DADE2')}><Eye size={14} /></button>
                     <button onClick={() => openChat(task)} style={btnSmStyle('#8E44AD')}><MessageCircle size={14} /></button>
                     {isAdminUser && (
-                      <button onClick={() => { setEditingTaskId(task.id); setNewTask({ title: task.title, priority: task.priority, deadline: task.deadline, description: task.description || '', assigned_to: task.assigned_to, assigned_partners: task.assigned_partners || [] }); setShowTaskModal(true); }} style={btnSmStyle('#F39C12')}><Edit2 size={14} /></button>
+                      <>
+                      <button onClick={() => { setEditingTaskId(task.id); setNewTask({ title: task.title, priority: task.priority, deadline: task.deadline || '', description: task.description || '', assigned_to: task.assigned_to || '', assigned_partners: task.assigned_partners || [], repeat_daily: task.repeat_daily || false }); setShowTaskModal(true); }} style={btnSmStyle('#F39C12')}><Edit2 size={14} /></button>
+                      <button onClick={() => deleteTask(task.id)} style={btnSmStyle('#E74C3C')} title="Delete task"><Trash2 size={14} /></button>
+                      </>
                     )}
                   </div>
                 </td>
@@ -378,6 +416,20 @@ export default function BahrainDailyTasks() {
                 <FormField label="Description">
                   <textarea value={newTask.description} onChange={e => setNewTask(p => ({ ...p, description: e.target.value }))} style={{ ...inputStyle, minHeight: '80px' }} />
                 </FormField>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', background: newTask.repeat_daily ? 'linear-gradient(135deg, #7c3aed08, #6d28d910)' : '#f8fafc', borderRadius: '12px', border: newTask.repeat_daily ? '1.5px solid #7c3aed30' : '1.5px solid #e2e8f0', transition: 'all 0.2s ease', cursor: 'pointer' }} onClick={() => setNewTask(p => ({ ...p, repeat_daily: !p.repeat_daily }))}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: newTask.repeat_daily ? 'linear-gradient(135deg, #7c3aed, #6d28d9)' : '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s ease' }}>
+                      <Repeat size={16} color={newTask.repeat_daily ? '#ffffff' : '#94a3b8'} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>Repeat Daily</div>
+                      <div style={{ fontSize: '12px', color: '#64748b', marginTop: '1px' }}>Task resets automatically every day</div>
+                    </div>
+                  </div>
+                  <div style={{ width: '44px', height: '24px', borderRadius: '12px', background: newTask.repeat_daily ? 'linear-gradient(135deg, #7c3aed, #6d28d9)' : '#cbd5e1', position: 'relative', transition: 'all 0.25s ease', boxShadow: newTask.repeat_daily ? '0 2px 8px rgba(124,58,237,0.3)' : 'none' }}>
+                    <div style={{ width: '20px', height: '20px', borderRadius: '50%', background: '#ffffff', position: 'absolute', top: '2px', left: newTask.repeat_daily ? '22px' : '2px', transition: 'all 0.25s ease', boxShadow: '0 1px 3px rgba(0,0,0,0.15)' }} />
+                  </div>
+                </div>
               </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '24px', paddingTop: '20px', borderTop: '1px solid #f1f5f9' }}>
                 <button onClick={() => setShowTaskModal(false)} style={{ padding: '11px 24px', background: '#f1f5f9', color: '#475569', border: '1px solid #e2e8f0', borderRadius: '10px', cursor: 'pointer', fontWeight: 600, fontSize: '14px', transition: 'all 0.15s ease' }} onMouseEnter={e => e.currentTarget.style.background = '#e2e8f0'} onMouseLeave={e => e.currentTarget.style.background = '#f1f5f9'}>Cancel</button>
