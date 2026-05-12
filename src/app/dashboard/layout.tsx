@@ -158,11 +158,10 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           transition: 'transform 0.3s cubic-bezier(0.25,0.1,0.25,1), width 0.3s cubic-bezier(0.25,0.1,0.25,1)',
           zIndex: 50, overflow: 'hidden',
         }}>
-        {/* Logo */}
         <div style={{ padding: collapsed ? '20px 16px' : '20px 24px', borderBottom: '1px solid var(--border-light)', display: 'flex', alignItems: 'center', gap: '12px', minHeight: '72px' }}>
-          <div style={{ overflow: 'hidden', height: '60px', display: 'flex', alignItems: 'center', width: collapsed ? '40px' : '200px', transition: 'width 0.3s cubic-bezier(0.25,0.1,0.25,1)' }}>
+          <div style={{ overflow: 'hidden', height: '60px', width: collapsed ? '40px' : '200px', transition: 'width 0.3s cubic-bezier(0.25,0.1,0.25,1)', position: 'relative' }}>
             <img src="/logo.png" alt="The Digital Ledger"
-              style={{ height: '100%', width: '100%', objectFit: collapsed ? 'cover' : 'contain', objectPosition: 'left center', transform: collapsed ? 'scale(2.2) translateX(4px)' : 'scale(2.2)', transformOrigin: 'left center', transition: 'all 0.3s cubic-bezier(0.25,0.1,0.25,1)' }}
+              style={{ position: 'absolute', top: 0, left: 0, height: '100%', width: '100%', objectFit: collapsed ? 'cover' : 'contain', objectPosition: 'left center', transform: collapsed ? 'scale(2.2) translateX(4px)' : 'scale(2.2)', transformOrigin: 'left center', transition: 'all 0.3s cubic-bezier(0.25,0.1,0.25,1)' }}
               onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
           </div>
         </div>

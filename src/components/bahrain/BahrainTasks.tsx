@@ -107,7 +107,7 @@ export default function BahrainTasks() {
       
       const resolvedStatuses = dbStatuses.length > 0
         ? [...new Set(dbStatuses)].sort((a, b) => a.localeCompare(b)) as string[]
-        : [...BAHRAIN_STATUSES].sort((a, b) => a.localeCompare(b));
+        : (!dataCountry || dataCountry === 'Bahrain' ? [...BAHRAIN_STATUSES].sort((a, b) => a.localeCompare(b)) : []);
       setDynamicStatuses(resolvedStatuses);
 
       const companyIds = companyList.map(c => c.id);
@@ -663,8 +663,10 @@ export default function BahrainTasks() {
           <option value="">All Status</option>
           {(() => {
             const allStatuses = new Set<string>(dynamicStatuses);
-            // Also include any status currently on a task (e.g. deactivated statuses still in use)
-            tasks.forEach(t => { if (t.status) allStatuses.add(t.status); });
+            // For Bahrain keep aggregating legacy task statuses, for other countries strictly sync with Edits section
+            if (!dataCountry || dataCountry === 'Bahrain') {
+              tasks.forEach(t => { if (t.status) allStatuses.add(t.status); });
+            }
             return Array.from(allStatuses).sort((a, b) => a.localeCompare(b)).map(s => <option key={s} value={s}>{s}</option>);
           })()}
         </select>
@@ -708,14 +710,14 @@ export default function BahrainTasks() {
         <table style={{ width: '100%', borderCollapse: 'collapse', background: '#ffffff' }}>
           <thead>
             <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
-              {['ID', 'Company', 'Task Type', 'Priority', 'Due', 'Status', 'Auditor', 'Assigned To', ''].map(h => (
+              {['ID', 'Company', 'Task Type', 'Description', 'Priority', 'Due', 'Status', 'Auditor', 'Assigned To', ''].map(h => (
                 <th key={h} style={{ padding: '11px 10px', textAlign: 'left', fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', color: '#64748b', whiteSpace: 'nowrap' }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 ? (
-              <tr><td colSpan={9} style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>No tasks found</td></tr>
+              <tr><td colSpan={10} style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>No tasks found</td></tr>
             ) : filtered.map(task => {
               const company = companies.find(c => c.id === task.company_id);
               const ttIds = task.task_type_ids && task.task_type_ids.length > 0 ? task.task_type_ids : (task.task_type_id ? task.task_type_id.split(',').map(s => s.trim()).filter(Boolean) : []);
@@ -740,6 +742,9 @@ export default function BahrainTasks() {
                         ))}
                       </div>
                     ) : <span style={{ fontSize: '11px', color: '#94a3b8' }}>—</span>}
+                  </td>
+                  <td style={compactCell}>
+                    <span style={{ fontSize: '11px', color: '#475569', maxWidth: '150px', display: 'inline-block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={task.description || ''}>{task.description || '—'}</span>
                   </td>
                   <td style={compactCell}>
                     <span style={{ padding: '3px 8px', borderRadius: '20px', fontSize: '10px', fontWeight: 700, background: pc.bg, color: pc.color, whiteSpace: 'nowrap' }}>{task.priority}</span>

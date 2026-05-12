@@ -88,7 +88,7 @@ export default function BahrainDailyTasks() {
       if (dbStatuses.length > 0) {
         setDynamicStatuses(dbStatuses.sort((a, b) => a.localeCompare(b)));
       } else {
-        setDynamicStatuses(BAHRAIN_STATUSES);
+        setDynamicStatuses(!dataCountry || dataCountry === 'Bahrain' ? [...BAHRAIN_STATUSES].sort((a, b) => a.localeCompare(b)) : []);
       }
 
     } catch (err) {
