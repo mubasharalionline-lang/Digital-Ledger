@@ -1,450 +1,355 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import type { Task, Company, User, TaskType } from '@/lib/supabase';
 import { getDataCountry, getSession, isAdmin } from '@/lib/auth';
-import { useRouter } from 'next/navigation';
 import {
-  ListTodo,
-  Building2,
-  Users as UsersIcon,
-  CheckCircle2,
-  Clock,
-  BarChart3,
-  Globe,
-  Download,
-  Loader2,
-  FileSpreadsheet
+  Download, Upload, FileSpreadsheet, FileJson, Loader2, X,
+  Calendar, Building2, Users as UsersIcon, BarChart3, CheckCircle2,
+  Clock, AlertTriangle, ListTodo, Filter, Database, ArrowRight, Search
 } from 'lucide-react';
-import * as XLSX from 'xlsx';
+import { filterTasks, exportExcel, exportFullJson, exportFullExcel } from '@/lib/reportExportUtils';
 
 export default function BahrainReports() {
-  const [tasksByCountry, setTasksByCountry] = useState<Record<string, number>>({});
-  const [totalTasks, setTotalTasks] = useState(0);
-  const [completedTasks, setCompletedTasks] = useState(0);
-  const [pendingTasks, setPendingTasks] = useState(0);
-  const [totalCompanies, setTotalCompanies] = useState(0);
-  const [totalPartners, setTotalPartners] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [exporting, setExporting] = useState(false);
+  const [exporting, setExporting] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<string | null>(null);
 
-  // Full data for export
   const [allTasks, setAllTasks] = useState<Task[]>([]);
   const [allCompanies, setAllCompanies] = useState<Company[]>([]);
   const [allPartners, setAllPartners] = useState<User[]>([]);
   const [allTaskTypes, setAllTaskTypes] = useState<TaskType[]>([]);
   const [allAuditors, setAllAuditors] = useState<any[]>([]);
-  
-  const router = useRouter();
+  const [allStatuses, setAllStatuses] = useState<string[]>([]);
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const { user: currentUser } = getSession();
   const isAdminUser = isAdmin(currentUser);
+  const dataCountry = getDataCountry() || 'Bahrain';
 
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const dataCountry = getDataCountry();
-
-      const [companiesRes, usersRes, taskTypesRes, auditorsRes] = await Promise.all([
-        supabase.from('companies').select('*').eq('country', dataCountry || 'Bahrain'),
-        dataCountry 
-          ? supabase.from('users').select('*').eq('country', dataCountry).neq('role', 'admin')
-          : supabase.from('users').select('*').neq('role', 'admin'),
-        supabase.from('task_types').select('*').eq('country', dataCountry || 'Bahrain'),
-        dataCountry
-          ? supabase.from('auditors').select('*').eq('country', dataCountry)
-          : supabase.from('auditors').select('*'),
+      const [compRes, usersRes, ttRes, audRes] = await Promise.all([
+        supabase.from('companies').select('*').eq('country', dataCountry),
+        dataCountry ? supabase.from('users').select('*').eq('country', dataCountry) : supabase.from('users').select('*'),
+        supabase.from('task_types').select('*').eq('country', dataCountry),
+        dataCountry ? supabase.from('auditors').select('*').eq('country', dataCountry) : supabase.from('auditors').select('*'),
       ]);
-
-      const companyList = companiesRes.data || [];
-      const companyIds = companyList.map(c => c.id);
-      const usersList = usersRes.data || [];
-      const ttList = taskTypesRes.data || [];
-      const audList = auditorsRes.data || [];
-      
-      setTotalCompanies(companyList.length);
-      setTotalPartners(usersList.length);
-      setAllCompanies(companyList);
-      setAllPartners(usersList);
+      const compList = compRes.data || [];
+      const partnerList = usersRes.data || [];
+      const ttList = ttRes.data || [];
+      const audList = audRes.data || [];
+      setAllCompanies(compList);
+      setAllPartners(partnerList);
       setAllTaskTypes(ttList);
       setAllAuditors(audList);
 
+      const ids = compList.map(c => c.id);
       let taskList: Task[] = [];
-      if (companyIds.length > 0) {
-        const { data: tasks } = await supabase.from('tasks').select('*').in('company_id', companyIds);
-        taskList = tasks || [];
+      if (ids.length > 0) {
+        const { data } = await supabase.from('tasks').select('*').in('company_id', ids);
+        taskList = data || [];
       }
-
       setAllTasks(taskList);
-      setTotalTasks(taskList.length);
-      const completedCount = taskList.filter(t => t.status === 'Closed' || t.status === 'Completed' || t.status === 'Filed').length;
-      setCompletedTasks(completedCount);
-      setPendingTasks(taskList.length - completedCount);
-
-      // Group by company country
-      const byCountry: Record<string, number> = {};
-      taskList.forEach(t => {
-        const company = companyList.find(c => c.id === t.company_id);
-        const country = company?.country || 'Unknown';
-        byCountry[country] = (byCountry[country] || 0) + 1;
-      });
-      setTasksByCountry(byCountry);
-    } catch (err) {
-      console.error(err);
-    }
+      const statusSet = new Set<string>();
+      taskList.forEach(t => { if (t.status) statusSet.add(t.status); });
+      setAllStatuses(Array.from(statusSet).sort());
+    } catch (e) { console.error(e); }
     setLoading(false);
-  }, []);
+  }, [dataCountry]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  // --- EXCEL EXPORT ---
-  async function exportToExcel() {
-    setExporting(true);
+  const ctx = { tasks: allTasks, companies: allCompanies, partners: allPartners, taskTypes: allTaskTypes, auditors: allAuditors, country: dataCountry };
+
+  // --- Export handler ---
+  function handleExport(label: string, filter: Parameters<typeof filterTasks>[1]) {
+    setExporting(label);
     try {
-      const dataCountry = getDataCountry() || 'Bahrain';
-      const now = new Date();
-      const dateStr = now.toISOString().split('T')[0];
+      const filtered = filterTasks(allTasks, filter);
+      if (filtered.length === 0) { alert('No tasks match this filter.'); setExporting(null); return; }
+      exportExcel(filtered, ctx, label);
+    } catch (e: any) { alert('Export failed: ' + e.message); }
+    setExporting(null);
+  }
 
-      // Prepare rows with readable names
-      const rows = allTasks.map(task => {
-        const company = allCompanies.find(c => c.id === task.company_id);
-        const ttIds = task.task_type_ids && task.task_type_ids.length > 0
-          ? task.task_type_ids
-          : (task.task_type_id ? task.task_type_id.split(',').map(s => s.trim()).filter(Boolean) : []);
-        const ttNames = ttIds.map(id => allTaskTypes.find(t => t.id === id)?.name).filter(Boolean).join(', ');
-
-        const assignedPartnerNames = task.assigned_partners && task.assigned_partners.length > 0
-          ? task.assigned_partners.map(id => allPartners.find(p => p.id === id)?.username).filter(Boolean).join(', ')
-          : '';
-        const primaryAssigned = allPartners.find(p => p.id === task.assigned_to)?.username || '';
-        const assignedDisplay = [primaryAssigned, assignedPartnerNames].filter(Boolean).join(', ');
-
-        const auditor = allAuditors.find(a => a.id === task.auditor_id);
-
-        return {
-          'Task ID': task.id.slice(0, 8),
-          'Company': company?.company_name || 'Unknown',
-          'Task Type': ttNames || '—',
-          'Description': task.description || '',
-          'Priority': task.priority,
-          'Status': task.status,
-          'Due Date': task.deadline || '',
-          'Assigned To': assignedDisplay || 'Unassigned',
-          'Auditor': auditor?.name || '',
-          'Created At': task.created_at ? new Date(task.created_at).toLocaleDateString() : '',
-          'Daily Task': task.is_daily ? 'Yes' : 'No',
-        };
-      });
-
-      // Sort by company name then status
-      rows.sort((a, b) => a['Company'].localeCompare(b['Company']) || a['Status'].localeCompare(b['Status']));
-
-      // Create workbook
-      const wb = XLSX.utils.book_new();
-
-      // Sheet 1: All Tasks
-      const ws = XLSX.utils.json_to_sheet(rows);
-      
-      // Set column widths
-      ws['!cols'] = [
-        { wch: 10 },  // Task ID
-        { wch: 25 },  // Company
-        { wch: 20 },  // Task Type
-        { wch: 35 },  // Description
-        { wch: 10 },  // Priority
-        { wch: 18 },  // Status
-        { wch: 12 },  // Due Date
-        { wch: 22 },  // Assigned To
-        { wch: 16 },  // Auditor
-        { wch: 12 },  // Created At
-        { wch: 10 },  // Daily Task
-      ];
-      XLSX.utils.book_append_sheet(wb, ws, 'All Tasks');
-
-      // Sheet 2: Summary
-      const summaryRows = [
-        { 'Metric': 'Total Tasks', 'Value': totalTasks },
-        { 'Metric': 'Completed Tasks', 'Value': completedTasks },
-        { 'Metric': 'Pending Tasks', 'Value': pendingTasks },
-        { 'Metric': 'Completion Rate', 'Value': totalTasks > 0 ? `${(completedTasks / totalTasks * 100).toFixed(1)}%` : '0%' },
-        { 'Metric': 'Total Companies', 'Value': totalCompanies },
-        { 'Metric': 'Total Partners', 'Value': totalPartners },
-        { 'Metric': '', 'Value': '' },
-        { 'Metric': 'Report Date', 'Value': now.toLocaleDateString() },
-        { 'Metric': 'Country', 'Value': dataCountry },
-      ];
-      const wsSummary = XLSX.utils.json_to_sheet(summaryRows);
-      wsSummary['!cols'] = [{ wch: 20 }, { wch: 20 }];
-      XLSX.utils.book_append_sheet(wb, wsSummary, 'Summary');
-
-      // Sheet 3: By Status
-      const statusGroups: Record<string, number> = {};
-      allTasks.forEach(t => {
-        statusGroups[t.status] = (statusGroups[t.status] || 0) + 1;
-      });
-      const statusRows = Object.entries(statusGroups)
-        .sort((a, b) => b[1] - a[1])
-        .map(([status, count]) => ({ 'Status': status, 'Count': count, 'Percentage': totalTasks > 0 ? `${(count / totalTasks * 100).toFixed(1)}%` : '0%' }));
-      const wsStatus = XLSX.utils.json_to_sheet(statusRows);
-      wsStatus['!cols'] = [{ wch: 22 }, { wch: 8 }, { wch: 12 }];
-      XLSX.utils.book_append_sheet(wb, wsStatus, 'By Status');
-
-      // Sheet 4: By Company
-      const companyGroups: Record<string, { total: number; completed: number }> = {};
-      allTasks.forEach(t => {
-        const comp = allCompanies.find(c => c.id === t.company_id);
-        const name = comp?.company_name || 'Unknown';
-        if (!companyGroups[name]) companyGroups[name] = { total: 0, completed: 0 };
-        companyGroups[name].total++;
-        if (t.status === 'Closed' || t.status === 'Completed' || t.status === 'Filed') companyGroups[name].completed++;
-      });
-      const companyRows = Object.entries(companyGroups)
-        .sort((a, b) => b[1].total - a[1].total)
-        .map(([name, data]) => ({
-          'Company': name,
-          'Total Tasks': data.total,
-          'Completed': data.completed,
-          'Pending': data.total - data.completed,
-          'Completion Rate': data.total > 0 ? `${(data.completed / data.total * 100).toFixed(1)}%` : '0%',
-        }));
-      const wsCompany = XLSX.utils.json_to_sheet(companyRows);
-      wsCompany['!cols'] = [{ wch: 25 }, { wch: 12 }, { wch: 10 }, { wch: 10 }, { wch: 14 }];
-      XLSX.utils.book_append_sheet(wb, wsCompany, 'By Company');
-
-      // Download
-      const filename = `Task_Report_${dataCountry}_${dateStr}.xlsx`;
-      XLSX.writeFile(wb, filename);
-    } catch (err) {
-      console.error('Export error:', err);
-      alert('Failed to export: ' + (err as Error).message);
+  // --- JSON import ---
+  async function handleJsonImport(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImporting(true);
+    setImportResult(null);
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      let imported = 0;
+      if (data.companies?.length) {
+        for (const c of data.companies) {
+          const { error } = await supabase.from('companies').upsert(c, { onConflict: 'id' });
+          if (!error) imported++;
+        }
+      }
+      if (data.tasks?.length) {
+        for (const t of data.tasks) {
+          const { error } = await supabase.from('tasks').upsert(t, { onConflict: 'id' });
+          if (!error) imported++;
+        }
+      }
+      setImportResult(`Successfully imported ${imported} records. Refreshing...`);
+      sessionStorage.clear();
+      setTimeout(() => { loadData(); setImportResult(null); }, 2000);
+    } catch (err: any) {
+      setImportResult('Import failed: ' + err.message);
     }
-    setExporting(false);
+    setImporting(false);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  }
+
+  // --- Helpers ---
+  const years = Array.from(new Set(allTasks.map(t => (t.deadline || t.created_at)?.slice(0, 4)).filter(Boolean))).sort().reverse();
+  const months: string[] = [];
+  const now = new Date();
+  for (let i = 0; i < 12; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
   }
 
   if (!isAdminUser) return <div style={{ textAlign: 'center', padding: '60px', color: '#E74C3C', fontSize: '18px', fontWeight: 'bold' }}>Access Denied</div>;
+  if (loading) return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}><Loader2 size={32} style={{ animation: 'spin 1s linear infinite' }} color="#3b82f6" /></div>;
 
-  if (loading) return (
-    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
-      <div style={{ fontSize: '18px', color: 'var(--text-secondary, #666)' }}>Loading reports...</div>
-    </div>
-  );
-
-  const completionRate = totalTasks > 0 ? (completedTasks / totalTasks * 100).toFixed(1) : '0';
+  const completedCount = allTasks.filter(t => { const s = t.status?.toLowerCase() || ''; return s.includes('completed') || s.includes('closed') || s.includes('filed'); }).length;
 
   return (
     <div style={{ paddingBottom: '40px', maxWidth: '1200px', margin: '0 auto' }}>
-      <div style={{ marginBottom: '32px', padding: '24px 28px', background: 'linear-gradient(135deg, #1E293B 0%, #334155 100%)', borderRadius: '16px', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
-        <div>
-          <h1 style={{ fontSize: '26px', fontWeight: 700, color: '#fff', margin: '0 0 6px 0', letterSpacing: '-0.5px' }}>Reports &amp; Analytics</h1>
-          <p style={{ fontSize: '14px', color: '#94A3B8', margin: 0 }}>Comprehensive overview of tasks, companies, and performance.</p>
+      {/* Header */}
+      <div style={{ marginBottom: '28px', padding: '28px 32px', background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%)', borderRadius: '20px', boxShadow: '0 4px 20px rgba(15,23,42,0.15)' }}>
+        <div className="reports-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+          <div>
+            <h1 style={{ color: '#fff', fontSize: '24px', fontWeight: 700, margin: '0 0 6px', letterSpacing: '-0.5px' }}>Reports & Export Center</h1>
+            <p style={{ color: '#94a3b8', fontSize: '14px', margin: 0 }}>Generate, export, backup & import your company data</p>
+          </div>
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+            <MiniStat label="Tasks" value={allTasks.length} color="#3b82f6" />
+            <MiniStat label="Done" value={completedCount} color="#10b981" />
+            <MiniStat label="Companies" value={allCompanies.length} color="#8b5cf6" />
+          </div>
         </div>
-        <button
-          onClick={exportToExcel}
-          disabled={exporting || allTasks.length === 0}
-          style={{
-            display: 'flex', alignItems: 'center', gap: '8px',
-            padding: '12px 24px', background: allTasks.length === 0 ? '#475569' : '#10B981',
-            color: '#fff', border: 'none', borderRadius: '12px', cursor: allTasks.length === 0 ? 'not-allowed' : 'pointer',
-            fontWeight: 600, fontSize: '14px',
-            boxShadow: '0 4px 14px rgba(16,185,129,0.3)',
-            transition: 'all 0.2s ease', opacity: exporting ? 0.7 : 1,
-            whiteSpace: 'nowrap',
-          }}
-          onMouseEnter={e => { if (allTasks.length > 0 && !exporting) { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 6px 20px rgba(16,185,129,0.4)'; } }}
-          onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 4px 14px rgba(16,185,129,0.3)'; }}
-        >
-          {exporting ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : <FileSpreadsheet size={16} />}
-          {exporting ? 'Exporting...' : 'Export to Excel'}
-        </button>
       </div>
 
-      {/* Stats Grid */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-        gap: '20px',
-        marginBottom: '32px',
-      }}>
-        <StatCard 
-          icon={<ListTodo size={20} />} 
-          label="Total Tasks" 
-          value={totalTasks} 
-          colorHex="#3B82F6" 
-          onClick={() => router.push('/dashboard/tasks')}
-        />
-        <StatCard 
-          icon={<CheckCircle2 size={20} />} 
-          label="Completed Tasks" 
-          value={completedTasks} 
-          colorHex="#10B981" 
-          onClick={() => router.push('/dashboard/tasks')}
-        />
-        <StatCard 
-          icon={<Clock size={20} />} 
-          label="Pending Tasks" 
-          value={pendingTasks} 
-          colorHex="#F59E0B" 
-          onClick={() => router.push('/dashboard/tasks')}
-        />
-        <StatCard 
-          icon={<Building2 size={20} />} 
-          label="Total Companies" 
-          value={totalCompanies} 
-          colorHex="#8B5CF6" 
-          onClick={() => router.push('/dashboard/companies')}
-        />
-        <StatCard 
-          icon={<UsersIcon size={20} />} 
-          label="Total Partners" 
-          value={totalPartners} 
-          colorHex="#EC4899" 
-          onClick={() => router.push('/dashboard/staff')}
-        />
+      {/* Import Result Banner */}
+      {importResult && (
+        <div style={{ padding: '14px 20px', background: importResult.includes('fail') ? '#fef2f2' : '#f0fdf4', border: `1px solid ${importResult.includes('fail') ? '#fecaca' : '#bbf7d0'}`, borderRadius: '12px', marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontSize: '14px', fontWeight: 600, color: importResult.includes('fail') ? '#dc2626' : '#16a34a' }}>{importResult}</span>
+          <button onClick={() => setImportResult(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}><X size={16} /></button>
+        </div>
+      )}
+
+      {/* === DATA BACKUP SECTION === */}
+      <SectionTitle icon={<Database size={18} color="#3b82f6" />} title="Data Backup & Import" subtitle="Full JSON and Excel backup of all company data" />
+      <div className="reports-backup-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '14px', marginBottom: '32px' }}>
+        <ActionCard icon={<FileJson size={20} />} label="Export JSON Backup" desc="Full data backup in JSON" color="#3b82f6" loading={exporting === 'json'}
+          onClick={() => { setExporting('json'); exportFullJson(ctx); setExporting(null); }} />
+        <ActionCard icon={<FileSpreadsheet size={20} />} label="Export Full Excel" desc="All data in Excel sheets" color="#10b981" loading={exporting === 'fullxl'}
+          onClick={() => { setExporting('fullxl'); exportFullExcel(ctx); setExporting(null); }} />
+        <ActionCard icon={<Upload size={20} />} label="Import JSON Backup" desc="Restore from JSON file" color="#f59e0b" loading={importing}
+          onClick={() => fileInputRef.current?.click()} />
+        <input ref={fileInputRef} type="file" accept=".json" style={{ display: 'none' }} onChange={handleJsonImport} />
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '24px' }}>
-        <div style={panelStyle}>
-          <div style={panelHeaderStyle}>
-            <h3 style={panelTitleStyle}>
-              <Globe size={18} color="#3B82F6" /> Tasks by Country
-            </h3>
-          </div>
-          <div style={listContainerStyle}>
-            {Object.entries(tasksByCountry).length === 0 ? (
-               <div style={{ textAlign: 'center', padding: '20px', color: '#6B7280' }}>No tasks found</div>
-            ) : (
-               Object.entries(tasksByCountry).map(([country, count], idx) => {
-                 const colors = ['#3B82F6', '#10B981', '#8B5CF6', '#F59E0B', '#EC4899'];
-                 const catColor = colors[idx % colors.length];
-                 return (
-                   <div key={country} style={{
-                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                      padding: '12px 16px', background: '#FAFAFA', borderRadius: '10px', border: '1px solid #E5E7EB', marginBottom: '8px'
-                   }}>
-                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <div style={{ 
-                          width: '36px', height: '36px', borderRadius: '8px', 
-                          background: `${catColor}20`, color: catColor, 
-                          display: 'flex', alignItems: 'center', justifyContent: 'center', 
-                          fontSize: '18px', fontWeight: 700 
-                        }}>
-                          {country === 'Bahrain' ? '🇧🇭' : (country === 'New Zealand' ? '🇳🇿' : '🌍')}
-                        </div>
-                        <div style={{ fontSize: '14px', fontWeight: 600, color: '#111827' }}>{country}</div>
-                     </div>
-                     <div style={{ fontSize: '16px', fontWeight: 700, color: catColor }}>{count}</div>
-                   </div>
-                 );
-               })
-            )}
-          </div>
-        </div>
+      {/* === FILTERED REPORTS === */}
+      <SectionTitle icon={<Filter size={18} color="#8b5cf6" />} title="Filtered Reports" subtitle="Export tasks by specific criteria as Excel files" />
 
-        <div style={panelStyle}>
-          <div style={panelHeaderStyle}>
-            <h3 style={panelTitleStyle}>
-              <BarChart3 size={18} color="#10B981" /> Overall Completion Rate
-            </h3>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flex: 1, padding: '20px' }}>
-             <div style={{ position: 'relative', width: '160px', height: '160px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-               <svg viewBox="0 0 36 36" style={{ width: '100%', height: '100%' }}>
-                 <path
-                   d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                   fill="none"
-                   stroke="#E5E7EB"
-                   strokeWidth="3.8"
-                 />
-                 <path
-                   d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                   fill="none"
-                   stroke="#10B981"
-                   strokeWidth="3.8"
-                   strokeDasharray={`${completionRate}, 100`}
-                   style={{ transition: 'stroke-dasharray 1s ease' }}
-                 />
-               </svg>
-               <div style={{ position: 'absolute', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                 <span style={{ fontSize: '32px', fontWeight: 700, color: '#111827' }}>{completionRate}%</span>
-               </div>
-             </div>
-             <div style={{ marginTop: '24px', textAlign: 'center' }}>
-               <div style={{ fontSize: '16px', fontWeight: 600, color: '#374151' }}>{completedTasks} of {totalTasks} Tasks Completed</div>
-               <div style={{ fontSize: '14px', color: '#6B7280', marginTop: '4px' }}>Keep up the great work!</div>
-             </div>
-          </div>
+      {/* Time-based */}
+      <SubTitle text="By Time Period" />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '12px', marginBottom: '24px' }}>
+        <FilterCard icon={<Calendar size={16} />} label="All Months (Combined)" count={allTasks.length} color="#0f172a" highlight
+          loading={exporting === 'all-months'} onClick={() => handleExport('All_Tasks', {})} />
+        {months.slice(0, 6).map(m => {
+          const d = new Date(m + '-01');
+          const label = d.toLocaleString('default', { month: 'long', year: 'numeric' });
+          const count = filterTasks(allTasks, { month: m }).length;
+          return <FilterCard key={m} icon={<Calendar size={16} />} label={label} count={count} color="#3b82f6"
+            loading={exporting === m} onClick={() => handleExport(label, { month: m })} />;
+        })}
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '12px', marginBottom: '28px' }}>
+        {years.map(y => {
+          const count = filterTasks(allTasks, { year: y }).length;
+          return <FilterCard key={y} icon={<Calendar size={16} />} label={`Year ${y}`} count={count} color="#6366f1"
+            loading={exporting === y} onClick={() => handleExport(`Year_${y}`, { year: y })} />;
+        })}
+      </div>
+
+      {/* Company-wise */}
+      <SubTitle text="By Company" />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '12px', marginBottom: '28px' }}>
+        <FilterCard icon={<Building2 size={16} />} label="All Companies (Combined)" count={allTasks.length} color="#0f172a" highlight
+          loading={exporting === 'all-companies'} onClick={() => handleExport('All_Companies', {})} />
+        {allCompanies.slice().sort((a, b) => a.company_name.localeCompare(b.company_name)).map(c => {
+          const count = filterTasks(allTasks, { companyId: c.id }).length;
+          return <FilterCard key={c.id} icon={<Building2 size={16} />} label={c.company_name} count={count} color="#8b5cf6"
+            loading={exporting === c.id} onClick={() => handleExport(c.company_name, { companyId: c.id })} />;
+        })}
+      </div>
+
+      {/* Task Type-wise */}
+      <SubTitle text="By Task Type" />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '12px', marginBottom: '28px' }}>
+        <FilterCard icon={<BarChart3 size={16} />} label="All Task Types (Combined)" count={allTasks.length} color="#0f172a" highlight
+          loading={exporting === 'all-types'} onClick={() => handleExport('All_Task_Types', {})} />
+        {allTaskTypes.filter(t => t.active).map(tt => {
+          const count = filterTasks(allTasks, { taskTypeId: tt.id }).length;
+          return <FilterCard key={tt.id} icon={<BarChart3 size={16} />} label={tt.name} count={count} color="#06b6d4"
+            loading={exporting === tt.id} onClick={() => handleExport(tt.name, { taskTypeId: tt.id })} />;
+        })}
+      </div>
+
+      {/* Status-wise */}
+      <SubTitle text="By Status" />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '12px', marginBottom: '28px' }}>
+        <FilterCard icon={<ListTodo size={16} />} label="All Statuses (Combined)" count={allTasks.length} color="#0f172a" highlight
+          loading={exporting === 'all-statuses'} onClick={() => handleExport('All_Statuses', {})} />
+        {allStatuses.map(s => {
+          const count = filterTasks(allTasks, { status: s }).length;
+          return <FilterCard key={s} icon={<ListTodo size={16} />} label={s} count={count} color="#f59e0b"
+            loading={exporting === s} onClick={() => handleExport(`Status_${s}`, { status: s })} />;
+        })}
+      </div>
+
+      {/* Partner-wise */}
+      <SubTitle text="By Partner / Assigned To" />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '12px', marginBottom: '28px' }}>
+        <FilterCard icon={<UsersIcon size={16} />} label="All Partners (Combined)" count={allTasks.length} color="#0f172a" highlight
+          loading={exporting === 'all-partners'} onClick={() => handleExport('All_Partners', {})} />
+        {allPartners.map(p => {
+          const count = filterTasks(allTasks, { partnerId: p.id }).length;
+          if (count === 0) return null;
+          return <FilterCard key={p.id} icon={<UsersIcon size={16} />} label={p.username} count={count} color="#ec4899"
+            loading={exporting === p.id} onClick={() => handleExport(`Partner_${p.username}`, { partnerId: p.id })} />;
+        })}
+      </div>
+
+      {/* Auditor-wise */}
+      {allAuditors.length > 0 && (<>
+        <SubTitle text="By Auditor" />
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '12px', marginBottom: '28px' }}>
+          <FilterCard icon={<Search size={16} />} label="All Auditors (Combined)" count={allTasks.length} color="#0f172a" highlight
+            loading={exporting === 'all-auditors'} onClick={() => handleExport('All_Auditors', {})} />
+          {allAuditors.map(a => {
+            const count = filterTasks(allTasks, { auditorId: a.id }).length;
+            if (count === 0) return null;
+            return <FilterCard key={a.id} icon={<Search size={16} />} label={a.name} count={count} color="#14b8a6"
+              loading={exporting === a.id} onClick={() => handleExport(`Auditor_${a.name}`, { auditorId: a.id })} />;
+          })}
         </div>
+      </>)}
+
+      {/* Special Reports */}
+      <SectionTitle icon={<CheckCircle2 size={18} color="#10b981" />} title="Special Reports" subtitle="Completed, pending, overdue, and daily task reports" />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '14px', marginBottom: '28px' }}>
+        <FilterCard icon={<CheckCircle2 size={16} />} label="All Completed Tasks" count={completedCount} color="#059669"
+          loading={exporting === 'completed'} onClick={() => handleExport('Completed_Tasks', { mode: 'completed' })} />
+        <FilterCard icon={<Clock size={16} />} label="Pending / In-Progress" count={allTasks.length - completedCount} color="#d97706"
+          loading={exporting === 'pending'} onClick={() => handleExport('Pending_Tasks', { mode: 'pending' })} />
+        <FilterCard icon={<AlertTriangle size={16} />} label="Overdue Tasks" count={allTasks.filter(t => {
+          if (!t.deadline) return false;
+          const sl = t.status?.toLowerCase() || '';
+          return new Date(t.deadline) < new Date() && !sl.includes('completed') && !sl.includes('closed') && !sl.includes('filed');
+        }).length} color="#ef4444"
+          loading={exporting === 'overdue'} onClick={() => {
+            setExporting('overdue');
+            const overdue = allTasks.filter(t => {
+              if (!t.deadline) return false;
+              const sl = t.status?.toLowerCase() || '';
+              return new Date(t.deadline) < new Date() && !sl.includes('completed') && !sl.includes('closed') && !sl.includes('filed');
+            });
+            if (overdue.length === 0) { alert('No overdue tasks.'); setExporting(null); return; }
+            exportExcel(overdue, ctx, 'Overdue_Tasks');
+            setExporting(null);
+          }} />
+        <FilterCard icon={<ListTodo size={16} />} label="Daily Tasks Only" count={allTasks.filter(t => t.is_daily).length} color="#7c3aed"
+          loading={exporting === 'daily'} onClick={() => handleExport('Daily_Tasks', { mode: 'daily' })} />
       </div>
     </div>
   );
 }
 
-// -----------------------------------------------------
-// Component & Style Definitions
-// -----------------------------------------------------
+/* ─── Sub-components ─── */
 
-function StatCard({ icon, label, value, colorHex, onClick }: { icon: React.ReactNode; label: string; value: number | string; colorHex: string; onClick?: () => void }) {
+function MiniStat({ label, value, color }: { label: string; value: number; color: string }) {
   return (
-    <div 
-      onClick={onClick}
-      style={{
-        background: `linear-gradient(135deg, #ffffff 0%, ${colorHex}08 100%)`,
-        border: `1px solid ${colorHex}30`,
-        borderTop: `4px solid ${colorHex}`,
-        borderRadius: '12px',
-        padding: '20px',
-        boxShadow: `0 2px 4px ${colorHex}15`,
-        cursor: onClick ? 'pointer' : 'default',
-        transition: 'all 0.2s ease',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '12px'
-      }}
-      onMouseEnter={e => onClick && (e.currentTarget.style.transform = 'translateY(-2px)', e.currentTarget.style.boxShadow = `0 6px 12px ${colorHex}25`)}
-      onMouseLeave={e => onClick && (e.currentTarget.style.transform = 'none', e.currentTarget.style.boxShadow = `0 2px 4px ${colorHex}15`)}
-    >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <div style={{ color: '#6B7280', fontSize: '14px', fontWeight: 500 }}>{label}</div>
-        <div style={{ background: `${colorHex}15`, color: colorHex, padding: '8px', borderRadius: '8px' }}>
-          {icon}
-        </div>
-      </div>
-      <div style={{ fontSize: '32px', fontWeight: 700, color: '#111827', lineHeight: 1 }}>{value}</div>
+    <div style={{ background: `${color}20`, padding: '8px 16px', borderRadius: '10px', textAlign: 'center' }}>
+      <div style={{ fontSize: '20px', fontWeight: 800, color: '#fff' }}>{value}</div>
+      <div style={{ fontSize: '10px', color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase' }}>{label}</div>
     </div>
   );
 }
 
-const panelStyle: React.CSSProperties = {
-  background: '#fff',
-  border: '1px solid #E5E7EB',
-  borderRadius: '16px',
-  padding: '24px',
-  boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-  display: 'flex',
-  flexDirection: 'column',
-  height: '100%'
-};
+function SectionTitle({ icon, title, subtitle }: { icon: React.ReactNode; title: string; subtitle: string }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+      <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{icon}</div>
+      <div>
+        <h2 style={{ fontSize: '17px', fontWeight: 700, color: '#0f172a', margin: 0 }}>{title}</h2>
+        <p style={{ fontSize: '12px', color: '#94a3b8', margin: 0 }}>{subtitle}</p>
+      </div>
+    </div>
+  );
+}
 
-const panelHeaderStyle: React.CSSProperties = {
-  display: 'flex',
-  justifyContent: 'space-between',
-  alignItems: 'center',
-  marginBottom: '20px'
-};
+function SubTitle({ text }: { text: string }) {
+  return <div style={{ fontSize: '13px', fontWeight: 700, color: '#64748b', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.5px', paddingLeft: '4px' }}>{text}</div>;
+}
 
-const panelTitleStyle: React.CSSProperties = {
-  fontSize: '16px',
-  fontWeight: 600,
-  color: '#111827',
-  margin: 0,
-  display: 'flex',
-  alignItems: 'center',
-  gap: '8px'
-};
+function ActionCard({ icon, label, desc, color, loading, onClick }: {
+  icon: React.ReactNode; label: string; desc: string; color: string; loading: boolean; onClick: () => void;
+}) {
+  return (
+    <button onClick={onClick} disabled={loading} style={{
+      display: 'flex', alignItems: 'center', gap: '14px', padding: '18px 20px',
+      background: '#ffffff', border: `1px solid ${color}30`, borderRadius: '14px',
+      cursor: loading ? 'wait' : 'pointer', transition: 'all 0.2s', textAlign: 'left',
+      boxShadow: '0 2px 8px rgba(0,0,0,0.04)', opacity: loading ? 0.7 : 1, width: '100%',
+    }}
+    onMouseEnter={e => { e.currentTarget.style.borderColor = color; e.currentTarget.style.boxShadow = `0 4px 16px ${color}20`; }}
+    onMouseLeave={e => { e.currentTarget.style.borderColor = `${color}30`; e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.04)'; }}
+    >
+      <div style={{ width: '42px', height: '42px', borderRadius: '10px', background: `${color}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', color, flexShrink: 0 }}>
+        {loading ? <Loader2 size={20} style={{ animation: 'spin 1s linear infinite' }} /> : icon}
+      </div>
+      <div style={{ flex: 1 }}>
+        <div style={{ fontSize: '14px', fontWeight: 700, color: '#0f172a' }}>{label}</div>
+        <div style={{ fontSize: '11px', color: '#94a3b8' }}>{desc}</div>
+      </div>
+      <Download size={16} color="#cbd5e1" />
+    </button>
+  );
+}
 
-const listContainerStyle: React.CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  gap: '12px',
-};
+function FilterCard({ icon, label, count, color, loading, onClick, highlight }: {
+  icon: React.ReactNode; label: string; count: number; color: string; loading: boolean; onClick: () => void; highlight?: boolean;
+}) {
+  return (
+    <button onClick={onClick} disabled={loading || count === 0} style={{
+      display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 14px',
+      background: highlight ? 'linear-gradient(135deg, #0f172a, #1e293b)' : (count === 0 ? '#f9fafb' : '#ffffff'),
+      border: highlight ? '1px solid #334155' : '1px solid #e2e8f0',
+      borderRadius: '12px', cursor: count === 0 ? 'not-allowed' : (loading ? 'wait' : 'pointer'),
+      transition: 'all 0.15s', textAlign: 'left', width: '100%',
+      opacity: count === 0 ? 0.5 : (loading ? 0.7 : 1),
+    }}
+    onMouseEnter={e => { if (count > 0) { e.currentTarget.style.borderColor = highlight ? '#60a5fa' : color; e.currentTarget.style.boxShadow = highlight ? '0 4px 16px rgba(59,130,246,0.2)' : `0 3px 12px ${color}15`; } }}
+    onMouseLeave={e => { e.currentTarget.style.borderColor = highlight ? '#334155' : '#e2e8f0'; e.currentTarget.style.boxShadow = 'none'; }}
+    >
+      <div style={{ color: highlight ? '#60a5fa' : color, flexShrink: 0 }}>{loading ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : icon}</div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: '12px', fontWeight: highlight ? 700 : 600, color: highlight ? '#f1f5f9' : '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</div>
+      </div>
+      <div style={{ fontSize: '12px', fontWeight: 700, color: highlight ? '#93c5fd' : color, background: highlight ? '#1e3a5f' : `${color}10`, padding: '2px 8px', borderRadius: '8px', whiteSpace: 'nowrap' }}>{count}</div>
+      <ArrowRight size={12} color={highlight ? '#60a5fa' : '#cbd5e1'} />
+    </button>
+  );
+}

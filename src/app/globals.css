@@ -604,3 +604,150 @@ tr:hover td {
     grid-template-columns: 1fr !important;
   }
 }
+
+/* ─── Task Management Mobile Responsive ─── */
+
+/* Task page header — stack on mobile */
+@media (max-width: 768px) {
+  .task-header {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    padding: 20px !important;
+    border-radius: 14px !important;
+    gap: 16px !important;
+  }
+  .task-header button {
+    width: 100% !important;
+    justify-content: center !important;
+  }
+}
+
+/* Filter bar — stack vertically on mobile */
+@media (max-width: 768px) {
+  .task-filters {
+    flex-direction: column !important;
+    gap: 8px !important;
+    padding: 14px !important;
+    border-radius: 14px !important;
+    margin-bottom: 16px !important;
+  }
+  .task-filters select,
+  .task-filters input {
+    width: 100% !important;
+    min-width: unset !important;
+    flex: unset !important;
+    min-height: 44px;
+    font-size: 16px !important; /* prevents iOS zoom */
+  }
+}
+
+/* Stat cards grid — 2 col → 1 col on mobile */
+@media (max-width: 900px) {
+  .task-stat-cards {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 10px !important;
+  }
+}
+@media (max-width: 480px) {
+  .task-stat-cards {
+    grid-template-columns: 1fr !important;
+    gap: 8px !important;
+  }
+}
+
+/* Task table → mobile card layout */
+@media (max-width: 768px) {
+  .task-table-wrap {
+    border-radius: 14px !important;
+    box-shadow: none !important;
+    border: none !important;
+    background: transparent !important;
+    overflow: visible !important;
+  }
+  .task-table-wrap table {
+    display: block !important;
+    width: 100% !important;
+  }
+  .task-table-wrap thead {
+    display: none !important;
+  }
+  .task-table-wrap tbody {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 10px !important;
+  }
+  .task-table-wrap tr {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 6px 12px !important;
+    padding: 14px !important;
+    border-radius: 14px !important;
+    background: #ffffff !important;
+    border: 1px solid #e2e8f0 !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04) !important;
+    align-items: center !important;
+    position: relative !important;
+  }
+  .task-table-wrap tr:hover td {
+    background: transparent !important;
+  }
+  .task-table-wrap td {
+    display: inline-flex !important;
+    align-items: center !important;
+    padding: 3px 0 !important;
+    border: none !important;
+    font-size: 13px !important;
+    vertical-align: middle !important;
+  }
+  /* Make action menu column full width on its own row */
+  .task-table-wrap td:last-child {
+    position: absolute !important;
+    top: 10px !important;
+    right: 10px !important;
+    width: auto !important;
+  }
+  /* Status dropdown full width */
+  .task-table-wrap td select {
+    min-height: 38px !important;
+    font-size: 13px !important;
+    min-width: 100px !important;
+  }
+}
+
+/* Stat card modal overlays — mobile full-width */
+@media (max-width: 768px) {
+  .stat-modal-overlay > div:first-child {
+    width: calc(100% - 16px) !important;
+    max-width: 100% !important;
+    margin: 8px !important;
+    max-height: 90vh !important;
+  }
+}
+
+/* Notification toast — mobile adapt */
+@media (max-width: 768px) {
+  .task-notifications {
+    right: 12px !important;
+    left: 12px !important;
+    bottom: 16px !important;
+  }
+  .task-notifications > div {
+    max-width: 100% !important;
+  }
+}
+
+/* Reports page responsive */
+@media (max-width: 768px) {
+  .reports-backup-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+@media (max-width: 640px) {
+  .reports-header {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 16px !important;
+    padding: 20px !important;
+    border-radius: 14px !important;
+  }
+}

@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase';
 import type { Task, Company, User, TaskType, StatusLog, TaskMessage } from '@/lib/supabase';
 import { getDataCountry, getSession, isAdmin } from '@/lib/auth';
 import { BAHRAIN_PRIORITIES, BAHRAIN_STATUSES } from '@/lib/bahrain';
-import { Plus, Eye, Trash2, X, Edit2, MessageCircle, Send, MoreHorizontal } from 'lucide-react';
+import { Plus, Eye, Trash2, X, Edit2, MessageCircle, Send, MoreHorizontal, Clock, CheckCircle2, BarChart3, PieChart, Activity, ArrowRight, TrendingUp } from 'lucide-react';
 
 export default function BahrainTasks() {
   const { user: currentUser } = getSession();
@@ -42,6 +42,13 @@ export default function BahrainTasks() {
 
   // Task Detail modal
   const [detailTask, setDetailTask] = useState<Task | null>(null);
+  // Stat card modal states
+  const [showRecentModal, setShowRecentModal] = useState(false);
+  const [showCompletedModal, setShowCompletedModal] = useState(false);
+  const [showTaskTypeModal, setShowTaskTypeModal] = useState(false);
+  const [showStatusModal, setShowStatusModal] = useState(false);
+  const [recentActivityLogs, setRecentActivityLogs] = useState<any[]>([]);
+  const [recentLoading, setRecentLoading] = useState(false);
   const [detailCompany, setDetailCompany] = useState<Company | null>(null);
   const [statusLogs, setStatusLogs] = useState<StatusLog[]>([]);
   const [updateStatus, setUpdateStatus] = useState('');
@@ -641,7 +648,7 @@ export default function BahrainTasks() {
   return (
     <div>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '28px', padding: '28px 32px', background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%)', borderRadius: '20px', boxShadow: '0 4px 20px rgba(15,23,42,0.15)' }}>
+      <div className="task-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '28px', padding: '28px 32px', background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%)', borderRadius: '20px', boxShadow: '0 4px 20px rgba(15,23,42,0.15)' }}>
         <div>
           <h2 style={{ color: '#ffffff', fontSize: '24px', fontWeight: 700, margin: 0, letterSpacing: '-0.5px' }}>Task Management</h2>
           <p style={{ color: '#94a3b8', fontSize: '14px', margin: '6px 0 0 0' }}>Manage, assign, and track all compliance tasks</p>
@@ -664,7 +671,7 @@ export default function BahrainTasks() {
       </div>
 
       {/* Filters */}
-      <div style={{ display: 'flex', gap: '14px', marginBottom: '28px', flexWrap: 'wrap', padding: '20px', background: 'rgba(255, 255, 255, 0.65)', backdropFilter: 'blur(10px)', borderRadius: '18px', border: '1px solid rgba(255,255,255,0.8)', boxShadow: '0 4px 20px rgba(0,0,0,0.03)' }}>
+      <div className="task-filters" style={{ display: 'flex', gap: '14px', marginBottom: '28px', flexWrap: 'wrap', padding: '20px', background: 'rgba(255, 255, 255, 0.65)', backdropFilter: 'blur(10px)', borderRadius: '18px', border: '1px solid rgba(255,255,255,0.8)', boxShadow: '0 4px 20px rgba(0,0,0,0.03)' }}>
         <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={filterStyle}>
           <option value="">All Status</option>
           {(() => {
@@ -711,8 +718,377 @@ export default function BahrainTasks() {
         )}
       </div>
 
+      {/* ─── 4 Compact Stat Cards ─── */}
+      <div className="task-stat-cards" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '14px', marginBottom: '20px' }}>
+        {/* Card 1: Recently Modified Tasks */}
+        <div
+          onClick={async () => {
+            setShowRecentModal(true);
+            setRecentLoading(true);
+            try {
+              const { data: logs } = await supabase
+                .from('status_log')
+                .select('*')
+                .order('created_at', { ascending: false })
+                .limit(200);
+              if (logs) {
+                // Group by task_id, get latest per task, take top 20
+                const taskMap = new Map<string, any>();
+                logs.forEach((log: any) => {
+                  if (!taskMap.has(log.task_id)) taskMap.set(log.task_id, log);
+                });
+                const top20 = Array.from(taskMap.values()).slice(0, 20);
+                // Enrich with task + user info
+                const enriched = top20.map((log: any) => {
+                  const task = tasks.find(t => t.id === log.task_id);
+                  const company = task ? companies.find(c => c.id === task.company_id) : null;
+                  const updater = partners.find(p => p.id === log.updated_by);
+                  return { ...log, task, company, updaterName: updater?.username || 'Unknown' };
+                });
+                setRecentActivityLogs(enriched);
+              }
+            } catch (e) { console.error(e); }
+            setRecentLoading(false);
+          }}
+          style={{
+            background: '#ffffff', borderRadius: '14px', padding: '16px 18px',
+            border: '1px solid #e2e8f0', cursor: 'pointer',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.04)', transition: 'all 0.2s ease',
+            display: 'flex', alignItems: 'center', gap: '14px',
+          }}
+          onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 4px 16px rgba(59,130,246,0.12)'; e.currentTarget.style.borderColor = '#93c5fd'; }}
+          onMouseLeave={e => { e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.04)'; e.currentTarget.style.borderColor = '#e2e8f0'; }}
+        >
+          <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: 'linear-gradient(135deg, #dbeafe, #bfdbfe)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <Clock size={20} color="#2563eb" />
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.3px' }}>Recently Modified</div>
+            <div style={{ fontSize: '22px', fontWeight: 800, color: '#0f172a', lineHeight: 1.2 }}>
+              {(() => {
+                const now = new Date();
+                const recent = tasks.filter(t => {
+                  const created = new Date(t.created_at);
+                  return (now.getTime() - created.getTime()) < 7 * 24 * 60 * 60 * 1000;
+                });
+                return recent.length;
+              })()}
+            </div>
+            <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '1px' }}>Last 7 days · Click to view</div>
+          </div>
+          <ArrowRight size={16} color="#94a3b8" />
+        </div>
+
+        {/* Card 2: Completed Tasks */}
+        <div
+          onClick={() => setShowCompletedModal(true)}
+          style={{
+            background: '#ffffff', borderRadius: '14px', padding: '16px 18px',
+            border: '1px solid #e2e8f0', cursor: 'pointer',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.04)', transition: 'all 0.2s ease',
+            display: 'flex', alignItems: 'center', gap: '14px',
+          }}
+          onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 4px 16px rgba(16,185,129,0.12)'; e.currentTarget.style.borderColor = '#6ee7b7'; }}
+          onMouseLeave={e => { e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.04)'; e.currentTarget.style.borderColor = '#e2e8f0'; }}
+        >
+          <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: 'linear-gradient(135deg, #d1fae5, #a7f3d0)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <CheckCircle2 size={20} color="#059669" />
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.3px' }}>Completed</div>
+            <div style={{ fontSize: '22px', fontWeight: 800, color: '#0f172a', lineHeight: 1.2 }}>
+              {tasks.filter(t => {
+                const sl = (t.status || '').toLowerCase();
+                return sl.includes('completed') || sl.includes('closed') || sl.includes('filed');
+              }).length}
+            </div>
+            <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '1px' }}>Total completed · Click to view</div>
+          </div>
+          <ArrowRight size={16} color="#94a3b8" />
+        </div>
+
+        {/* Card 3: All Task Types */}
+        <div
+          onClick={() => setShowTaskTypeModal(true)}
+          style={{
+            background: '#ffffff', borderRadius: '14px', padding: '16px 18px',
+            border: '1px solid #e2e8f0', cursor: 'pointer',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.04)', transition: 'all 0.2s ease',
+            display: 'flex', alignItems: 'center', gap: '14px',
+          }}
+          onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 4px 16px rgba(139,92,246,0.12)'; e.currentTarget.style.borderColor = '#c4b5fd'; }}
+          onMouseLeave={e => { e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.04)'; e.currentTarget.style.borderColor = '#e2e8f0'; }}
+        >
+          <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: 'linear-gradient(135deg, #ede9fe, #ddd6fe)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <BarChart3 size={20} color="#7c3aed" />
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.3px' }}>Task Types</div>
+            <div style={{ fontSize: '22px', fontWeight: 800, color: '#0f172a', lineHeight: 1.2 }}>
+              {taskTypes.filter(t => t.active).length}
+            </div>
+            <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '1px' }}>Distribution · Click to view</div>
+          </div>
+          <ArrowRight size={16} color="#94a3b8" />
+        </div>
+
+        {/* Card 4: Status Distribution */}
+        <div
+          onClick={() => setShowStatusModal(true)}
+          style={{
+            background: '#ffffff', borderRadius: '14px', padding: '16px 18px',
+            border: '1px solid #e2e8f0', cursor: 'pointer',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.04)', transition: 'all 0.2s ease',
+            display: 'flex', alignItems: 'center', gap: '14px',
+          }}
+          onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 4px 16px rgba(249,115,22,0.12)'; e.currentTarget.style.borderColor = '#fdba74'; }}
+          onMouseLeave={e => { e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.04)'; e.currentTarget.style.borderColor = '#e2e8f0'; }}
+        >
+          <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: 'linear-gradient(135deg, #ffedd5, #fed7aa)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <PieChart size={20} color="#ea580c" />
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.3px' }}>Status Overview</div>
+            <div style={{ fontSize: '22px', fontWeight: 800, color: '#0f172a', lineHeight: 1.2 }}>
+              {(() => {
+                const statusSet = new Set<string>();
+                tasks.forEach(t => { if (t.status) statusSet.add(t.status); });
+                return statusSet.size;
+              })()}
+            </div>
+            <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '1px' }}>Statuses · Click to view</div>
+          </div>
+          <ArrowRight size={16} color="#94a3b8" />
+        </div>
+      </div>
+
+      {/* ─── Recently Modified Modal ─── */}
+      {showRecentModal && (
+        <Modal title="Recently Modified Tasks (Latest 20)" onClose={() => setShowRecentModal(false)}>
+          {recentLoading ? (
+            <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>Loading activity history...</div>
+          ) : recentActivityLogs.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>No recent activity found</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '65vh', overflowY: 'auto' }}>
+              {recentActivityLogs.map((log: any, i: number) => (
+                <div key={log.id || i} style={{
+                  display: 'flex', alignItems: 'flex-start', gap: '12px',
+                  padding: '14px 16px', background: '#f8fafc', borderRadius: '12px',
+                  border: '1px solid #f1f5f9', transition: 'all 0.15s', cursor: 'pointer',
+                }}
+                title="Click to view task details"
+                onClick={() => { setShowRecentModal(false); if (log.task_id) viewDetail(log.task_id); }}
+                onMouseEnter={e => { e.currentTarget.style.background = '#eff6ff'; e.currentTarget.style.borderColor = '#bfdbfe'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = '#f8fafc'; e.currentTarget.style.borderColor = '#f1f5f9'; }}
+                >
+                  <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'linear-gradient(135deg, #dbeafe, #bfdbfe)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: '2px' }}>
+                    <Activity size={14} color="#2563eb" />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                      <span style={{ fontWeight: 700, fontSize: '13px', color: '#0f172a' }}>
+                        #{log.task_id?.slice(0, 6)} — {log.company?.company_name || 'Unknown Company'}
+                      </span>
+                      <span style={{ fontSize: '11px', color: '#94a3b8', whiteSpace: 'nowrap', marginLeft: '8px' }}>
+                        {new Date(log.created_at).toLocaleString()}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#475569', marginBottom: '3px' }}>
+                      <span style={{ padding: '2px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 600, background: '#eff6ff', color: '#2563eb', marginRight: '6px' }}>{log.status}</span>
+                      {log.remarks && <span style={{ color: '#64748b' }}>{log.remarks}</span>}
+                    </div>
+                    <div style={{ fontSize: '11px', color: '#94a3b8' }}>By: {log.updaterName}</div>
+                  </div>
+                  <ArrowRight size={14} color="#93c5fd" style={{ flexShrink: 0, marginTop: '8px' }} />
+                </div>
+              ))}
+            </div>
+          )}
+        </Modal>
+      )}
+
+      {/* ─── Completed Tasks Modal ─── */}
+      {showCompletedModal && (
+        <Modal title="All Completed Tasks" onClose={() => setShowCompletedModal(false)}>
+          {(() => {
+            const completedTasks = tasks.filter(t => {
+              const sl = (t.status || '').toLowerCase();
+              return sl.includes('completed') || sl.includes('closed') || sl.includes('filed');
+            });
+            if (completedTasks.length === 0) return <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>No completed tasks yet</div>;
+            return (
+              <div style={{ maxHeight: '65vh', overflowY: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
+                      {['ID', 'Company', 'Task Type', 'Status', 'Priority', 'Due Date'].map(h => (
+                        <th key={h} style={{ padding: '10px 12px', textAlign: 'left', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.3px', color: '#64748b' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {completedTasks.map(task => {
+                      const company = companies.find(c => c.id === task.company_id);
+                      const ttIds = task.task_type_ids && task.task_type_ids.length > 0 ? task.task_type_ids : (task.task_type_id ? task.task_type_id.split(',').map(s => s.trim()).filter(Boolean) : []);
+                      const ttNames = ttIds.map(id => taskTypes.find(t => t.id === id)?.name).filter(Boolean);
+                      const pc = priorityColor(task.priority);
+                      const sc = statusColor(task.status);
+                      return (
+                        <tr key={task.id} style={{ borderBottom: '1px solid #f1f5f9', cursor: 'pointer', transition: 'background 0.15s' }}
+                          title="Click to view task details"
+                          onClick={() => { setShowCompletedModal(false); viewDetail(task.id); }}
+                          onMouseEnter={e => e.currentTarget.style.background = '#f0fdf4'}
+                          onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                        >
+                          <td style={{ padding: '10px 12px', fontSize: '12px', fontWeight: 600, color: '#475569' }}>#{task.id.slice(0, 6)}</td>
+                          <td style={{ padding: '10px 12px', fontSize: '12px', color: '#1e293b', fontWeight: 500 }}>{company?.company_name || 'Unknown'}</td>
+                          <td style={{ padding: '10px 12px', fontSize: '12px' }}>
+                            {ttNames.length > 0 ? ttNames.map((name, i) => (
+                              <span key={i} style={{ padding: '2px 6px', borderRadius: '10px', fontSize: '10px', fontWeight: 600, background: '#EBF5FB', color: '#2980B9', border: '1px solid #AED6F1', marginRight: '4px' }}>{name}</span>
+                            )) : '—'}
+                          </td>
+                          <td style={{ padding: '10px 12px' }}>
+                            <span style={{ padding: '3px 8px', borderRadius: '20px', fontSize: '11px', fontWeight: 600, background: sc.bg, color: sc.color, border: `1px solid ${sc.border}` }}>{task.status}</span>
+                          </td>
+                          <td style={{ padding: '10px 12px' }}>
+                            <span style={{ padding: '3px 8px', borderRadius: '20px', fontSize: '10px', fontWeight: 700, background: pc.bg, color: pc.color }}>{task.priority}</span>
+                          </td>
+                          <td style={{ padding: '10px 12px', fontSize: '12px', color: '#475569' }}>{task.deadline || '—'}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+                <div style={{ padding: '12px 16px', background: '#f8fafc', borderRadius: '0 0 12px 12px', fontSize: '12px', color: '#64748b', fontWeight: 600 }}>
+                  Total: {completedTasks.length} completed task{completedTasks.length !== 1 ? 's' : ''}
+                </div>
+              </div>
+            );
+          })()}
+        </Modal>
+      )}
+
+      {/* ─── Task Type Distribution Modal ─── */}
+      {showTaskTypeModal && (
+        <Modal title="Task Type Distribution" onClose={() => setShowTaskTypeModal(false)}>
+          {(() => {
+            // Count tasks per task type
+            const typeCount: Record<string, number> = {};
+            tasks.forEach(t => {
+              const ttIds = t.task_type_ids && t.task_type_ids.length > 0 ? t.task_type_ids : (t.task_type_id ? t.task_type_id.split(',').map(s => s.trim()).filter(Boolean) : []);
+              ttIds.forEach(id => { typeCount[id] = (typeCount[id] || 0) + 1; });
+            });
+            const total = tasks.length;
+            const entries = Object.entries(typeCount)
+              .map(([id, count]) => ({ id, name: taskTypes.find(t => t.id === id)?.name || 'Unknown', count }))
+              .sort((a, b) => b.count - a.count);
+
+            const barColors = ['#3b82f6', '#8b5cf6', '#06b6d4', '#f59e0b', '#ef4444', '#10b981', '#ec4899', '#6366f1'];
+
+            return (
+              <div style={{ maxHeight: '65vh', overflowY: 'auto' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {entries.map((entry, i) => {
+                    const pct = total > 0 ? ((entry.count / total) * 100) : 0;
+                    const color = barColors[i % barColors.length];
+                    return (
+                      <div key={entry.id} onClick={() => { setShowTaskTypeModal(false); setFilterTaskType(entry.id); }}
+                        style={{ cursor: 'pointer', padding: '10px 12px', borderRadius: '10px', transition: 'all 0.15s', border: '1px solid transparent' }}
+                        title={`Click to filter by "${entry.name}"`}
+                        onMouseEnter={e => { e.currentTarget.style.background = '#f5f3ff'; e.currentTarget.style.borderColor = '#ddd6fe'; }}
+                        onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'transparent'; }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                          <span style={{ fontSize: '13px', fontWeight: 600, color: '#1e293b' }}>{entry.name}</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 600 }}>{entry.count} tasks ({pct.toFixed(1)}%)</span>
+                            <ArrowRight size={12} color="#c4b5fd" />
+                          </div>
+                        </div>
+                        <div style={{ width: '100%', height: '8px', background: '#f1f5f9', borderRadius: '4px', overflow: 'hidden' }}>
+                          <div style={{ width: `${pct}%`, height: '100%', background: color, borderRadius: '4px', transition: 'width 0.6s ease' }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div style={{ marginTop: '20px', padding: '12px 16px', background: '#f8fafc', borderRadius: '10px', fontSize: '12px', color: '#64748b', fontWeight: 600 }}>
+                  Total: {total} task{total !== 1 ? 's' : ''} across {entries.length} type{entries.length !== 1 ? 's' : ''}
+                </div>
+              </div>
+            );
+          })()}
+        </Modal>
+      )}
+
+      {/* ─── Status Distribution Modal ─── */}
+      {showStatusModal && (
+        <Modal title="Status Distribution" onClose={() => setShowStatusModal(false)}>
+          {(() => {
+            const statusCount: Record<string, number> = {};
+            tasks.forEach(t => {
+              const s = t.status || 'Unknown';
+              statusCount[s] = (statusCount[s] || 0) + 1;
+            });
+            const total = tasks.length;
+            const entries = Object.entries(statusCount)
+              .map(([name, count]) => ({ name, count }))
+              .sort((a, b) => b.count - a.count);
+
+            const statusBarColors: Record<string, string> = {};
+            const defaultColors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899', '#6366f1', '#14b8a6', '#f97316'];
+            entries.forEach((e, i) => {
+              const sl = e.name.toLowerCase();
+              if (sl.includes('completed') || sl.includes('closed') || sl.includes('filed')) statusBarColors[e.name] = '#059669';
+              else if (sl.includes('progress') || sl.includes('active')) statusBarColors[e.name] = '#2563eb';
+              else if (sl.includes('pending') || sl.includes('waiting') || sl.includes('query')) statusBarColors[e.name] = '#d97706';
+              else if (sl.includes('review') || sl.includes('ready')) statusBarColors[e.name] = '#7c3aed';
+              else if (sl.includes('not started')) statusBarColors[e.name] = '#94a3b8';
+              else statusBarColors[e.name] = defaultColors[i % defaultColors.length];
+            });
+
+            return (
+              <div style={{ maxHeight: '65vh', overflowY: 'auto' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {entries.map((entry) => {
+                    const pct = total > 0 ? ((entry.count / total) * 100) : 0;
+                    const color = statusBarColors[entry.name];
+                    return (
+                      <div key={entry.name} onClick={() => { setShowStatusModal(false); setFilterStatus(entry.name); }}
+                        style={{ cursor: 'pointer', padding: '10px 12px', borderRadius: '10px', transition: 'all 0.15s', border: '1px solid transparent' }}
+                        title={`Click to filter by "${entry.name}"`}
+                        onMouseEnter={e => { e.currentTarget.style.background = '#fff7ed'; e.currentTarget.style.borderColor = '#fed7aa'; }}
+                        onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'transparent'; }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: color }} />
+                            <span style={{ fontSize: '13px', fontWeight: 600, color: '#1e293b' }}>{entry.name}</span>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 600 }}>{entry.count} ({pct.toFixed(1)}%)</span>
+                            <ArrowRight size={12} color="#fdba74" />
+                          </div>
+                        </div>
+                        <div style={{ width: '100%', height: '8px', background: '#f1f5f9', borderRadius: '4px', overflow: 'hidden' }}>
+                          <div style={{ width: `${pct}%`, height: '100%', background: color, borderRadius: '4px', transition: 'width 0.6s ease' }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div style={{ marginTop: '20px', padding: '12px 16px', background: '#f8fafc', borderRadius: '10px', fontSize: '12px', color: '#64748b', fontWeight: 600 }}>
+                  Total: {total} task{total !== 1 ? 's' : ''} across {entries.length} status{entries.length !== 1 ? 'es' : ''}
+                </div>
+              </div>
+            );
+          })()}
+        </Modal>
+      )}
+
       {/* Tasks Table */}
-      <div style={{ overflowX: 'auto', borderRadius: '18px', boxShadow: '0 8px 32px rgba(0,0,0,0.05)', border: '1px solid rgba(226, 232, 240, 0.8)', background: '#ffffff' }}>
+      <div className="task-table-wrap" style={{ overflowX: 'auto', borderRadius: '18px', boxShadow: '0 8px 32px rgba(0,0,0,0.05)', border: '1px solid rgba(226, 232, 240, 0.8)', background: '#ffffff' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', background: '#ffffff' }}>
           <thead>
             <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
@@ -832,7 +1208,7 @@ export default function BahrainTasks() {
       </div>
 
       {/* Notifications overlay */}
-      <div style={{ position: 'fixed', bottom: '24px', right: '24px', zIndex: 9999, display: 'flex', flexDirection: 'column', gap: '10px' }}>
+      <div className="task-notifications" style={{ position: 'fixed', bottom: '24px', right: '24px', zIndex: 9999, display: 'flex', flexDirection: 'column', gap: '10px' }}>
         {notifications.map(n => (
           <div key={n.id} className="animate-fadeIn" style={{
             background: 'linear-gradient(135deg, #1E293B, #334155)', color: '#fff',
@@ -1142,34 +1518,34 @@ function MultiSelect({ options, selected, onChange, placeholder }: { options: {i
 
 function Modal({ title, children, onClose }: { title: string; children: React.ReactNode; onClose: () => void }) {
   return (
-    <div style={{
+    <div className="stat-modal-overlay" style={{
       position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
       background: 'rgba(15,23,42,0.6)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
-      zIndex: 1000, padding: '20px', animation: 'fadeIn 0.2s ease-out',
-    }}>
+      zIndex: 1000, padding: '12px', animation: 'fadeIn 0.2s ease-out',
+    }} onClick={onClose}>
       <div style={{
         background: '#ffffff', borderRadius: '20px', maxWidth: '800px', width: '100%',
         maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 25px 60px rgba(0,0,0,0.2), 0 10px 20px rgba(0,0,0,0.1)',
         animation: 'scaleIn 0.25s ease-out', border: '1px solid rgba(226,232,240,0.6)',
-      }}>
+      }} onClick={e => e.stopPropagation()}>
         <div style={{
-          padding: '22px 28px', borderBottom: '1px solid #f1f5f9',
+          padding: '18px 20px', borderBottom: '1px solid #f1f5f9',
           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
           background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
           borderRadius: '20px 20px 0 0',
         }}>
-          <h2 style={{ fontSize: '18px', color: '#0f172a', fontWeight: 700, letterSpacing: '-0.3px', margin: 0 }}>{title}</h2>
+          <h2 style={{ fontSize: '16px', color: '#0f172a', fontWeight: 700, letterSpacing: '-0.3px', margin: 0, lineHeight: 1.3 }}>{title}</h2>
           <button onClick={onClose} style={{
             background: '#f1f5f9', border: 'none', cursor: 'pointer', color: '#64748b',
             width: '36px', height: '36px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center',
-            transition: 'all 0.15s ease',
+            transition: 'all 0.15s ease', flexShrink: 0, marginLeft: '12px',
           }}
           onMouseEnter={e => { e.currentTarget.style.background = '#e2e8f0'; e.currentTarget.style.color = '#0f172a'; }}
           onMouseLeave={e => { e.currentTarget.style.background = '#f1f5f9'; e.currentTarget.style.color = '#64748b'; }}
           ><X size={18} /></button>
         </div>
-        <div style={{ padding: '28px' }}>{children}</div>
+        <div style={{ padding: '20px' }}>{children}</div>
       </div>
     </div>
   );
