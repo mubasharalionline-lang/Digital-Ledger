@@ -82,7 +82,7 @@ export default function BahrainDailyTasks() {
   const statusColor = (s: string) => {
     if (!s) return { bg: '#F3F4F6', color: '#6B7280', border: '#D1D5DB' };
     const sl = s.toLowerCase();
-    if (sl.includes('closed') || sl.includes('completed') || sl.includes('filed')) return { bg: '#ECFDF5', color: '#059669', border: '#A7F3D0' };
+    if (sl.includes('closed') || sl.includes('complete') || sl.includes('filed') || sl.includes('done')) return { bg: '#ECFDF5', color: '#059669', border: '#A7F3D0' };
     if (sl.includes('review') || sl.includes('ready')) return { bg: '#F5F3FF', color: '#7C3AED', border: '#DDD6FE' };
     if (sl.includes('progress') || sl.includes('active') || sl.includes('started')) return { bg: '#EFF6FF', color: '#2563EB', border: '#BFDBFE' };
     if (sl.includes('query') || sl.includes('waiting') || sl.includes('pending') || sl.includes('rework') || sl.includes('info')) return { bg: '#FFFBEB', color: '#D97706', border: '#FDE68A' };

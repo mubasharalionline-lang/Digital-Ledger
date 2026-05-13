@@ -257,14 +257,14 @@ export default function BahrainReports() {
         <FilterCard icon={<AlertTriangle size={16} />} label="Overdue Tasks" count={allTasks.filter(t => {
           if (!t.deadline) return false;
           const sl = t.status?.toLowerCase() || '';
-          return new Date(t.deadline) < new Date() && !sl.includes('completed') && !sl.includes('closed') && !sl.includes('filed');
+          return new Date(t.deadline) < new Date() && !sl.includes('complete') && !sl.includes('closed') && !sl.includes('filed') && !sl.includes('done');
         }).length} color="#ef4444"
           loading={exporting === 'overdue'} onClick={() => {
             setExporting('overdue');
             const overdue = allTasks.filter(t => {
               if (!t.deadline) return false;
               const sl = t.status?.toLowerCase() || '';
-              return new Date(t.deadline) < new Date() && !sl.includes('completed') && !sl.includes('closed') && !sl.includes('filed');
+              return new Date(t.deadline) < new Date() && !sl.includes('complete') && !sl.includes('closed') && !sl.includes('filed') && !sl.includes('done');
             });
             if (overdue.length === 0) { alert('No overdue tasks.'); setExporting(null); return; }
             exportExcel(overdue, ctx, 'Overdue_Tasks');

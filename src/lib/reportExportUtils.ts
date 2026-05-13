@@ -35,7 +35,7 @@ const COL_WIDTHS = [
 
 function isCompleted(s: string) {
   const sl = s.toLowerCase();
-  return sl.includes('completed') || sl.includes('closed') || sl.includes('filed');
+  return sl.includes('complete') || sl.includes('closed') || sl.includes('filed') || sl.includes('done');
 }
 
 export function filterTasks(tasks: Task[], filter: {

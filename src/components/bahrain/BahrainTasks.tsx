@@ -686,7 +686,7 @@ export default function BahrainTasks() {
 
   const statusColor = (s: string) => {
     const sl = s.toLowerCase();
-    if (sl.includes('closed') || sl.includes('completed') || sl.includes('filed')) return { bg: '#ECFDF5', color: '#059669', border: '#A7F3D0' };
+    if (sl.includes('closed') || sl.includes('complete') || sl.includes('filed')) return { bg: '#ECFDF5', color: '#059669', border: '#A7F3D0' };
     if (sl.includes('review') || sl.includes('ready')) return { bg: '#F5F3FF', color: '#7C3AED', border: '#DDD6FE' };
     if (sl.includes('progress') || sl.includes('active')) return { bg: '#EFF6FF', color: '#2563EB', border: '#BFDBFE' };
     if (sl.includes('query') || sl.includes('waiting')) return { bg: '#FFFBEB', color: '#D97706', border: '#FDE68A' };
@@ -781,12 +781,14 @@ export default function BahrainTasks() {
                 .from('status_log')
                 .select('*')
                 .order('created_at', { ascending: false })
-                .limit(200);
+                .limit(1000);
               if (logs) {
                 // Group by task_id, get latest per task, take top 20
                 const taskMap = new Map<string, any>();
                 logs.forEach((log: any) => {
-                  if (!taskMap.has(log.task_id)) taskMap.set(log.task_id, log);
+                  if (tasks.some(t => t.id === log.task_id)) {
+                    if (!taskMap.has(log.task_id)) taskMap.set(log.task_id, log);
+                  }
                 });
                 const top20 = Array.from(taskMap.values()).slice(0, 20);
                 // Enrich with task + user info
@@ -850,7 +852,7 @@ export default function BahrainTasks() {
             <div style={{ fontSize: '22px', fontWeight: 800, color: '#0f172a', lineHeight: 1.2 }}>
               {tasks.filter(t => {
                 const sl = (t.status || '').toLowerCase();
-                return sl.includes('completed') || sl.includes('closed') || sl.includes('filed');
+                return sl.includes('complete') || sl.includes('closed') || sl.includes('filed') || sl.includes('done');
               }).length}
             </div>
             <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '1px' }}>Total completed · Click to view</div>
@@ -965,7 +967,7 @@ export default function BahrainTasks() {
           {(() => {
             const completedTasks = tasks.filter(t => {
               const sl = (t.status || '').toLowerCase();
-              return sl.includes('completed') || sl.includes('closed') || sl.includes('filed');
+              return sl.includes('complete') || sl.includes('closed') || sl.includes('filed') || sl.includes('done');
             });
             if (completedTasks.length === 0) return <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>No completed tasks yet</div>;
             return (
@@ -1091,7 +1093,7 @@ export default function BahrainTasks() {
             const defaultColors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899', '#6366f1', '#14b8a6', '#f97316'];
             entries.forEach((e, i) => {
               const sl = e.name.toLowerCase();
-              if (sl.includes('completed') || sl.includes('closed') || sl.includes('filed')) statusBarColors[e.name] = '#059669';
+              if (sl.includes('complete') || sl.includes('closed') || sl.includes('filed') || sl.includes('done')) statusBarColors[e.name] = '#059669';
               else if (sl.includes('progress') || sl.includes('active')) statusBarColors[e.name] = '#2563eb';
               else if (sl.includes('pending') || sl.includes('waiting') || sl.includes('query')) statusBarColors[e.name] = '#d97706';
               else if (sl.includes('review') || sl.includes('ready')) statusBarColors[e.name] = '#7c3aed';
