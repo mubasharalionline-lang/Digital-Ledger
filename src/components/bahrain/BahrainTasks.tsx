@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase';
 import type { Task, Company, User, TaskType, StatusLog, TaskMessage } from '@/lib/supabase';
 import { getDataCountry, getSession, isAdmin } from '@/lib/auth';
 import { BAHRAIN_PRIORITIES, BAHRAIN_STATUSES } from '@/lib/bahrain';
-import { Plus, Eye, Trash2, X, Edit2, MessageCircle, Send, MoreHorizontal, Clock, CheckCircle2, BarChart3, PieChart, Activity, ArrowRight, TrendingUp } from 'lucide-react';
+import { Plus, Eye, Trash2, X, Edit2, MessageCircle, Send, MoreHorizontal, Clock, CheckCircle2, Check, BarChart3, PieChart, Activity, ArrowRight, TrendingUp } from 'lucide-react';
 
 export default function BahrainTasks() {
   const { user: currentUser } = getSession();
@@ -42,6 +42,11 @@ export default function BahrainTasks() {
 
   // Task Detail modal
   const [detailTask, setDetailTask] = useState<Task | null>(null);
+
+  // Inline Description Edit states
+  const [inlineEditDescId, setInlineEditDescId] = useState<string | null>(null);
+  const [inlineEditDescValue, setInlineEditDescValue] = useState('');
+  const [hoveredDescTaskId, setHoveredDescTaskId] = useState<string | null>(null);
   // Stat card modal states
   const [showRecentModal, setShowRecentModal] = useState(false);
   const [showCompletedModal, setShowCompletedModal] = useState(false);
@@ -339,6 +344,35 @@ export default function BahrainTasks() {
       return;
     }
     setTasks(prev => prev.map(t => t.id === taskId ? { ...t, auditor_id: assignValue } : t));
+  }
+
+  // Save inline description
+  async function saveInlineDescription(taskId: string) {
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return;
+    if (inlineEditDescValue === task.description) {
+      setInlineEditDescId(null);
+      return;
+    }
+    
+    // Optimistic update
+    const previousDesc = task.description;
+    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, description: inlineEditDescValue } : t));
+    
+    const { data, error } = await supabase.from('tasks').update({ description: inlineEditDescValue }).eq('id', taskId).select();
+    
+    if (error) {
+      console.error('Description update error:', error);
+      setTasks(prev => prev.map(t => t.id === taskId ? { ...t, description: previousDesc } : t));
+      alert('Error updating description: ' + error.message);
+    } else if (!data || data.length === 0) {
+      setTasks(prev => prev.map(t => t.id === taskId ? { ...t, description: previousDesc } : t));
+      alert('Update blocked by Supabase Row Level Security (RLS).');
+    } else {
+      sessionStorage.removeItem('tasks_data_time');
+      sessionStorage.removeItem('dashboard_data_time_v2');
+    }
+    setInlineEditDescId(null);
   }
 
   // Save new task
@@ -1142,8 +1176,86 @@ export default function BahrainTasks() {
                       </div>
                     ) : <span style={{ fontSize: '11px', color: '#94a3b8' }}>—</span>}
                   </td>
-                  <td style={compactCell}>
-                    <span style={{ fontSize: '11px', color: '#475569', maxWidth: '150px', display: 'inline-block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={task.description || ''}>{task.description || '—'}</span>
+                  <td 
+                    style={{...compactCell, position: 'relative'}}
+                    onMouseEnter={() => setHoveredDescTaskId(task.id)}
+                    onMouseLeave={() => setHoveredDescTaskId(null)}
+                  >
+                    {inlineEditDescId === task.id ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: '180px', position: 'absolute', zIndex: 10, background: '#fff', padding: '8px', borderRadius: '8px', boxShadow: '0 4px 20px rgba(0,0,0,0.15)', border: '1px solid #e2e8f0', top: '50%', transform: 'translateY(-50%)', left: '10px' }}>
+                        <textarea
+                          autoFocus
+                          value={inlineEditDescValue}
+                          onChange={e => setInlineEditDescValue(e.target.value)}
+                          style={{
+                            width: '100%',
+                            minHeight: '60px',
+                            padding: '6px',
+                            fontSize: '11px',
+                            borderRadius: '6px',
+                            border: '1px solid #3b82f6',
+                            outline: 'none',
+                            resize: 'vertical',
+                            fontFamily: 'inherit',
+                            color: '#1e293b'
+                          }}
+                          onKeyDown={e => {
+                            if (e.key === 'Escape') {
+                              setInlineEditDescId(null);
+                            } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                              saveInlineDescription(task.id);
+                            }
+                          }}
+                        />
+                        <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end', marginTop: '2px' }}>
+                          <button
+                            onClick={() => setInlineEditDescId(null)}
+                            style={{ padding: '4px 8px', border: '1px solid #e2e8f0', background: '#f8fafc', color: '#64748b', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10px', fontWeight: 600 }}
+                            title="Cancel (Esc)"
+                          >
+                            <X size={12} /> Cancel
+                          </button>
+                          <button
+                            onClick={() => saveInlineDescription(task.id)}
+                            style={{ padding: '4px 8px', border: 'none', background: '#3b82f6', color: '#fff', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10px', fontWeight: 600 }}
+                            title="Save (Ctrl+Enter)"
+                          >
+                            <Check size={12} /> Save
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px', minHeight: '24px' }}>
+                        <span style={{ fontSize: '11px', color: '#475569', maxWidth: '150px', display: 'inline-block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={task.description || ''}>
+                          {task.description || '—'}
+                        </span>
+                        {hoveredDescTaskId === task.id && isAdminUser && (
+                          <button
+                            onClick={() => {
+                              setInlineEditDescId(task.id);
+                              setInlineEditDescValue(task.description || '');
+                            }}
+                            style={{
+                              background: '#eff6ff',
+                              border: '1px solid #bfdbfe',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                              padding: '3px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              color: '#3b82f6',
+                              transition: 'all 0.15s ease'
+                            }}
+                            title="Edit Description"
+                            onMouseEnter={e => { e.currentTarget.style.background = '#dbeafe'; }}
+                            onMouseLeave={e => { e.currentTarget.style.background = '#eff6ff'; }}
+                          >
+                            <Edit2 size={12} />
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </td>
                   <td style={compactCell}>
                     {canUpdateStatus ? (
