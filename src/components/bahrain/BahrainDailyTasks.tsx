@@ -222,32 +222,60 @@ export default function BahrainDailyTasks() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
+  // --- Unread message tracking ---
   const [unreadTasks, setUnreadTasks] = useState<string[]>([]);
 
-  useEffect(() => {
-    const saved = localStorage.getItem('unread_tasks');
-    if (saved) {
-      try { setUnreadTasks(JSON.parse(saved)); } catch(e) {}
-    }
-  }, []);
+  function getLastReadMap(): Record<string, string> {
+    try {
+      const raw = localStorage.getItem('task_last_read');
+      return raw ? JSON.parse(raw) : {};
+    } catch { return {}; }
+  }
 
-  const addUnreadTask = (taskId: string) => {
+  function markTaskRead(taskId: string) {
+    const map = getLastReadMap();
+    map[taskId] = new Date().toISOString();
+    localStorage.setItem('task_last_read', JSON.stringify(map));
+    setUnreadTasks(prev => prev.filter(id => id !== taskId));
+  }
+
+  function addUnreadTask(taskId: string) {
     setUnreadTasks(prev => {
       if (prev.includes(taskId)) return prev;
-      const next = [...prev, taskId];
-      localStorage.setItem('unread_tasks', JSON.stringify(next));
-      return next;
+      return [...prev, taskId];
     });
-  };
+  }
 
-  const removeUnreadTask = (taskId: string) => {
-    setUnreadTasks(prev => {
-      if (!prev.includes(taskId)) return prev;
-      const next = prev.filter(id => id !== taskId);
-      localStorage.setItem('unread_tasks', JSON.stringify(next));
-      return next;
-    });
-  };
+  // On load: scan for unread messages across daily tasks
+  useEffect(() => {
+    if (!currentUser || tasks.length === 0) return;
+    const taskIds = tasks.map(t => t.id);
+    if (taskIds.length === 0) return;
+
+    (async () => {
+      const lastReadMap = getLastReadMap();
+      const { data: allMsgs } = await supabase
+        .from('task_messages')
+        .select('task_id, sender_id, created_at')
+        .in('task_id', taskIds)
+        .neq('sender_id', currentUser.id)
+        .order('created_at', { ascending: false });
+
+      if (!allMsgs || allMsgs.length === 0) return;
+
+      const unread: string[] = [];
+      for (const msg of allMsgs) {
+        if (unread.includes(msg.task_id)) continue;
+        const lastRead = lastReadMap[msg.task_id];
+        if (!lastRead || new Date(msg.created_at) > new Date(lastRead)) {
+          unread.push(msg.task_id);
+        }
+      }
+      if (unread.length > 0) {
+        setUnreadTasks(unread);
+      }
+    })();
+  }, [currentUser, tasks]);
 
   // Realtime messages for notifications
   useEffect(() => {
@@ -262,12 +290,13 @@ export default function BahrainDailyTasks() {
 
         const isAssigned = task.assigned_to === currentUser.id || (task.assigned_partners && task.assigned_partners.includes(currentUser.id));
         if (isAssigned || isAdminUser) {
+          addUnreadTask(msg.task_id);
+
           const { data: sender } = await supabase.from('users').select('username').eq('id', msg.sender_id).single();
           const senderName = sender?.username || 'Someone';
           
           const notifId = Date.now().toString();
           setNotifications(prev => [...prev, { id: notifId, message: `${senderName}: ${msg.message.substring(0, 30)}${msg.message.length > 30 ? '...' : ''}`, taskId: msg.task_id }]);
-          addUnreadTask(msg.task_id);
           
           setTimeout(() => {
             setNotifications(prev => prev.filter(n => n.id !== notifId));
@@ -391,7 +420,7 @@ export default function BahrainDailyTasks() {
   }
 
   async function openChat(task: Task) {
-    removeUnreadTask(task.id);
+    markTaskRead(task.id);
     setChatTask(task);
     const { data } = await supabase.from('task_messages')
       .select('*, sender:users!sender_id(username, role)')

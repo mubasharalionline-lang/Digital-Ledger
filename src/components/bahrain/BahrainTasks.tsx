@@ -200,32 +200,64 @@ export default function BahrainTasks() {
     return true;
   }).sort((a, b) => (a.status || '').localeCompare(b.status || ''));
 
+  // --- Unread message tracking ---
   const [unreadTasks, setUnreadTasks] = useState<string[]>([]);
 
-  useEffect(() => {
-    const saved = localStorage.getItem('unread_tasks');
-    if (saved) {
-      try { setUnreadTasks(JSON.parse(saved)); } catch(e) {}
-    }
-  }, []);
+  // Get last-read timestamps from localStorage
+  function getLastReadMap(): Record<string, string> {
+    try {
+      const raw = localStorage.getItem('task_last_read');
+      return raw ? JSON.parse(raw) : {};
+    } catch { return {}; }
+  }
 
-  const addUnreadTask = (taskId: string) => {
+  function markTaskRead(taskId: string) {
+    const map = getLastReadMap();
+    map[taskId] = new Date().toISOString();
+    localStorage.setItem('task_last_read', JSON.stringify(map));
+    setUnreadTasks(prev => {
+      const next = prev.filter(id => id !== taskId);
+      return next;
+    });
+  }
+
+  function addUnreadTask(taskId: string) {
     setUnreadTasks(prev => {
       if (prev.includes(taskId)) return prev;
-      const next = [...prev, taskId];
-      localStorage.setItem('unread_tasks', JSON.stringify(next));
-      return next;
+      return [...prev, taskId];
     });
-  };
+  }
 
-  const removeUnreadTask = (taskId: string) => {
-    setUnreadTasks(prev => {
-      if (!prev.includes(taskId)) return prev;
-      const next = prev.filter(id => id !== taskId);
-      localStorage.setItem('unread_tasks', JSON.stringify(next));
-      return next;
-    });
-  };
+  // On load: scan for unread messages across all visible tasks
+  useEffect(() => {
+    if (!currentUser || tasks.length === 0) return;
+    const taskIds = tasks.map(t => t.id);
+    if (taskIds.length === 0) return;
+
+    (async () => {
+      const lastReadMap = getLastReadMap();
+      const { data: allMsgs } = await supabase
+        .from('task_messages')
+        .select('task_id, sender_id, created_at')
+        .in('task_id', taskIds)
+        .neq('sender_id', currentUser.id)
+        .order('created_at', { ascending: false });
+
+      if (!allMsgs || allMsgs.length === 0) return;
+
+      const unread: string[] = [];
+      for (const msg of allMsgs) {
+        if (unread.includes(msg.task_id)) continue;
+        const lastRead = lastReadMap[msg.task_id];
+        if (!lastRead || new Date(msg.created_at) > new Date(lastRead)) {
+          unread.push(msg.task_id);
+        }
+      }
+      if (unread.length > 0) {
+        setUnreadTasks(unread);
+      }
+    })();
+  }, [currentUser, tasks]);
 
   // Listen for realtime task_messages
   useEffect(() => {
@@ -238,26 +270,26 @@ export default function BahrainTasks() {
         { event: 'INSERT', schema: 'public', table: 'task_messages' },
         (payload) => {
           const newMessage = payload.new as TaskMessage;
-          if (newMessage.sender_id === currentUser.id) return; // Don't notify sender
+          if (newMessage.sender_id === currentUser.id) return;
 
           const relatedTask = tasks.find(t => t.id === newMessage.task_id);
           if (!relatedTask) return;
 
-          const isAssigned = 
+          const isAssigned = isAdminUser ||
             relatedTask.assigned_to === currentUser.id || 
             (relatedTask.assigned_partners && relatedTask.assigned_partners.includes(currentUser.id));
 
-            if (isAssigned) {
-              const notifId = Math.random().toString(36).substring(7);
-              const shortMsg = newMessage.message.length > 30 ? newMessage.message.substring(0, 30) + '...' : newMessage.message;
-              setNotifications(prev => [...prev, {
-                id: notifId,
-                message: `New message on Task #${relatedTask.id.slice(0, 6)}: "${shortMsg}"`,
-                taskId: relatedTask.id
-              }]);
-              addUnreadTask(newMessage.task_id);
+          if (isAssigned) {
+            addUnreadTask(newMessage.task_id);
 
-              // Auto-hide after 5s
+            const notifId = Math.random().toString(36).substring(7);
+            const shortMsg = newMessage.message.length > 30 ? newMessage.message.substring(0, 30) + '...' : newMessage.message;
+            setNotifications(prev => [...prev, {
+              id: notifId,
+              message: `New message on Task #${relatedTask.id.slice(0, 6)}: "${shortMsg}"`,
+              taskId: relatedTask.id
+            }]);
+
             setTimeout(() => {
               setNotifications(prev => prev.filter(n => n.id !== notifId));
             }, 6000);
@@ -269,7 +301,7 @@ export default function BahrainTasks() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [currentUser, tasks]);
+  }, [currentUser, tasks, isAdminUser]);
 
   // Inline status update
   async function handleStatusChange(taskId: string, newStatus: string) {
@@ -633,7 +665,7 @@ export default function BahrainTasks() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   async function openChat(task: Task) {
-    removeUnreadTask(task.id);
+    markTaskRead(task.id);
     setChatTask(task);
     setNewMessage('');
     loadMessages(task.id);
