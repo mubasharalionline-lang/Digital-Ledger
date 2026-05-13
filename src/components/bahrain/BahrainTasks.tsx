@@ -200,6 +200,33 @@ export default function BahrainTasks() {
     return true;
   }).sort((a, b) => (a.status || '').localeCompare(b.status || ''));
 
+  const [unreadTasks, setUnreadTasks] = useState<string[]>([]);
+
+  useEffect(() => {
+    const saved = localStorage.getItem('unread_tasks');
+    if (saved) {
+      try { setUnreadTasks(JSON.parse(saved)); } catch(e) {}
+    }
+  }, []);
+
+  const addUnreadTask = (taskId: string) => {
+    setUnreadTasks(prev => {
+      if (prev.includes(taskId)) return prev;
+      const next = [...prev, taskId];
+      localStorage.setItem('unread_tasks', JSON.stringify(next));
+      return next;
+    });
+  };
+
+  const removeUnreadTask = (taskId: string) => {
+    setUnreadTasks(prev => {
+      if (!prev.includes(taskId)) return prev;
+      const next = prev.filter(id => id !== taskId);
+      localStorage.setItem('unread_tasks', JSON.stringify(next));
+      return next;
+    });
+  };
+
   // Listen for realtime task_messages
   useEffect(() => {
     if (!currentUser || tasks.length === 0) return;
@@ -220,16 +247,17 @@ export default function BahrainTasks() {
             relatedTask.assigned_to === currentUser.id || 
             (relatedTask.assigned_partners && relatedTask.assigned_partners.includes(currentUser.id));
 
-          if (isAssigned) {
-            const notifId = Math.random().toString(36).substring(7);
-            const shortMsg = newMessage.message.length > 30 ? newMessage.message.substring(0, 30) + '...' : newMessage.message;
-            setNotifications(prev => [...prev, {
-              id: notifId,
-              message: `New message on Task #${relatedTask.id.slice(0, 6)}: "${shortMsg}"`,
-              taskId: relatedTask.id
-            }]);
+            if (isAssigned) {
+              const notifId = Math.random().toString(36).substring(7);
+              const shortMsg = newMessage.message.length > 30 ? newMessage.message.substring(0, 30) + '...' : newMessage.message;
+              setNotifications(prev => [...prev, {
+                id: notifId,
+                message: `New message on Task #${relatedTask.id.slice(0, 6)}: "${shortMsg}"`,
+                taskId: relatedTask.id
+              }]);
+              addUnreadTask(newMessage.task_id);
 
-            // Auto-hide after 5s
+              // Auto-hide after 5s
             setTimeout(() => {
               setNotifications(prev => prev.filter(n => n.id !== notifId));
             }, 6000);
@@ -605,6 +633,7 @@ export default function BahrainTasks() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   async function openChat(task: Task) {
+    removeUnreadTask(task.id);
     setChatTask(task);
     setNewMessage('');
     loadMessages(task.id);
@@ -613,7 +642,7 @@ export default function BahrainTasks() {
   async function loadMessages(taskId: string) {
     const { data: messages, error } = await supabase
       .from('task_messages')
-      .select('*')
+      .select('*, sender:users!sender_id(username, role)')
       .eq('task_id', taskId)
       .order('created_at', { ascending: true });
     
@@ -622,27 +651,10 @@ export default function BahrainTasks() {
       return;
     }
 
-    const { user: sessionUser } = getSession();
-    
-    // Resolve user details
-    const enrichedMessages = messages.map(msg => {
-      let username = 'Unknown';
-      let role = 'staff';
-      
-      const partner = partners.find(p => p.id === msg.sender_id);
-      if (partner) {
-        username = partner.username;
-        role = partner.role;
-      } else if (sessionUser && sessionUser.id === msg.sender_id) {
-        username = sessionUser.username;
-        role = sessionUser.role;
-      }
-
-      return {
-        ...msg,
-        sender: { username, role }
-      };
-    });
+    const enrichedMessages = messages.map(msg => ({
+      ...msg,
+      sender: msg.sender || { username: 'Unknown', role: 'staff' }
+    }));
 
     setTaskMessages(enrichedMessages as any);
   }
@@ -1312,10 +1324,13 @@ export default function BahrainTasks() {
                   </td>
                   <td style={{ ...compactCell, position: 'relative', width: '40px' }}>
                     <button onClick={e => { e.stopPropagation(); setOpenMenuId(isMenuOpen ? null : task.id); }}
-                      style={{ background: isMenuOpen ? '#f1f5f9' : 'transparent', border: 'none', cursor: 'pointer', borderRadius: '8px', padding: '5px', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.15s' }}
+                      style={{ background: isMenuOpen ? '#f1f5f9' : 'transparent', border: 'none', cursor: 'pointer', borderRadius: '8px', padding: '5px', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.15s', position: 'relative' }}
                       onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'}
                       onMouseLeave={e => { if (!isMenuOpen) e.currentTarget.style.background = 'transparent'; }}>
                       <MoreHorizontal size={16} color="#64748b" />
+                      {unreadTasks.includes(task.id) && (
+                        <span style={{ position: 'absolute', top: '2px', right: '2px', width: '6px', height: '6px', backgroundColor: '#ef4444', borderRadius: '50%', border: '1px solid white' }} />
+                      )}
                     </button>
                     {isMenuOpen && (
                       <div style={{ position: 'absolute', top: '100%', right: 0, background: '#fff', borderRadius: '12px', boxShadow: '0 8px 30px rgba(0,0,0,0.12)', border: '1px solid #e2e8f0', zIndex: 50, minWidth: '155px', overflow: 'hidden' }}
@@ -1323,8 +1338,11 @@ export default function BahrainTasks() {
                         <button onClick={() => { viewDetail(task.id); setOpenMenuId(null); }} style={menuItemStyle}>
                           <Eye size={14} color="#3b82f6" /> View Details
                         </button>
-                        <button onClick={() => { openChat(task); setOpenMenuId(null); }} style={menuItemStyle}>
-                          <MessageCircle size={14} color="#8b5cf6" /> Messages
+                        <button onClick={() => { openChat(task); setOpenMenuId(null); }} style={{...menuItemStyle, display: 'flex', alignItems: 'center'}}>
+                          <MessageCircle size={14} color="#8b5cf6" style={{marginRight: '8px'}} /> Messages
+                          {unreadTasks.includes(task.id) && (
+                            <span style={{ marginLeft: 'auto', background: '#ef4444', color: 'white', fontSize: '9px', padding: '1px 5px', borderRadius: '10px', fontWeight: 600 }}>New</span>
+                          )}
                         </button>
                         {isAdminUser && (<>
                           <button onClick={() => { openEditTask(task); setOpenMenuId(null); }} style={menuItemStyle}>
