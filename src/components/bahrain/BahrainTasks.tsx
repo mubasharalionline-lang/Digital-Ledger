@@ -268,6 +268,23 @@ export default function BahrainTasks() {
     setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: newStatus } : t));
   }
 
+  async function handlePriorityChange(taskId: string, newPriority: string) {
+    const task = tasks.find(t => t.id === taskId);
+    if (!task || task.priority === newPriority) return;
+
+    const { data, error } = await supabase.from('tasks').update({ priority: newPriority }).eq('id', taskId).select();
+    if (error) { console.error('Priority update error:', error); return; }
+    if (!data || data.length === 0) {
+      alert('Update blocked by Supabase Row Level Security (RLS).');
+      return;
+    }
+
+    sessionStorage.removeItem('tasks_data_time');
+    sessionStorage.removeItem('dashboard_data_time_v2');
+
+    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, priority: newPriority } : t));
+  }
+
   function openEditTask(task: Task) {
     setEditingTaskId(task.id);
     const existingTypeIds = task.task_type_ids && task.task_type_ids.length > 0 ? task.task_type_ids : (task.task_type_id ? task.task_type_id.split(',').map(s => s.trim()).filter(Boolean) : []);
@@ -1129,7 +1146,14 @@ export default function BahrainTasks() {
                     <span style={{ fontSize: '11px', color: '#475569', maxWidth: '150px', display: 'inline-block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={task.description || ''}>{task.description || '—'}</span>
                   </td>
                   <td style={compactCell}>
-                    <span style={{ padding: '3px 8px', borderRadius: '20px', fontSize: '10px', fontWeight: 700, background: pc.bg, color: pc.color, whiteSpace: 'nowrap' }}>{task.priority}</span>
+                    {canUpdateStatus ? (
+                      <select value={task.priority} onChange={e => handlePriorityChange(task.id, e.target.value)}
+                        style={{ padding: '4px 6px', borderRadius: '8px', border: 'none', background: pc.bg, color: pc.color, fontWeight: 700, fontSize: '10px', cursor: 'pointer', outline: 'none' }}>
+                        {BAHRAIN_PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
+                      </select>
+                    ) : (
+                      <span style={{ padding: '3px 8px', borderRadius: '20px', fontSize: '10px', fontWeight: 700, background: pc.bg, color: pc.color, whiteSpace: 'nowrap' }}>{task.priority}</span>
+                    )}
                   </td>
                   <td style={compactCell}><span style={{ fontSize: '12px', color: '#475569', whiteSpace: 'nowrap' }}>{task.deadline || '—'}</span></td>
                   <td style={compactCell}>
