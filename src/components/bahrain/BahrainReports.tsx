@@ -76,6 +76,47 @@ export default function BahrainReports() {
     setExporting(null);
   }
 
+  // --- Full Platform Export ---
+  async function handleFullPlatformExport() {
+    setExporting('full-platform');
+    try {
+      const [compRes, usersRes, ttRes, audRes, taskRes, statusRes, logRes, msgRes] = await Promise.all([
+        supabase.from('companies').select('*'),
+        supabase.from('users').select('*'),
+        supabase.from('task_types').select('*'),
+        supabase.from('auditors').select('*'),
+        supabase.from('tasks').select('*'),
+        supabase.from('statuses').select('*'),
+        supabase.from('status_log').select('*'),
+        supabase.from('task_messages').select('*')
+      ]);
+
+      const data = {
+        exportDate: new Date().toISOString(),
+        type: 'Full_Platform_Backup',
+        companies: compRes.data || [],
+        users: usersRes.data || [],
+        task_types: ttRes.data || [],
+        auditors: audRes.data || [],
+        tasks: taskRes.data || [],
+        statuses: statusRes.data || [],
+        status_log: logRes.data || [],
+        task_messages: msgRes.data || []
+      };
+
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `DigitalLedger_FullPlatformBackup_${new Date().toISOString().split('T')[0]}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e: any) {
+      alert('Full Platform Export failed: ' + e.message);
+    }
+    setExporting(null);
+  }
+
   // --- JSON import ---
   async function handleJsonImport(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -86,18 +127,42 @@ export default function BahrainReports() {
       const text = await file.text();
       const data = JSON.parse(text);
       let imported = 0;
-      if (data.companies?.length) {
-        for (const c of data.companies) {
-          const { error } = await supabase.from('companies').upsert(c, { onConflict: 'id' });
-          if (!error) imported++;
+      
+      // Ordered by dependencies (users, companies, etc before tasks)
+      const tables = [
+        { key: 'users', table: 'users' },
+        { key: 'companies', table: 'companies' },
+        { key: 'auditors', table: 'auditors' },
+        { key: 'task_types', table: 'task_types' },
+        { key: 'statuses', table: 'statuses' },
+        { key: 'tasks', table: 'tasks' },
+        { key: 'status_log', table: 'status_log' },
+        { key: 'task_messages', table: 'task_messages' }
+      ];
+
+      for (const tDef of tables) {
+        const records = data[tDef.key];
+        if (records && records.length) {
+          const chunkSize = 500;
+          for (let i = 0; i < records.length; i += chunkSize) {
+            const chunk = records.slice(i, i + chunkSize);
+            const { error } = await supabase.from(tDef.table).upsert(chunk, { onConflict: 'id' });
+            if (!error) imported += chunk.length;
+            else console.error(`Import error on ${tDef.table}:`, error);
+          }
         }
       }
-      if (data.tasks?.length) {
-        for (const t of data.tasks) {
-          const { error } = await supabase.from('tasks').upsert(t, { onConflict: 'id' });
-          if (!error) imported++;
-        }
+
+      // Legacy fallback for old backups
+      if (data.partners?.length && !data.users) {
+         const { error } = await supabase.from('users').upsert(data.partners, { onConflict: 'id' });
+         if (!error) imported += data.partners.length;
       }
+      if (data.taskTypes?.length && !data.task_types) {
+         const { error } = await supabase.from('task_types').upsert(data.taskTypes, { onConflict: 'id' });
+         if (!error) imported += data.taskTypes.length;
+      }
+
       setImportResult(`Successfully imported ${imported} records. Refreshing...`);
       sessionStorage.clear();
       setTimeout(() => { loadData(); setImportResult(null); }, 2000);
@@ -149,10 +214,12 @@ export default function BahrainReports() {
 
       {/* === DATA BACKUP SECTION === */}
       <SectionTitle icon={<Database size={18} color="#3b82f6" />} title="Data Backup & Import" subtitle="Full JSON and Excel backup of all company data" />
-      <div className="reports-backup-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '14px', marginBottom: '32px' }}>
-        <ActionCard icon={<FileJson size={20} />} label="Export JSON Backup" desc="Full data backup in JSON" color="#3b82f6" loading={exporting === 'json'}
+      <div className="reports-backup-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '14px', marginBottom: '32px' }}>
+        <ActionCard icon={<Database size={20} />} label="Export Full Platform" desc="All countries & tables" color="#6366f1" loading={exporting === 'full-platform'}
+          onClick={handleFullPlatformExport} />
+        <ActionCard icon={<FileJson size={20} />} label="Export Country JSON" desc={`${dataCountry} data only`} color="#3b82f6" loading={exporting === 'json'}
           onClick={() => { setExporting('json'); exportFullJson(ctx); setExporting(null); }} />
-        <ActionCard icon={<FileSpreadsheet size={20} />} label="Export Full Excel" desc="All data in Excel sheets" color="#10b981" loading={exporting === 'fullxl'}
+        <ActionCard icon={<FileSpreadsheet size={20} />} label="Export Full Excel" desc={`${dataCountry} data in sheets`} color="#10b981" loading={exporting === 'fullxl'}
           onClick={() => { setExporting('fullxl'); exportFullExcel(ctx); setExporting(null); }} />
         <ActionCard icon={<Upload size={20} />} label="Import JSON Backup" desc="Restore from JSON file" color="#f59e0b" loading={importing}
           onClick={() => fileInputRef.current?.click()} />
