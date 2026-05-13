@@ -154,7 +154,8 @@ export default function BahrainDailyTasks() {
       const tasksQuery = supabase.from('tasks')
         .select('*')
         .eq('is_daily', true)
-        .or(`country.eq.${dataCountry || 'Bahrain'},country.is.null`);
+        .eq('country', dataCountry || 'Bahrain')
+        .order('created_at', { ascending: false });
 
       const [usersRes, statusRes, tasksRes] = await Promise.all([
         usersQuery, statusQuery, tasksQuery

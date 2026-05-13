@@ -124,10 +124,51 @@ export default function BahrainDashboard() {
       const dailyQuery = supabase.from('tasks')
         .select('*')
         .eq('is_daily', true)
-        .or(`country.eq.${taskCountry},country.is.null`);
+        .eq('country', taskCountry);
 
       const { data: dailyTasks } = await dailyQuery;
       const dailyList = dailyTasks || [];
+
+      // Auto-reset daily repeating tasks
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+
+      const tasksToReset = dailyList.filter(t => t.repeat_daily && t.status !== 'Pending');
+      if (tasksToReset.length > 0) {
+        const taskIds = tasksToReset.map(t => t.id);
+        const { data: logs } = await supabase
+          .from('status_log')
+          .select('task_id, created_at')
+          .in('task_id', taskIds)
+          .order('created_at', { ascending: false });
+          
+        const resetPromises: any[] = [];
+        
+        for (const task of tasksToReset) {
+          const taskLogs = (logs || []).filter(l => l.task_id === task.id);
+          const latestLogDateStr = taskLogs.length > 0 ? taskLogs[0].created_at : task.created_at;
+          const latestDate = new Date(latestLogDateStr);
+          
+          if (latestDate < todayStart) {
+            resetPromises.push(
+              supabase.from('tasks').update({ status: 'Pending' }).eq('id', task.id)
+            );
+            resetPromises.push(
+              supabase.from('status_log').insert({
+                task_id: task.id,
+                status: 'Pending',
+                remarks: 'Daily auto-reset'
+              })
+            );
+            task.status = 'Pending';
+          }
+        }
+        
+        if (resetPromises.length > 0) {
+          await Promise.all(resetPromises);
+        }
+      }
+
       setTotalDailyTasks(dailyList.length);
 
       // Compute daily task stats
