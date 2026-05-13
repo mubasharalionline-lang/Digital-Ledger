@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { getSession, isAdmin, getDataCountry } from '@/lib/auth';
-import { Plus, Trash2, Edit2, Loader2, Save, X, ToggleLeft, ToggleRight, ChevronDown } from 'lucide-react';
+import { Plus, Trash2, Edit2, Loader2, Save, X, ToggleLeft, ToggleRight, ChevronDown, Search } from 'lucide-react';
 
 interface TaskTypeRecord { id: string; name: string; active: boolean; }
 
@@ -169,9 +169,9 @@ export default function EditsPage() {
         </p>
       </div>
 
-      <div className="card" style={{ padding: '0', overflow: 'hidden' }}>
+      <div className="card" style={{ padding: '0', overflow: 'visible' }}>
         {/* Tabs */}
-        <div style={{ display: 'flex', borderBottom: '1px solid var(--border-light)', background: 'var(--bg-secondary)' }}>
+        <div style={{ display: 'flex', borderBottom: '1px solid var(--border-light)', background: 'var(--bg-secondary)', borderTopLeftRadius: 'inherit', borderTopRightRadius: 'inherit' }}>
           {(['statuses', 'roles', 'auditors'] as const).map(tab => (
             <button key={tab}
               onClick={() => { setActiveTab(tab); setIsAdding(false); setEditingId(null); }}
@@ -390,10 +390,14 @@ function TaskTypeMultiSelect({ taskTypes, selected, onChange }: {
   onChange: (ids: string[]) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      setSearchQuery('');
+      return;
+    }
     const handler = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     };
@@ -409,7 +413,14 @@ function TaskTypeMultiSelect({ taskTypes, selected, onChange }: {
     }
   };
 
-  const selectedNames = selected.map(id => taskTypes.find(t => t.id === id)?.name).filter(Boolean);
+  const selectAll = () => onChange(taskTypes.map(t => t.id));
+  const deselectAll = () => onChange([]);
+
+  const selectedItems = selected.map(id => taskTypes.find(t => t.id === id)).filter(Boolean) as TaskTypeRecord[];
+
+  const filteredTaskTypes = taskTypes.filter(tt => 
+    tt.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   return (
     <div style={{ position: 'relative' }} ref={ref}>
@@ -419,53 +430,124 @@ function TaskTypeMultiSelect({ taskTypes, selected, onChange }: {
           padding: '8px 12px', border: '1.5px solid var(--border-light)', borderRadius: '8px',
           background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center',
           gap: '6px', flexWrap: 'wrap', minHeight: '38px', fontSize: '13px',
+          boxShadow: open ? '0 0 0 2px rgba(0, 113, 227, 0.15)' : 'none',
+          borderColor: open ? '#0071e3' : 'var(--border-light)',
+          transition: 'all 0.2s ease',
         }}
       >
-        {selectedNames.length === 0 ? (
-          <span style={{ color: 'var(--text-tertiary)' }}>Applies to all task types</span>
-        ) : selectedNames.length === taskTypes.length ? (
-          <span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>All task types selected</span>
+        {selectedItems.length === 0 ? (
+          <span style={{ color: 'var(--text-tertiary)' }}>No specific types (Applies to all)</span>
+        ) : selectedItems.length === taskTypes.length ? (
+          <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>All task types selected ({taskTypes.length})</span>
         ) : (
-          selectedNames.map((name, i) => (
-            <span key={i} style={{
-              padding: '2px 8px', borderRadius: '6px', fontSize: '12px', fontWeight: 500,
-              background: '#EBF5FB', color: '#2980B9', border: '1px solid #AED6F1',
-              display: 'flex', alignItems: 'center', gap: '4px',
-            }}>
-              {name}
-              <X size={12} style={{ cursor: 'pointer' }} onClick={e => { e.stopPropagation(); toggle(selected[i]); }} />
-            </span>
-          ))
+          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', flex: 1 }}>
+            {selectedItems.map((item) => (
+              <span key={item.id} style={{
+                padding: '3px 8px', borderRadius: '6px', fontSize: '12px', fontWeight: 500,
+                background: '#F0F7FF', color: '#0071e3', border: '1px solid #CDE2FB',
+                display: 'flex', alignItems: 'center', gap: '4px',
+              }}>
+                {item.name}
+                <X size={12} 
+                  style={{ cursor: 'pointer', opacity: 0.6, transition: 'opacity 0.2s' }} 
+                  onClick={e => { 
+                    e.stopPropagation(); 
+                    toggle(item.id); 
+                  }} 
+                  onMouseEnter={e => e.currentTarget.style.opacity = '1'}
+                  onMouseLeave={e => e.currentTarget.style.opacity = '0.6'}
+                />
+              </span>
+            ))}
+          </div>
         )}
-        <ChevronDown size={14} color="var(--text-tertiary)" style={{ marginLeft: 'auto', flexShrink: 0, transition: 'transform 0.2s', transform: open ? 'rotate(180deg)' : 'none' }} />
+        <ChevronDown size={16} color="var(--text-tertiary)" style={{ marginLeft: 'auto', flexShrink: 0, transition: 'transform 0.2s', transform: open ? 'rotate(180deg)' : 'none' }} />
       </div>
+      
       {open && (
         <div style={{
-          position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff',
-          border: '1px solid var(--border-light)', borderRadius: '8px', marginTop: '4px',
-          zIndex: 100, maxHeight: '200px', overflowY: 'auto',
-          boxShadow: '0 4px 16px rgba(0,0,0,0.1)',
+          position: 'absolute', top: 'calc(100% + 6px)', left: 0, right: 0, background: '#fff',
+          border: '1px solid var(--border-light)', borderRadius: '10px',
+          zIndex: 100,
+          boxShadow: '0 10px 30px rgba(0,0,0,0.12)',
+          display: 'flex', flexDirection: 'column',
+          overflow: 'hidden'
         }}>
-          {taskTypes.length === 0 ? (
-            <div style={{ padding: '12px', fontSize: '13px', color: 'var(--text-tertiary)', textAlign: 'center' }}>
-              No task types found
-            </div>
-          ) : taskTypes.map(tt => (
-            <div key={tt.id}
-              onClick={() => toggle(tt.id)}
+          {/* Search Input */}
+          <div style={{ padding: '10px', borderBottom: '1px solid var(--border-light)', background: '#F8FAFC', position: 'relative' }}>
+            <Search size={14} color="var(--text-tertiary)" style={{ position: 'absolute', left: '20px', top: '50%', transform: 'translateY(-50%)' }} />
+            <input 
+              type="text"
+              autoFocus
+              placeholder="Search task types..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
               style={{
-                padding: '8px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px',
-                borderBottom: '1px solid var(--border-light)',
-                background: selected.includes(tt.id) ? '#EBF5FB' : 'transparent',
-                transition: 'background 0.1s',
+                width: '100%', padding: '8px 12px 8px 30px', border: '1px solid var(--border-light)', 
+                borderRadius: '6px', fontSize: '13px', outline: 'none', background: '#fff',
+                boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.05)'
               }}
-              onMouseEnter={e => { if (!selected.includes(tt.id)) e.currentTarget.style.background = '#f8fafc'; }}
-              onMouseLeave={e => { if (!selected.includes(tt.id)) e.currentTarget.style.background = 'transparent'; }}
+              onClick={e => e.stopPropagation()}
+            />
+          </div>
+          
+          {/* Actions */}
+          <div style={{ 
+            padding: '8px 14px', borderBottom: '1px solid var(--border-light)', 
+            display: 'flex', justifyContent: 'space-between', fontSize: '12px',
+            background: '#fff' 
+          }}>
+            <button 
+              onClick={(e) => { e.stopPropagation(); selectAll(); }} 
+              style={{ background: 'none', border: 'none', color: '#0071e3', cursor: 'pointer', fontWeight: 600, padding: 0 }}
             >
-              <input type="checkbox" checked={selected.includes(tt.id)} readOnly style={{ pointerEvents: 'none', accentColor: '#2980B9' }} />
-              <span style={{ fontSize: '13px', fontWeight: selected.includes(tt.id) ? 600 : 400, color: 'var(--text-primary)' }}>{tt.name}</span>
-            </div>
-          ))}
+              Select All
+            </button>
+            <button 
+              onClick={(e) => { e.stopPropagation(); deselectAll(); }} 
+              style={{ background: 'none', border: 'none', color: 'var(--text-tertiary)', cursor: 'pointer', fontWeight: 500, padding: 0 }}
+            >
+              Clear All
+            </button>
+          </div>
+          
+          {/* Options */}
+          <div style={{ maxHeight: '260px', overflowY: 'auto' }}>
+            {filteredTaskTypes.length === 0 ? (
+              <div style={{ padding: '20px', fontSize: '13px', color: 'var(--text-tertiary)', textAlign: 'center' }}>
+                No task types match "{searchQuery}"
+              </div>
+            ) : filteredTaskTypes.map(tt => {
+              const isSelected = selected.includes(tt.id);
+              return (
+                <div key={tt.id}
+                  onClick={(e) => { e.stopPropagation(); toggle(tt.id); }}
+                  style={{
+                    padding: '10px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '12px',
+                    borderBottom: '1px solid #F1F5F9',
+                    background: isSelected ? '#F8FAFC' : '#fff',
+                    transition: 'all 0.15s ease',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.background = isSelected ? '#F0F7FF' : '#F8FAFC'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = isSelected ? '#F8FAFC' : '#fff'; }}
+                >
+                  <div style={{ 
+                    width: '18px', height: '18px', borderRadius: '4px', 
+                    border: `2px solid ${isSelected ? '#0071e3' : '#CBD5E1'}`,
+                    background: isSelected ? '#0071e3' : '#fff',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    flexShrink: 0,
+                    transition: 'all 0.2s ease'
+                  }}>
+                    {isSelected && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>}
+                  </div>
+                  <span style={{ fontSize: '13px', fontWeight: isSelected ? 500 : 400, color: isSelected ? '#0f172a' : '#334155' }}>
+                    {tt.name}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
     </div>
