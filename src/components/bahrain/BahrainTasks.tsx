@@ -1219,6 +1219,7 @@ export default function BahrainTasks() {
               }
               const pc = priorityColor(task.priority);
               const isMenuOpen = openMenuId === task.id;
+              const hasUnread = unreadTasks.includes(task.id);
 
               return (
                 <tr key={task.id} style={{ borderBottom: '1px solid #f1f5f9', transition: 'background 0.15s ease' }} onMouseEnter={e => e.currentTarget.style.background = '#fafbfc'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
@@ -1365,26 +1366,52 @@ export default function BahrainTasks() {
                       </span>
                     )}
                   </td>
-                  <td style={{ ...compactCell, position: 'relative', width: '40px' }}>
+                  <td style={{ ...compactCell, position: 'relative', width: '44px' }}>
                     <button onClick={e => { e.stopPropagation(); setOpenMenuId(isMenuOpen ? null : task.id); }}
-                      style={{ background: isMenuOpen ? '#f1f5f9' : 'transparent', border: 'none', cursor: 'pointer', borderRadius: '8px', padding: '5px', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.15s', position: 'relative' }}
-                      onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'}
-                      onMouseLeave={e => { if (!isMenuOpen) e.currentTarget.style.background = 'transparent'; }}>
-                      <MoreHorizontal size={16} color="#64748b" />
-                      {unreadTasks.includes(task.id) && (
-                        <span style={{ position: 'absolute', top: '2px', right: '2px', width: '6px', height: '6px', backgroundColor: '#ef4444', borderRadius: '50%', border: '1px solid white' }} />
+                      style={{
+                        background: isMenuOpen ? '#f1f5f9' : (hasUnread ? '#fef2f2' : 'transparent'),
+                        border: hasUnread ? '1.5px solid #fca5a5' : 'none',
+                        cursor: 'pointer', borderRadius: '10px', padding: '7px',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        transition: 'all 0.2s ease', position: 'relative',
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.background = hasUnread ? '#fee2e2' : '#f1f5f9'; e.currentTarget.style.transform = 'scale(1.05)'; }}
+                      onMouseLeave={e => { if (!isMenuOpen) { e.currentTarget.style.background = hasUnread ? '#fef2f2' : 'transparent'; } e.currentTarget.style.transform = 'scale(1)'; }}>
+                      <MoreHorizontal size={18} color={hasUnread ? '#ef4444' : '#64748b'} />
+                      {hasUnread && (
+                        <span style={{
+                          position: 'absolute', top: '-4px', right: '-4px',
+                          minWidth: '18px', height: '18px',
+                          background: 'linear-gradient(135deg, #ef4444, #dc2626)',
+                          borderRadius: '9px', border: '2px solid #ffffff',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: '9px', fontWeight: 700, color: '#ffffff',
+                          letterSpacing: '-0.02em', padding: '0 4px',
+                          boxShadow: '0 2px 6px rgba(239, 68, 68, 0.4)',
+                          animation: 'notif-pulse 2s ease-in-out infinite, notif-bounce 2s ease-in-out infinite',
+                        }}>
+                          <MessageCircle size={9} />
+                        </span>
                       )}
                     </button>
                     {isMenuOpen && (
-                      <div style={{ position: 'absolute', top: '100%', right: 0, background: '#fff', borderRadius: '12px', boxShadow: '0 8px 30px rgba(0,0,0,0.12)', border: '1px solid #e2e8f0', zIndex: 50, minWidth: '155px', overflow: 'hidden' }}
+                      <div style={{ position: 'absolute', top: '100%', right: 0, background: '#fff', borderRadius: '12px', boxShadow: '0 8px 30px rgba(0,0,0,0.12)', border: '1px solid #e2e8f0', zIndex: 50, minWidth: '165px', overflow: 'hidden' }}
                         onClick={e => e.stopPropagation()}>
                         <button onClick={() => { viewDetail(task.id); setOpenMenuId(null); }} style={menuItemStyle}>
                           <Eye size={14} color="#3b82f6" /> View Details
                         </button>
-                        <button onClick={() => { openChat(task); setOpenMenuId(null); }} style={{ ...menuItemStyle, display: 'flex', alignItems: 'center' }}>
-                          <MessageCircle size={14} color="#8b5cf6" style={{ marginRight: '8px' }} /> Messages
-                          {unreadTasks.includes(task.id) && (
-                            <span style={{ marginLeft: 'auto', background: '#ef4444', color: 'white', fontSize: '9px', padding: '1px 5px', borderRadius: '10px', fontWeight: 600 }}>New</span>
+                        <button onClick={() => { openChat(task); setOpenMenuId(null); }} style={{ ...menuItemStyle, display: 'flex', alignItems: 'center', background: hasUnread ? '#fef2f2' : undefined }}>
+                          <MessageCircle size={14} color={hasUnread ? '#ef4444' : '#8b5cf6'} style={{ marginRight: '8px' }} />
+                          <span style={{ fontWeight: hasUnread ? 600 : 500, color: hasUnread ? '#dc2626' : undefined }}>Messages</span>
+                          {hasUnread && (
+                            <span style={{
+                              marginLeft: 'auto',
+                              background: 'linear-gradient(135deg, #ef4444, #dc2626)',
+                              color: 'white', fontSize: '10px', padding: '2px 8px',
+                              borderRadius: '10px', fontWeight: 700,
+                              boxShadow: '0 1px 4px rgba(239,68,68,0.3)',
+                              animation: 'notif-bounce 2s ease-in-out infinite',
+                            }}>NEW</span>
                           )}
                         </button>
                         {canManageTask(task) && (<>
