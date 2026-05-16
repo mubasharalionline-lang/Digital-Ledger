@@ -19,9 +19,9 @@ export default function BahrainTasks() {
   const [partners, setPartners] = useState<User[]>([]);
   const [auditors, setAuditors] = useState<any[]>([]);
   const [dynamicStatuses, setDynamicStatuses] = useState<string[]>(BAHRAIN_STATUSES);
-  const [statusObjects, setStatusObjects] = useState<{name: string; task_type_ids: string[] | null}[]>([]);
+  const [statusObjects, setStatusObjects] = useState<{ name: string; task_type_ids: string[] | null }[]>([]);
   const [loading, setLoading] = useState(true);
-  const [notifications, setNotifications] = useState<{id: string, message: string, taskId: string}[]>([]);
+  const [notifications, setNotifications] = useState<{ id: string, message: string, taskId: string }[]>([]);
 
   const searchParams = useSearchParams();
 
@@ -68,7 +68,7 @@ export default function BahrainTasks() {
     const cacheTimeKey = 'tasks_data_time';
     const cachedData = sessionStorage.getItem(cacheKey);
     const cacheTime = sessionStorage.getItem(cacheTimeKey);
-    
+
     let hadCache = false;
 
     // Show cached data instantly for zero-wait UI
@@ -89,7 +89,7 @@ export default function BahrainTasks() {
         hadCache = true;
         // If cache is fresh (< 2 min), skip network entirely
         if (age < 2 * 60 * 1000) return;
-      } catch (e) {}
+      } catch (e) { }
     }
 
     // Fetch fresh data (runs in background if we had cache)
@@ -103,8 +103,8 @@ export default function BahrainTasks() {
         supabase.from('companies').select('*').eq('country', dataCountry || 'Bahrain'),
         supabase.from('task_types').select('*').eq('active', true).eq('country', dataCountry || 'Bahrain'),
         usersQuery,
-        dataCountry 
-          ? supabase.from('statuses').select('name, active, task_type_ids').eq('country', dataCountry) 
+        dataCountry
+          ? supabase.from('statuses').select('name, active, task_type_ids').eq('country', dataCountry)
           : supabase.from('statuses').select('name, active, task_type_ids'),
         dataCountry
           ? supabase.from('auditors').select('*').eq('country', dataCountry).order('name')
@@ -117,7 +117,7 @@ export default function BahrainTasks() {
       const audList = audRes.data || [];
       const activeStatuses = statusRes.data?.filter(s => s.active !== false) || [];
       const dbStatuses = activeStatuses.map(s => s.name);
-      
+
       const resolvedStatuses = dbStatuses.length > 0
         ? [...new Set(dbStatuses)].sort((a, b) => a.localeCompare(b)) as string[]
         : (!dataCountry || dataCountry === 'Bahrain' ? [...BAHRAIN_STATUSES].sort((a, b) => a.localeCompare(b)) : []);
@@ -133,7 +133,7 @@ export default function BahrainTasks() {
         const { data: t } = await supabase.from('tasks').select('*').in('company_id', companyIds).neq('is_daily', true);
         taskList = t || [];
       }
-      
+
       setCompanies(companyList);
       setTaskTypes(ttList);
       setPartners(usersList);
@@ -169,9 +169,14 @@ export default function BahrainTasks() {
 
   // Filter tasks
   const filtered = tasks.filter(t => {
+    const sl = (t.status || '').toLowerCase();
+    if (sl === 'complete' || sl === 'completed') {
+      return false;
+    }
+
     const isAssigned = (t.assigned_partners && t.assigned_partners.includes(currentUser?.id || '')) || t.assigned_to === currentUser?.id;
     if (!isAdminUser && !isAssigned) return false;
-    
+
     if (filterStatus && t.status !== filterStatus) return false;
     if (filterPriority && t.priority !== filterPriority) return false;
     if (filterCompany && t.company_id !== filterCompany) return false;
@@ -276,7 +281,7 @@ export default function BahrainTasks() {
           if (!relatedTask) return;
 
           const isAssigned = isAdminUser ||
-            relatedTask.assigned_to === currentUser.id || 
+            relatedTask.assigned_to === currentUser.id ||
             (relatedTask.assigned_partners && relatedTask.assigned_partners.includes(currentUser.id));
 
           if (isAssigned) {
@@ -315,7 +320,7 @@ export default function BahrainTasks() {
       alert('Update blocked by Supabase Row Level Security (RLS). Ask Admin to run the database fix script.');
       return;
     }
-    
+
     // Always use the actual logged-in user for accurate tracking
     const { user } = getSession();
     const updaterId = user?.id || null;
@@ -377,7 +382,7 @@ export default function BahrainTasks() {
       alert('Assignment blocked by Supabase Row Level Security (RLS).');
       return;
     }
-    
+
     if (assignValue) {
       const partner = partners.find(p => p.id === assignValue);
       await supabase.from('status_log').insert({
@@ -414,13 +419,13 @@ export default function BahrainTasks() {
       setInlineEditDescId(null);
       return;
     }
-    
+
     // Optimistic update
     const previousDesc = task.description;
     setTasks(prev => prev.map(t => t.id === taskId ? { ...t, description: inlineEditDescValue } : t));
-    
+
     const { data, error } = await supabase.from('tasks').update({ description: inlineEditDescValue }).eq('id', taskId).select();
-    
+
     if (error) {
       console.error('Description update error:', error);
       setTasks(prev => prev.map(t => t.id === taskId ? { ...t, description: previousDesc } : t));
@@ -516,10 +521,10 @@ export default function BahrainTasks() {
     setShowTaskModal(false);
     setEditingTaskId(null);
     setNewTask({ company_id: '', task_type_id: '', task_type_ids: [], priority: 'Medium', status: '', auditor_id: '', deadline: '', description: '', assigned_to: '', assigned_partners: [] });
-    
+
     sessionStorage.removeItem('tasks_data_time');
     sessionStorage.removeItem('dashboard_data_time_v2');
-    
+
     loadData();
   }
 
@@ -599,7 +604,7 @@ export default function BahrainTasks() {
     const actualUpdaterId = sessionUser?.id || null;
     const assignTo = updatePartners.length > 0 ? updatePartners[0] : null;
 
-    const { data, error: e1 } = await supabase.from('tasks').update({ 
+    const { data, error: e1 } = await supabase.from('tasks').update({
       status: updateStatus,
       assigned_partners: updatePartners,
       assigned_to: assignTo
@@ -610,11 +615,11 @@ export default function BahrainTasks() {
       return;
     }
     // Build clear remarks showing transition + any custom notes
-    const transitionNote = previousStatus !== updateStatus 
-      ? `${previousStatus} → ${updateStatus}` 
+    const transitionNote = previousStatus !== updateStatus
+      ? `${previousStatus} → ${updateStatus}`
       : `Status unchanged (${updateStatus})`;
-    const fullRemarks = updateRemarks 
-      ? `${transitionNote} | ${updateRemarks}` 
+    const fullRemarks = updateRemarks
+      ? `${transitionNote} | ${updateRemarks}`
       : transitionNote;
 
     const { error: e2 } = await supabase.from('status_log').insert({
@@ -637,18 +642,18 @@ export default function BahrainTasks() {
     try {
       // Delete status logs first (cascade should handle this but be safe)
       await supabase.from('status_log').delete().eq('task_id', taskId);
-      
+
       const { data, error } = await supabase.from('tasks').delete().eq('id', taskId).select();
-      if (error) { 
-        console.error('Delete error:', error); 
-        alert('Error deleting: ' + error.message); 
-        return; 
+      if (error) {
+        console.error('Delete error:', error);
+        alert('Error deleting: ' + error.message);
+        return;
       }
       if (!data || data.length === 0) {
         alert('Delete blocked by Supabase Row Level Security (RLS). Please run the database fix script.');
         return;
       }
-      
+
       sessionStorage.removeItem('tasks_data_time');
       sessionStorage.removeItem('dashboard_data_time_v2');
       setTasks(prev => prev.filter(t => t.id !== taskId));
@@ -677,7 +682,7 @@ export default function BahrainTasks() {
       .select('*, sender:users!sender_id(username, role)')
       .eq('task_id', taskId)
       .order('created_at', { ascending: true });
-    
+
     if (error) {
       console.error('Error loading messages:', error);
       return;
@@ -814,6 +819,7 @@ export default function BahrainTasks() {
       </div>
 
       {/* ─── 4 Compact Stat Cards ─── */}
+      {isAdminUser && (
       <div className="task-stat-cards" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '14px', marginBottom: '20px' }}>
         {/* Card 1: Recently Modified Tasks */}
         <div
@@ -958,6 +964,7 @@ export default function BahrainTasks() {
           <ArrowRight size={16} color="#94a3b8" />
         </div>
       </div>
+      )}
 
       {/* ─── Recently Modified Modal ─── */}
       {showRecentModal && (
@@ -974,10 +981,10 @@ export default function BahrainTasks() {
                   padding: '14px 16px', background: '#f8fafc', borderRadius: '12px',
                   border: '1px solid #f1f5f9', transition: 'all 0.15s', cursor: 'pointer',
                 }}
-                title="Click to view task details"
-                onClick={() => { setShowRecentModal(false); if (log.task_id) viewDetail(log.task_id); }}
-                onMouseEnter={e => { e.currentTarget.style.background = '#eff6ff'; e.currentTarget.style.borderColor = '#bfdbfe'; }}
-                onMouseLeave={e => { e.currentTarget.style.background = '#f8fafc'; e.currentTarget.style.borderColor = '#f1f5f9'; }}
+                  title="Click to view task details"
+                  onClick={() => { setShowRecentModal(false); if (log.task_id) viewDetail(log.task_id); }}
+                  onMouseEnter={e => { e.currentTarget.style.background = '#eff6ff'; e.currentTarget.style.borderColor = '#bfdbfe'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = '#f8fafc'; e.currentTarget.style.borderColor = '#f1f5f9'; }}
                 >
                   <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'linear-gradient(135deg, #dbeafe, #bfdbfe)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: '2px' }}>
                     <Activity size={14} color="#2563eb" />
@@ -1222,8 +1229,8 @@ export default function BahrainTasks() {
                       </div>
                     ) : <span style={{ fontSize: '11px', color: '#94a3b8' }}>—</span>}
                   </td>
-                  <td 
-                    style={{...compactCell, position: 'relative'}}
+                  <td
+                    style={{ ...compactCell, position: 'relative' }}
                     onMouseEnter={() => setHoveredDescTaskId(task.id)}
                     onMouseLeave={() => setHoveredDescTaskId(null)}
                   >
@@ -1348,8 +1355,8 @@ export default function BahrainTasks() {
                       </select>
                     ) : (
                       <span style={{ fontSize: '12px' }}>
-                        {(task.assigned_partners && task.assigned_partners.length > 0) 
-                          ? task.assigned_partners.map(id => partners.find(p => p.id === id)?.username).filter(Boolean).join(', ') 
+                        {(task.assigned_partners && task.assigned_partners.length > 0)
+                          ? task.assigned_partners.map(id => partners.find(p => p.id === id)?.username).filter(Boolean).join(', ')
                           : (partners.find(p => p.id === task.assigned_to)?.username || 'Unassigned')}
                       </span>
                     )}
@@ -1370,8 +1377,8 @@ export default function BahrainTasks() {
                         <button onClick={() => { viewDetail(task.id); setOpenMenuId(null); }} style={menuItemStyle}>
                           <Eye size={14} color="#3b82f6" /> View Details
                         </button>
-                        <button onClick={() => { openChat(task); setOpenMenuId(null); }} style={{...menuItemStyle, display: 'flex', alignItems: 'center'}}>
-                          <MessageCircle size={14} color="#8b5cf6" style={{marginRight: '8px'}} /> Messages
+                        <button onClick={() => { openChat(task); setOpenMenuId(null); }} style={{ ...menuItemStyle, display: 'flex', alignItems: 'center' }}>
+                          <MessageCircle size={14} color="#8b5cf6" style={{ marginRight: '8px' }} /> Messages
                           {unreadTasks.includes(task.id) && (
                             <span style={{ marginLeft: 'auto', background: '#ef4444', color: 'white', fontSize: '9px', padding: '1px 5px', borderRadius: '10px', fontWeight: 600 }}>New</span>
                           )}
@@ -1404,9 +1411,9 @@ export default function BahrainTasks() {
             display: 'flex', alignItems: 'center', gap: '12px', maxWidth: '350px', cursor: 'pointer',
             border: '1px solid #475569'
           }} onClick={() => {
-             const t = tasks.find(tk => tk.id === n.taskId);
-             if (t) openChat(t);
-             setNotifications(prev => prev.filter(notif => notif.id !== n.id));
+            const t = tasks.find(tk => tk.id === n.taskId);
+            if (t) openChat(t);
+            setNotifications(prev => prev.filter(notif => notif.id !== n.id));
           }}>
             <MessageCircle size={20} color="#60A5FA" />
             <div style={{ fontSize: '14px', fontWeight: 500, lineHeight: 1.4, flex: 1 }}>{n.message}</div>
@@ -1429,11 +1436,11 @@ export default function BahrainTasks() {
               </select>
             </FormField>
             <FormField label="Task Types *">
-              <MultiSelect 
-                options={taskTypes.filter(t => t.active).map(t => ({id: t.id, label: t.name}))} 
-                selected={newTask.task_type_ids} 
-                onChange={vals => setNewTask(p => ({ ...p, task_type_ids: vals, task_type_id: vals[0] || '' }))} 
-                placeholder="Select Task Types" 
+              <MultiSelect
+                options={taskTypes.filter(t => t.active).map(t => ({ id: t.id, label: t.name }))}
+                selected={newTask.task_type_ids}
+                onChange={vals => setNewTask(p => ({ ...p, task_type_ids: vals, task_type_id: vals[0] || '' }))}
+                placeholder="Select Task Types"
               />
             </FormField>
             <FormField label="Priority *">
@@ -1461,11 +1468,11 @@ export default function BahrainTasks() {
             <textarea value={newTask.description} onChange={e => setNewTask(p => ({ ...p, description: e.target.value }))} placeholder="Task details..." style={{ ...inputStyle, minHeight: '80px', resize: 'vertical' }} />
           </FormField>
           <FormField label="Assign To">
-            <MultiSelect 
-              options={partners.map(p => ({id: p.id, label: p.username}))} 
-              selected={newTask.assigned_partners} 
-              onChange={vals => setNewTask(p => ({ ...p, assigned_partners: vals }))} 
-              placeholder="Select Partners" 
+            <MultiSelect
+              options={partners.map(p => ({ id: p.id, label: p.username }))}
+              selected={newTask.assigned_partners}
+              onChange={vals => setNewTask(p => ({ ...p, assigned_partners: vals }))}
+              placeholder="Select Partners"
             />
           </FormField>
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '24px', paddingTop: '20px', borderTop: '1px solid #f1f5f9' }}>
@@ -1548,11 +1555,11 @@ export default function BahrainTasks() {
               </div>
               {isAdminUser && (
                 <FormField label="Assign Partners">
-                  <MultiSelect 
-                    options={partners.map(p => ({id: p.id, label: p.username}))} 
-                    selected={updatePartners} 
-                    onChange={setUpdatePartners} 
-                    placeholder="Select Partners" 
+                  <MultiSelect
+                    options={partners.map(p => ({ id: p.id, label: p.username }))}
+                    selected={updatePartners}
+                    onChange={setUpdatePartners}
+                    placeholder="Select Partners"
                   />
                 </FormField>
               )}
@@ -1587,7 +1594,7 @@ export default function BahrainTasks() {
                   const isMine = msg.sender_id === currentUser?.id;
                   const senderRole = msg.sender?.role || 'staff';
                   const showHeader = i === 0 || taskMessages[i - 1].sender_id !== msg.sender_id;
-                  
+
                   return (
                     <div key={msg.id} style={{ alignSelf: isMine ? 'flex-end' : 'flex-start', maxWidth: '80%' }}>
                       {showHeader && (
@@ -1620,15 +1627,15 @@ export default function BahrainTasks() {
 
             {/* Input Area */}
             <div style={{ padding: '16px', background: '#FFFFFF', borderTop: '1px solid #E2E8F0', display: 'flex', gap: '12px' }}>
-              <input 
-                type="text" 
+              <input
+                type="text"
                 value={newMessage}
                 onChange={e => setNewMessage(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && sendMessage()}
                 placeholder="Type a message..."
                 style={{ flex: 1, padding: '12px 16px', border: '1px solid #CBD5E1', borderRadius: '24px', fontSize: '14px', outline: 'none' }}
               />
-              <button 
+              <button
                 onClick={sendMessage}
                 disabled={!newMessage.trim()}
                 style={{
@@ -1650,10 +1657,10 @@ export default function BahrainTasks() {
 
 /* ---- Shared sub-components & styles ---- */
 
-function MultiSelect({ options, selected, onChange, placeholder }: { options: {id: string, label: string}[], selected: string[], onChange: (val: string[]) => void, placeholder: string }) {
+function MultiSelect({ options, selected, onChange, placeholder }: { options: { id: string, label: string }[], selected: string[], onChange: (val: string[]) => void, placeholder: string }) {
   const [open, setOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  
+
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
@@ -1678,13 +1685,13 @@ function MultiSelect({ options, selected, onChange, placeholder }: { options: {i
   return (
     <div style={{ position: 'relative' }} ref={dropdownRef}>
       <div onClick={() => setOpen(!open)} style={{ padding: '10px 12px', border: '2px solid #BDC3C7', borderRadius: '6px', fontSize: '14px', width: '100%', background: 'var(--bg-card, #fff)', color: 'var(--text-primary, #333)', cursor: 'pointer', display: 'flex', flexWrap: 'wrap', gap: '4px', minHeight: '42px', alignItems: 'center' }}>
-        {selected.length === 0 ? <span style={{color: '#7F8C8D'}}>{placeholder}</span> : 
+        {selected.length === 0 ? <span style={{ color: '#7F8C8D' }}>{placeholder}</span> :
           selected.map(s => {
             const opt = options.find(o => o.id === s);
             return (
-              <span key={s} style={{background: '#5DADE2', color: '#fff', padding: '2px 8px', borderRadius: '4px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px'}}>
-                {opt?.label || s} 
-                <X size={12} onClick={(e) => toggle(s, e)} style={{cursor: 'pointer'}} />
+              <span key={s} style={{ background: '#5DADE2', color: '#fff', padding: '2px 8px', borderRadius: '4px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                {opt?.label || s}
+                <X size={12} onClick={(e) => toggle(s, e)} style={{ cursor: 'pointer' }} />
               </span>
             );
           })
@@ -1695,7 +1702,7 @@ function MultiSelect({ options, selected, onChange, placeholder }: { options: {i
           {options.map(opt => (
             <div key={opt.id} onClick={(e) => toggle(opt.id, e)} style={{ padding: '8px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', background: selected.includes(opt.id) ? '#F4F6F7' : 'transparent', borderBottom: '1px solid #F2F3F4' }}>
               <input type="checkbox" checked={selected.includes(opt.id)} readOnly style={{ cursor: 'pointer' }} />
-              <span style={{color: '#2E4053'}}>{opt.label}</span>
+              <span style={{ color: '#2E4053' }}>{opt.label}</span>
             </div>
           ))}
         </div>
@@ -1729,8 +1736,8 @@ function Modal({ title, children, onClose }: { title: string; children: React.Re
             width: '36px', height: '36px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center',
             transition: 'all 0.15s ease', flexShrink: 0, marginLeft: '12px',
           }}
-          onMouseEnter={e => { e.currentTarget.style.background = '#e2e8f0'; e.currentTarget.style.color = '#0f172a'; }}
-          onMouseLeave={e => { e.currentTarget.style.background = '#f1f5f9'; e.currentTarget.style.color = '#64748b'; }}
+            onMouseEnter={e => { e.currentTarget.style.background = '#e2e8f0'; e.currentTarget.style.color = '#0f172a'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = '#f1f5f9'; e.currentTarget.style.color = '#64748b'; }}
           ><X size={18} /></button>
         </div>
         <div style={{ padding: '20px' }}>{children}</div>
@@ -1744,23 +1751,23 @@ function Modal({ title, children, onClose }: { title: string; children: React.Re
 // Statuses with specific task_type_ids only show for tasks with matching types
 function getStatusesForTask(
   taskTypeIds: string[],
-  statusObjects: {name: string; task_type_ids: string[] | null}[],
+  statusObjects: { name: string; task_type_ids: string[] | null }[],
   fallbackStatuses: string[]
 ): string[] {
   // If no status objects loaded yet, return all statuses
   if (statusObjects.length === 0) return [...fallbackStatuses];
-  
+
   // If task has no task type selected, show all statuses
   if (!taskTypeIds || taskTypeIds.length === 0) {
     return [...new Set(statusObjects.map(s => s.name))].sort((a, b) => a.localeCompare(b));
   }
-  
+
   // Filter: show statuses that are universal (null) OR linked to any of the task's types
   const filtered = statusObjects.filter(s => {
     if (!s.task_type_ids || s.task_type_ids.length === 0) return true; // universal
     return s.task_type_ids.some(id => taskTypeIds.includes(id));
   });
-  
+
   return [...new Set(filtered.map(s => s.name))].sort((a, b) => a.localeCompare(b));
 }
 

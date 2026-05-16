@@ -515,7 +515,7 @@ function TaskTypeMultiSelect({ taskTypes, selected, onChange }: {
           <div style={{ maxHeight: '260px', overflowY: 'auto' }}>
             {filteredTaskTypes.length === 0 ? (
               <div style={{ padding: '20px', fontSize: '13px', color: 'var(--text-tertiary)', textAlign: 'center' }}>
-                No task types match "{searchQuery}"
+                No task types match &quot;{searchQuery}&quot;
               </div>
             ) : filteredTaskTypes.map(tt => {
               const isSelected = selected.includes(tt.id);
