@@ -255,7 +255,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
                   width: '100%', fontFamily: 'inherit',
                 }}
                 title={collapsed ? item.label : undefined}>
-                <span style={{ flexShrink: 0, display: 'flex' }}>{React.cloneElement(item.icon as React.ReactElement, { size: 18 })}</span>
+                <span style={{ flexShrink: 0, display: 'flex' }}>{React.cloneElement(item.icon as React.ReactElement<any>, { size: 18 })}</span>
                 {!collapsed && <span>{item.label}</span>}
               </button>
             );
