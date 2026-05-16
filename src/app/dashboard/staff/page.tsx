@@ -37,6 +37,9 @@ export default function StaffPage() {
   const [canUpdateStatus, setCanUpdateStatus] = useState(true);
   const [canViewCompanies, setCanViewCompanies] = useState(false);
   const [canMessage, setCanMessage] = useState(false);
+  const [auditorAccess, setAuditorAccess] = useState<string[]>([]);
+  const [allAuditors, setAllAuditors] = useState<any[]>([]);
+  const [showAuditorList, setShowAuditorList] = useState(false);
   
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
@@ -57,17 +60,21 @@ export default function StaffPage() {
     let usersQuery = supabase.from('users').select('*').order('created_at', { ascending: false });
     if (dataCountry) usersQuery = usersQuery.eq('country', dataCountry);
 
-    const [usersRes, tasksRes, rolesRes] = await Promise.all([
+    const [usersRes, tasksRes, rolesRes, auditorsRes] = await Promise.all([
       usersQuery,
       supabase.from('tasks').select('*, company:companies(company_name)'),
       dataCountry 
         ? supabase.from('roles').select('name').eq('country', dataCountry) 
-        : supabase.from('roles').select('name')
+        : supabase.from('roles').select('name'),
+      dataCountry
+        ? supabase.from('auditors').select('*').eq('country', dataCountry).order('name')
+        : supabase.from('auditors').select('*').order('name')
     ]);
 
     const users = usersRes.data || [];
     const tasks = tasksRes.data || [];
     const dbRoles = rolesRes.data?.map(r => r.name) || [];
+    setAllAuditors(auditorsRes.data || []);
     
     // Fallback to defaults if table is empty or missing
     if (dbRoles.length > 0) {
@@ -128,6 +135,7 @@ export default function StaffPage() {
           can_update_status: canUpdateStatus,
           can_view_companies: canViewCompanies,
           can_message: canMessage,
+          auditor_access: auditorAccess,
         }
       };
       if (formPassword.trim()) {
@@ -149,6 +157,7 @@ export default function StaffPage() {
           can_update_status: canUpdateStatus,
           can_view_companies: canViewCompanies,
           can_message: canMessage,
+          auditor_access: auditorAccess,
         }
       });
       if (error) {
@@ -179,6 +188,8 @@ export default function StaffPage() {
     setCanUpdateStatus(true);
     setCanViewCompanies(false);
     setCanMessage(false);
+    setAuditorAccess([]);
+    setShowAuditorList(false);
     setFormError('');
     setShowModal(true);
   }
@@ -191,6 +202,8 @@ export default function StaffPage() {
     setCanUpdateStatus(member.permissions?.can_update_status ?? true);
     setCanViewCompanies(member.permissions?.can_view_companies ?? false);
     setCanMessage(member.permissions?.can_message ?? false);
+    setAuditorAccess(member.permissions?.auditor_access || []);
+    setShowAuditorList(false);
     setFormError('');
     setShowModal(true);
   }
@@ -457,10 +470,42 @@ export default function StaffPage() {
                   <input type="checkbox" checked={canViewCompanies} onChange={e => setCanViewCompanies(e.target.checked)} />
                   <span style={{ fontSize: '14px' }}>Can view assigned companies</span>
                 </label>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px', cursor: 'pointer' }}>
                   <input type="checkbox" checked={canMessage} onChange={e => setCanMessage(e.target.checked)} />
                   <span style={{ fontSize: '14px' }}>Can send/receive messages</span>
                 </label>
+                
+                <div style={{ borderTop: '1px solid var(--border-light)', paddingTop: '12px' }}>
+                  <div 
+                    onClick={() => setShowAuditorList(!showAuditorList)}
+                    style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', marginBottom: showAuditorList ? '10px' : '0' }}
+                  >
+                    <span style={{ fontSize: '14px', fontWeight: 600 }}>Auditor Access ({auditorAccess.length})</span>
+                    <span style={{ fontSize: '18px', color: 'var(--text-tertiary)' }}>{showAuditorList ? '−' : '+'}</span>
+                  </div>
+                  
+                  {showAuditorList && (
+                    <div style={{ maxHeight: '160px', overflowY: 'auto', background: 'var(--bg-primary)', padding: '10px', borderRadius: '8px', border: '1px solid var(--border-light)' }}>
+                      {allAuditors.length === 0 ? (
+                        <div style={{ fontSize: '13px', color: 'var(--text-tertiary)', textAlign: 'center' }}>No auditors found</div>
+                      ) : (
+                        allAuditors.map(auditor => (
+                          <label key={auditor.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 4px', cursor: 'pointer', borderBottom: '1px solid var(--border-light)', fontSize: '13px' }}>
+                            <input 
+                              type="checkbox" 
+                              checked={auditorAccess.includes(auditor.id)} 
+                              onChange={(e) => {
+                                if (e.target.checked) setAuditorAccess(prev => [...prev, auditor.id]);
+                                else setAuditorAccess(prev => prev.filter(id => id !== auditor.id));
+                              }} 
+                            />
+                            <span>{auditor.name}</span>
+                          </label>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
 
               {formError && (

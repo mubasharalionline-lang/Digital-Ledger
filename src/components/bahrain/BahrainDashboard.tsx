@@ -107,13 +107,25 @@ export default function BahrainDashboard() {
 
       // Fetch tasks (depends on companyIds)
       let taskList: Task[] = [];
+      const userAuditorAccess: string[] = currentUser?.permissions?.auditor_access || [];
       if (companyIds.length > 0) {
         let taskQuery = supabase.from('tasks').select('*').in('company_id', companyIds).neq('is_daily', true);
-        if (!isAdminUser && currentUser) {
+        if (!isAdminUser && currentUser && userAuditorAccess.length === 0) {
+          // Simple case: no auditor access, just fetch assigned tasks
           taskQuery = taskQuery.eq('assigned_to', currentUser.id);
         }
         const { data: tasks } = await taskQuery;
-        taskList = tasks || [];
+        let allTasks = tasks || [];
+
+        // For users with auditor access (but not admin), filter client-side
+        if (!isAdminUser && currentUser && userAuditorAccess.length > 0) {
+          allTasks = allTasks.filter(t =>
+            t.assigned_to === currentUser.id ||
+            (t.assigned_partners && t.assigned_partners.includes(currentUser.id)) ||
+            userAuditorAccess.includes(t.auditor_id || '')
+          );
+        }
+        taskList = allTasks;
       }
       
       const newTotalTasks = taskList.length;

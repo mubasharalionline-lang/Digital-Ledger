@@ -22,6 +22,7 @@ export interface User {
     can_update_status: boolean;
     can_view_companies: boolean;
     can_message: boolean;
+    auditor_access?: string[];
   };
   created_at: string;
 }

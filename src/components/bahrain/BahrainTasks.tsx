@@ -11,7 +11,9 @@ import { Plus, Eye, Trash2, X, Edit2, MessageCircle, Send, MoreHorizontal, Clock
 export default function BahrainTasks() {
   const { user: currentUser } = getSession();
   const isAdminUser = isAdmin(currentUser);
-  const canUpdateStatus = isAdminUser || (currentUser?.permissions?.can_update_status ?? true);
+  const userAuditorAccess: string[] = currentUser?.permissions?.auditor_access || [];
+  const canManageTask = (task: Task) => isAdminUser || userAuditorAccess.includes(task.auditor_id || '');
+  const canUpdateStatus = isAdminUser || userAuditorAccess.length > 0 || (currentUser?.permissions?.can_update_status ?? true);
 
   const [tasks, setTasks] = useState<Task[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
@@ -175,7 +177,8 @@ export default function BahrainTasks() {
     }
 
     const isAssigned = (t.assigned_partners && t.assigned_partners.includes(currentUser?.id || '')) || t.assigned_to === currentUser?.id;
-    if (!isAdminUser && !isAssigned) return false;
+    const hasAuditorAccess = (currentUser?.permissions?.auditor_access || []).includes(t.auditor_id || '');
+    if (!isAdminUser && !isAssigned && !hasAuditorAccess) return false;
 
     if (filterStatus && t.status !== filterStatus) return false;
     if (filterPriority && t.priority !== filterPriority) return false;
@@ -282,7 +285,8 @@ export default function BahrainTasks() {
 
           const isAssigned = isAdminUser ||
             relatedTask.assigned_to === currentUser.id ||
-            (relatedTask.assigned_partners && relatedTask.assigned_partners.includes(currentUser.id));
+            (relatedTask.assigned_partners && relatedTask.assigned_partners.includes(currentUser.id)) ||
+            userAuditorAccess.includes(relatedTask.auditor_id || '');
 
           if (isAssigned) {
             addUnreadTask(newMessage.task_id);
@@ -585,7 +589,7 @@ export default function BahrainTasks() {
 
     const { user } = getSession();
     // Default to the assigned partner if Admin in Bahrain, otherwise self
-    if (isAdminUser && dataCountry === 'Bahrain' && task.assigned_to) {
+    if ((isAdminUser || canManageTask(task)) && dataCountry === 'Bahrain' && task.assigned_to) {
       setUpdateBy(task.assigned_to);
     } else {
       setUpdateBy(user?.id || '');
@@ -753,7 +757,7 @@ export default function BahrainTasks() {
           <h2 style={{ color: '#ffffff', fontSize: '24px', fontWeight: 700, margin: 0, letterSpacing: '-0.5px' }}>Task Management</h2>
           <p style={{ color: '#94a3b8', fontSize: '14px', margin: '6px 0 0 0' }}>Manage, assign, and track all compliance tasks</p>
         </div>
-        {isAdminUser && (
+        {(isAdminUser || userAuditorAccess.length > 0) && (
           <button
             onClick={() => { setEditingTaskId(null); setNewTask({ company_id: '', task_type_id: '', task_type_ids: [], priority: 'Medium', status: '', auditor_id: '', deadline: '', description: '', assigned_to: '', assigned_partners: [] }); setShowTaskModal(true); }}
             style={{
@@ -1282,7 +1286,7 @@ export default function BahrainTasks() {
                         <span style={{ fontSize: '11px', color: '#475569', maxWidth: '150px', display: 'inline-block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={task.description || ''}>
                           {task.description || '—'}
                         </span>
-                        {hoveredDescTaskId === task.id && isAdminUser && (
+                        {hoveredDescTaskId === task.id && canManageTask(task) && (
                           <button
                             onClick={() => {
                               setInlineEditDescId(task.id);
@@ -1347,7 +1351,7 @@ export default function BahrainTasks() {
                     )}
                   </td>
                   <td style={compactCell}>
-                    {isAdminUser ? (
+                    {canManageTask(task) ? (
                       <select value={task.assigned_to || ''} onChange={e => handleAssign(task.id, e.target.value)}
                         style={{ padding: '5px 6px', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#f8fafc', fontSize: '11px', color: '#334155', minWidth: '110px', cursor: 'pointer', outline: 'none', fontWeight: 500 }}>
                         <option value="">Unassigned</option>
@@ -1383,7 +1387,7 @@ export default function BahrainTasks() {
                             <span style={{ marginLeft: 'auto', background: '#ef4444', color: 'white', fontSize: '9px', padding: '1px 5px', borderRadius: '10px', fontWeight: 600 }}>New</span>
                           )}
                         </button>
-                        {isAdminUser && (<>
+                        {canManageTask(task) && (<>
                           <button onClick={() => { openEditTask(task); setOpenMenuId(null); }} style={menuItemStyle}>
                             <Edit2 size={14} color="#f59e0b" /> Edit Task
                           </button>
@@ -1455,10 +1459,17 @@ export default function BahrainTasks() {
               </select>
             </FormField>
             <FormField label="Auditor">
-              <select value={newTask.auditor_id} onChange={e => setNewTask(p => ({ ...p, auditor_id: e.target.value }))} style={inputStyle}>
-                <option value="">Select Auditor</option>
-                {auditors.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-              </select>
+              {isAdminUser ? (
+                <select value={newTask.auditor_id} onChange={e => setNewTask(p => ({ ...p, auditor_id: e.target.value }))} style={inputStyle}>
+                  <option value="">Select Auditor</option>
+                  {auditors.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                </select>
+              ) : (
+                <select value={newTask.auditor_id} onChange={e => setNewTask(p => ({ ...p, auditor_id: e.target.value }))} style={{ ...inputStyle, opacity: editingTaskId ? 0.6 : 1 }} disabled={!!editingTaskId}>
+                  <option value="">Select Auditor</option>
+                  {auditors.filter(a => userAuditorAccess.includes(a.id)).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                </select>
+              )}
             </FormField>
             <FormField label="Due Date *">
               <input type="date" value={newTask.deadline} onChange={e => setNewTask(p => ({ ...p, deadline: e.target.value }))} style={inputStyle} />
@@ -1545,7 +1556,7 @@ export default function BahrainTasks() {
                   </select>
                 </FormField>
                 <FormField label="Updated By">
-                  <select value={updateBy} onChange={e => setUpdateBy(e.target.value)} style={inputStyle} disabled={!isAdminUser}>
+                  <select value={updateBy} onChange={e => setUpdateBy(e.target.value)} style={inputStyle} disabled={!isAdminUser && !(detailTask && canManageTask(detailTask))}>
                     {!partners.some(p => p.id === updateBy) && updateBy && (
                       <option value={updateBy}>{currentUser?.username || 'Current User'}</option>
                     )}
@@ -1553,7 +1564,7 @@ export default function BahrainTasks() {
                   </select>
                 </FormField>
               </div>
-              {isAdminUser && (
+              {(isAdminUser || (detailTask && canManageTask(detailTask))) && (
                 <FormField label="Assign Partners">
                   <MultiSelect
                     options={partners.map(p => ({ id: p.id, label: p.username }))}
