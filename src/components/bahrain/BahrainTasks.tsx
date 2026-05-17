@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase';
 import type { Task, Company, User, TaskType, StatusLog, TaskMessage } from '@/lib/supabase';
 import { getDataCountry, getSession, isAdmin } from '@/lib/auth';
 import { BAHRAIN_PRIORITIES, BAHRAIN_STATUSES } from '@/lib/bahrain';
-import { Plus, Eye, Trash2, X, Edit2, MessageCircle, Send, MoreHorizontal, Clock, CheckCircle2, Check, BarChart3, PieChart, Activity, ArrowRight, TrendingUp } from 'lucide-react';
+import { Plus, Eye, Trash2, X, Edit2, MessageCircle, Send, MoreHorizontal, Clock, CheckCircle2, Check, BarChart3, PieChart, Activity, ArrowRight, TrendingUp, Building2 } from 'lucide-react';
 
 export default function BahrainTasks() {
   const { user: currentUser } = getSession();
@@ -62,6 +62,11 @@ export default function BahrainTasks() {
   const [updateBy, setUpdateBy] = useState('');
   const [updateRemarks, setUpdateRemarks] = useState('');
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+
+  // Inline Create Company state
+  const [showInlineCompanyForm, setShowInlineCompanyForm] = useState(false);
+  const [inlineCompanyForm, setInlineCompanyForm] = useState({ name: '', tax_registration: '', industry: '', compliance_type: '' });
+  const [inlineCompanySaving, setInlineCompanySaving] = useState(false);
 
   const dataCountry = getDataCountry();
 
@@ -445,6 +450,36 @@ export default function BahrainTasks() {
   }
 
   // Save new task
+  async function saveInlineCompany() {
+    if (!inlineCompanyForm.name.trim()) { alert('Company name is required'); return; }
+    setInlineCompanySaving(true);
+    try {
+      const companyCountry = dataCountry || 'Bahrain';
+      const { data, error } = await supabase.from('companies').insert({
+        company_name: inlineCompanyForm.name.trim(),
+        country: companyCountry,
+        tax_registration: inlineCompanyForm.tax_registration || null,
+        industry: inlineCompanyForm.industry || null,
+        compliance_type: inlineCompanyForm.compliance_type || null,
+        notes: '',
+        status: 'Active',
+      }).select().single();
+      if (error) { alert('Error creating company: ' + error.message); setInlineCompanySaving(false); return; }
+      // Add the new company to the local list and auto-select it
+      setCompanies(prev => [...prev, data].sort((a, b) => a.company_name.localeCompare(b.company_name)));
+      setNewTask(p => ({ ...p, company_id: data.id }));
+      setShowInlineCompanyForm(false);
+      setInlineCompanyForm({ name: '', tax_registration: '', industry: '', compliance_type: '' });
+      // Invalidate caches
+      sessionStorage.removeItem('tasks_data_time');
+      sessionStorage.removeItem('dashboard_data_time_v2');
+    } catch (err) {
+      console.error('Inline company create error:', err);
+      alert('An unexpected error occurred.');
+    }
+    setInlineCompanySaving(false);
+  }
+
   async function saveTask() {
     const typeIds = newTask.task_type_ids || [];
     if (!newTask.company_id || typeIds.length === 0 || !newTask.deadline) {
@@ -1461,10 +1496,75 @@ export default function BahrainTasks() {
         <Modal title={editingTaskId ? "Edit Task" : "New Task"} onClose={() => { setShowTaskModal(false); setEditingTaskId(null); }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
             <FormField label="Company *">
-              <select value={newTask.company_id} onChange={e => setNewTask(p => ({ ...p, company_id: e.target.value }))} style={inputStyle}>
+              <select value={newTask.company_id} onChange={e => {
+                if (e.target.value === '__create_new__') {
+                  setShowInlineCompanyForm(true);
+                  // Reset selection so dropdown doesn't stick on the magic value
+                  setNewTask(p => ({ ...p, company_id: '' }));
+                } else {
+                  setNewTask(p => ({ ...p, company_id: e.target.value }));
+                }
+              }} style={inputStyle}>
                 <option value="">Select Company</option>
+                <option value="__create_new__" style={{ fontWeight: 700, color: '#10b981' }}>＋ Create New Company</option>
                 {companies.map(c => <option key={c.id} value={c.id}>{c.company_name}</option>)}
               </select>
+              {/* Inline Create Company Mini-Form */}
+              {showInlineCompanyForm && (
+                <div style={{ marginTop: '12px', padding: '16px', background: 'linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%)', borderRadius: '14px', border: '1.5px solid #86efac', boxShadow: '0 4px 16px rgba(16,185,129,0.1)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div style={{ width: '28px', height: '28px', borderRadius: '8px', background: 'linear-gradient(135deg, #10b981, #059669)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <Building2 size={14} color="#ffffff" />
+                      </div>
+                      <span style={{ fontSize: '13px', fontWeight: 700, color: '#065f46' }}>New Company</span>
+                    </div>
+                    <button onClick={() => { setShowInlineCompanyForm(false); setInlineCompanyForm({ name: '', tax_registration: '', industry: '', compliance_type: '' }); }} style={{ background: '#dcfce7', border: 'none', borderRadius: '6px', cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#065f46', transition: 'all 0.15s' }}>
+                      <X size={14} />
+                    </button>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    <input
+                      autoFocus
+                      value={inlineCompanyForm.name}
+                      onChange={e => setInlineCompanyForm(p => ({ ...p, name: e.target.value }))}
+                      placeholder="Company Name *"
+                      style={{ ...inputStyle, fontSize: '13px', padding: '10px 14px', borderColor: '#86efac' }}
+                      onKeyDown={e => { if (e.key === 'Enter') saveInlineCompany(); if (e.key === 'Escape') { setShowInlineCompanyForm(false); setInlineCompanyForm({ name: '', tax_registration: '', industry: '', compliance_type: '' }); } }}
+                    />
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                      <input
+                        value={inlineCompanyForm.tax_registration}
+                        onChange={e => setInlineCompanyForm(p => ({ ...p, tax_registration: e.target.value }))}
+                        placeholder="Tax Registration"
+                        style={{ ...inputStyle, fontSize: '12px', padding: '8px 12px', borderColor: '#bbf7d0' }}
+                      />
+                      <input
+                        value={inlineCompanyForm.industry}
+                        onChange={e => setInlineCompanyForm(p => ({ ...p, industry: e.target.value }))}
+                        placeholder="Industry"
+                        style={{ ...inputStyle, fontSize: '12px', padding: '8px 12px', borderColor: '#bbf7d0' }}
+                      />
+                    </div>
+                    <input
+                      value={inlineCompanyForm.compliance_type}
+                      onChange={e => setInlineCompanyForm(p => ({ ...p, compliance_type: e.target.value }))}
+                      placeholder="Compliance Type (e.g., VAT, Corporate Tax)"
+                      style={{ ...inputStyle, fontSize: '12px', padding: '8px 12px', borderColor: '#bbf7d0' }}
+                    />
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '4px' }}>
+                      <button onClick={() => { setShowInlineCompanyForm(false); setInlineCompanyForm({ name: '', tax_registration: '', industry: '', compliance_type: '' }); }}
+                        style={{ padding: '8px 16px', background: '#f1f5f9', color: '#475569', border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '12px', transition: 'all 0.15s' }}>
+                        Cancel
+                      </button>
+                      <button onClick={saveInlineCompany} disabled={inlineCompanySaving}
+                        style={{ padding: '8px 16px', background: inlineCompanySaving ? '#94a3b8' : 'linear-gradient(135deg, #10b981, #059669)', color: '#fff', border: 'none', borderRadius: '8px', cursor: inlineCompanySaving ? 'not-allowed' : 'pointer', fontWeight: 600, fontSize: '12px', boxShadow: '0 2px 8px rgba(16,185,129,0.3)', transition: 'all 0.15s', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <Plus size={14} /> {inlineCompanySaving ? 'Creating...' : 'Create & Select'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </FormField>
             <FormField label="Task Types *">
               <MultiSelect
