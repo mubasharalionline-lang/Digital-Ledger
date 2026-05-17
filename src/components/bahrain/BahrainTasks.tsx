@@ -247,9 +247,11 @@ export default function BahrainTasks() {
     });
   }
 
-  // Check for openChat URL param
+  // Check for openChat or openDesc URL param
   useEffect(() => {
     const openChatId = searchParams.get('openChat');
+    const openDescId = searchParams.get('openDesc');
+    
     if (openChatId && tasks.length > 0 && !chatTask) {
       const task = tasks.find(t => t.id === openChatId);
       if (task) {
@@ -260,7 +262,14 @@ export default function BahrainTasks() {
       url.searchParams.delete('openChat');
       window.history.replaceState({}, '', url);
     }
-  }, [searchParams, tasks, chatTask]);
+
+    if (openDescId && tasks.length > 0 && !detailTask) {
+      viewDetail(openDescId);
+      const url = new URL(window.location.href);
+      url.searchParams.delete('openDesc');
+      window.history.replaceState({}, '', url);
+    }
+  }, [searchParams, tasks, chatTask, detailTask]);
 
   // On load: scan for unread messages across all visible tasks
   useEffect(() => {
@@ -464,6 +473,14 @@ export default function BahrainTasks() {
       setTasks(prev => prev.map(t => t.id === taskId ? { ...t, description: previousDesc } : t));
       alert('Update blocked by Supabase Row Level Security (RLS).');
     } else {
+      if (currentUser) {
+        await supabase.from('status_log').insert({
+          task_id: taskId,
+          status: task.status || 'Unknown',
+          updated_by: currentUser.id,
+          remarks: `Description updated to: ${inlineEditDescValue}`
+        });
+      }
       sessionStorage.removeItem('tasks_data_time');
       sessionStorage.removeItem('dashboard_data_time_v2');
     }

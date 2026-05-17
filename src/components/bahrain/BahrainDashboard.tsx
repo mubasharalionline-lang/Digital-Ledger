@@ -20,6 +20,7 @@ import {
   Loader2,
   MessageCircle,
   Trash2,
+  Edit2,
 } from 'lucide-react';
 
 interface UrgentClient {
@@ -56,6 +57,20 @@ interface RecentMessage {
   is_daily: boolean;
 }
 
+interface RecentDescUpdate {
+  id: string;
+  task_id: string;
+  description_preview: string;
+  created_at: string;
+  updated_by_name: string;
+  task_title: string;
+  company_name: string;
+  task_status: string;
+  task_type_name: string;
+  assigned_to_name: string;
+  is_daily: boolean;
+}
+
 export default function BahrainDashboard() {
   const [totalTasks, setTotalTasks] = useState(0);
   const [totalDailyTasks, setTotalDailyTasks] = useState(0);
@@ -69,6 +84,7 @@ export default function BahrainDashboard() {
   const [partnerWorkloads, setPartnerWorkloads] = useState<PartnerWorkload[]>([]);
   const [dailyTaskStats, setDailyTaskStats] = useState<{ total: number; pending: number; completed: number; repeatCount: number; statusBreakdown: Record<string, number> }>({ total: 0, pending: 0, completed: 0, repeatCount: 0, statusBreakdown: {} });
   const [recentMessages, setRecentMessages] = useState<RecentMessage[]>([]);
+  const [recentDescUpdates, setRecentDescUpdates] = useState<RecentDescUpdate[]>([]);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
@@ -133,6 +149,63 @@ export default function BahrainDashboard() {
     }
   }, []);
 
+  const loadRecentDescUpdates = useCallback(async () => {
+    try {
+      const dataCountry = getDataCountry();
+      const { data: logs } = await supabase
+        .from('status_log')
+        .select('id, task_id, remarks, created_at, updated_by')
+        .ilike('remarks', 'Description updated to:%')
+        .order('created_at', { ascending: false })
+        .limit(20);
+
+      if (!logs || logs.length === 0) return;
+
+      const taskIds = [...new Set(logs.map(l => l.task_id))];
+      const { data: tasksForLogs } = await supabase
+        .from('tasks')
+        .select('id, title, status, company_id, is_daily, task_type_id, assigned_to')
+        .in('id', taskIds);
+
+      const userIds = [...new Set([
+        ...logs.map(l => l.updated_by), 
+        ...(tasksForLogs || []).map(t => t.assigned_to)
+      ].filter(Boolean))];
+
+      const [usersRes, companiesRes, taskTypesRes] = await Promise.all([
+        supabase.from('users').select('id, username').in('id', userIds),
+        supabase.from('companies').select('id, company_name').eq('country', dataCountry || 'Bahrain'),
+        supabase.from('task_types').select('id, name').eq('country', dataCountry || 'Bahrain'),
+      ]);
+
+      const taskMap = new Map((tasksForLogs || []).map(t => [t.id, t]));
+      const userMap = new Map((usersRes.data || []).map(u => [u.id, u.username]));
+      const companyMap = new Map((companiesRes.data || []).map(c => [c.id, c.company_name]));
+      const taskTypeMap = new Map((taskTypesRes.data || []).map(tt => [tt.id, tt.name]));
+
+      const enriched: RecentDescUpdate[] = logs.map(l => {
+        const task = taskMap.get(l.task_id);
+        return {
+          id: l.id,
+          task_id: l.task_id,
+          description_preview: l.remarks?.replace('Description updated to: ', '') || '',
+          created_at: l.created_at,
+          updated_by_name: l.updated_by ? (userMap.get(l.updated_by) || 'Unknown') : 'Unknown',
+          task_title: task?.title || 'Unknown Task',
+          company_name: task?.company_id ? (companyMap.get(task.company_id) || '—') : 'Daily Task',
+          task_status: task?.status || '',
+          task_type_name: task?.task_type_id ? (taskTypeMap.get(task.task_type_id) || '') : '',
+          assigned_to_name: task?.assigned_to ? (userMap.get(task.assigned_to) || 'Unassigned') : 'Unassigned',
+          is_daily: task?.is_daily || false,
+        };
+      }).filter(u => u.task_title !== 'Unknown Task');
+
+      setRecentDescUpdates(enriched);
+    } catch (err) {
+      console.error('Desc updates load error:', err);
+    }
+  }, []);
+
   const loadDashboard = useCallback(async () => {
     const cacheKey = 'dashboard_data_cache_v2';
     const cacheTimeKey = 'dashboard_data_time_v2';
@@ -166,6 +239,7 @@ export default function BahrainDashboard() {
     if (useCache) {
       // Still load fresh messages even when dashboard stats are cached
       await loadRecentMessages();
+      await loadRecentDescUpdates();
       return;
     }
 
@@ -402,15 +476,18 @@ export default function BahrainDashboard() {
       sessionStorage.setItem('dashboard_data_time_v2', Date.now().toString());
 
       // Load recent messages (always fresh, not cached)
-      await loadRecentMessages();
+      loadRecentMessages();
+      loadRecentDescUpdates();
       
     } catch (err) {
       console.error('Dashboard load error:', err);
     }
     setLoading(false);
-  }, []);
+  }, [loadRecentMessages, loadRecentDescUpdates]);
 
-  useEffect(() => { loadDashboard(); }, [loadDashboard]);
+  useEffect(() => {
+    loadDashboard();
+  }, [loadDashboard]);
 
   if (loading) {
     return (
@@ -789,6 +866,66 @@ export default function BahrainDashboard() {
                         {msg.company_name && <span style={{ fontSize: '10px', color: '#64748b' }}>• {msg.company_name}</span>}
                         {msg.task_type_name && <span style={{ fontSize: '10px', color: '#94a3b8' }}>• {msg.task_type_name}</span>}
                         <span style={{ fontSize: '10px', fontWeight: 600, color: statusColor, background: `${statusColor}12`, padding: '1px 6px', borderRadius: '4px', marginLeft: 'auto' }}>{msg.task_status}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Recent Task Description Updates */}
+        <div style={{ ...panelStyle, gridColumn: '1 / -1', marginTop: '20px' }}>
+          <div style={panelHeaderStyle}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div style={{ background: 'linear-gradient(135deg, #dcfce7, #ecfdf5)', color: '#16a34a', width: '36px', height: '36px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Edit2 size={18} /></div>
+              <h3 style={{ ...panelTitleStyle, margin: 0 }}>Recent Description Updates</h3>
+            </div>
+            <span style={badgeStyle}>{recentDescUpdates.length} latest</span>
+          </div>
+          {recentDescUpdates.length === 0 ? (
+            <EmptyState message="No recent description updates" icon="📝" />
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '420px', overflowY: 'auto', paddingRight: '4px' }}>
+              {recentDescUpdates.map((update, idx) => {
+                const timeAgo = getTimeAgo(update.created_at);
+                const avatarColors = ['#8b5cf6','#3b82f6','#10b981','#f59e0b','#ec4899','#06b6d4','#6366f1','#ef4444'];
+                const avatarColor = avatarColors[update.updated_by_name.charCodeAt(0) % avatarColors.length];
+                const statusColor = getStatusColor(update.task_status);
+                return (
+                  <div key={update.id}
+                    onClick={() => router.push(update.is_daily ? `/dashboard/daily-tasks?openDesc=${update.task_id}` : `/dashboard/tasks?openDesc=${update.task_id}`)}
+                    style={{
+                      display: 'flex', gap: '14px', padding: '14px 16px', borderRadius: '14px',
+                      cursor: 'pointer', transition: 'all 0.2s ease',
+                      background: idx < 3 ? '#f0fdf4' : '#ffffff',
+                      border: idx < 3 ? '1px solid #bbf7d0' : '1px solid #f1f5f9',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.background = '#f8fafc'; e.currentTarget.style.transform = 'translateX(3px)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.05)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = idx < 3 ? '#f0fdf4' : '#ffffff'; e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = 'none'; }}
+                  >
+                    {/* Avatar */}
+                    <div style={{ width: '38px', height: '38px', borderRadius: '12px', background: `linear-gradient(135deg, ${avatarColor}, ${avatarColor}cc)`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: '14px', fontWeight: 700, color: '#fff', position: 'relative' }}>
+                      {update.updated_by_name.charAt(0).toUpperCase()}
+                      {idx < 3 && <span style={{ position: 'absolute', top: '-2px', right: '-2px', width: '10px', height: '10px', borderRadius: '50%', background: '#22c55e', border: '2px solid #fff' }} />}
+                    </div>
+                    {/* Content */}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px', flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: '13px', fontWeight: 700, color: '#0f172a' }}>{update.updated_by_name}</span>
+                        <span style={{ fontSize: '11px', color: '#64748b' }}>updated description</span>
+                        <span style={{ fontSize: '11px', color: '#94a3b8', marginLeft: 'auto', fontWeight: 500, whiteSpace: 'nowrap' }}>{timeAgo}</span>
+                      </div>
+                      <div style={{ fontSize: '13px', color: '#334155', lineHeight: 1.4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginBottom: '6px' }}>
+                        "{update.description_preview}"
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: '11px', fontWeight: 600, color: '#475569', background: '#f1f5f9', padding: '2px 8px', borderRadius: '6px', maxWidth: '160px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{update.task_title}</span>
+                        {update.company_name && <span style={{ fontSize: '10px', color: '#64748b' }}>• {update.company_name}</span>}
+                        {update.task_type_name && <span style={{ fontSize: '10px', color: '#94a3b8' }}>• {update.task_type_name}</span>}
+                        {update.assigned_to_name !== 'Unassigned' && <span style={{ fontSize: '10px', color: '#94a3b8' }}>• 👤 {update.assigned_to_name}</span>}
+                        <span style={{ fontSize: '10px', fontWeight: 600, color: statusColor, background: `${statusColor}12`, padding: '1px 6px', borderRadius: '4px', marginLeft: 'auto' }}>{update.task_status}</span>
                       </div>
                     </div>
                   </div>
