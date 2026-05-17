@@ -58,6 +58,12 @@ export default function BahrainTasks() {
   const [recentLoading, setRecentLoading] = useState(false);
   const [detailCompany, setDetailCompany] = useState<Company | null>(null);
   const [statusLogs, setStatusLogs] = useState<StatusLog[]>([]);
+
+  // --- Chat Feature States ---
+  const [chatTask, setChatTask] = useState<Task | null>(null);
+  const [taskMessages, setTaskMessages] = useState<TaskMessage[]>([]);
+  const [newMessage, setNewMessage] = useState('');
+  const messagesEndRef = useRef<HTMLDivElement>(null);
   const [updateStatus, setUpdateStatus] = useState('');
   const [updateBy, setUpdateBy] = useState('');
   const [updateRemarks, setUpdateRemarks] = useState('');
@@ -718,10 +724,6 @@ export default function BahrainTasks() {
   }
 
   // --- Chat Feature ---
-  const [chatTask, setChatTask] = useState<Task | null>(null);
-  const [taskMessages, setTaskMessages] = useState<TaskMessage[]>([]);
-  const [newMessage, setNewMessage] = useState('');
-  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   async function openChat(task: Task) {
     markTaskRead(task.id);
