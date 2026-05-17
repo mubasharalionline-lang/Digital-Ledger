@@ -60,9 +60,12 @@ export default function StaffPage() {
     let usersQuery = supabase.from('users').select('*').order('created_at', { ascending: false });
     if (dataCountry) usersQuery = usersQuery.eq('country', dataCountry);
 
+    let tasksQuery = supabase.from('tasks').select('*, company:companies(company_name)');
+      if (dataCountry) tasksQuery = tasksQuery.eq('country', dataCountry);
+
     const [usersRes, tasksRes, rolesRes, auditorsRes] = await Promise.all([
       usersQuery,
-      supabase.from('tasks').select('*, company:companies(company_name)'),
+      tasksQuery,
       dataCountry 
         ? supabase.from('roles').select('name').eq('country', dataCountry) 
         : supabase.from('roles').select('name'),
@@ -88,7 +91,12 @@ export default function StaffPage() {
 
     const withTasks = users.map(u => ({
       ...u,
-      tasks: tasks.filter(t => t.assigned_to === u.id && !t.status.toLowerCase().includes('completed')),
+      tasks: tasks.filter(t => {
+        // Match by primary assignment OR assigned_partners array
+        const isAssigned = t.assigned_to === u.id || (t.assigned_partners && t.assigned_partners.includes(u.id));
+        const isNotCompleted = !t.status.toLowerCase().includes('completed');
+        return isAssigned && isNotCompleted;
+      }),
     }));
 
     setStaffList(withTasks);

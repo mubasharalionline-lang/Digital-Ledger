@@ -100,6 +100,9 @@ export default function BahrainDailyTasks() {
         remarks: 'Quick status update'
       });
       setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: newStatus } : t));
+      // Invalidate caches so other pages (Staff, Dashboard) fetch fresh data
+      sessionStorage.removeItem('dashboard_data_time_v2');
+      sessionStorage.removeItem('tasks_data_time');
     } catch (e) {
       console.error(e);
     }
