@@ -47,7 +47,7 @@ export default function BahrainDailyTasks() {
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [newTask, setNewTask] = useState({
-    title: '', priority: 'Medium', deadline: '', description: '', assigned_to: '', assigned_partners: [] as string[], repeat_daily: false, status: ''
+    title: '', priority: 'Medium', deadline: '', description: '', assigned_to: '', assigned_partners: [] as string[], repeat_daily: false, repeat_monthly: false, status: ''
   });
 
   const [detailTask, setDetailTask] = useState<Task | null>(null);
@@ -167,7 +167,7 @@ export default function BahrainDailyTasks() {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
-      const tasksToCheck = tasksData.filter(t => t.repeat_daily && t.status !== 'Pending');
+      const tasksToCheck = tasksData.filter(t => (t.repeat_daily || t.repeat_monthly) && t.status !== 'Pending');
       
       if (tasksToCheck.length > 0) {
         const taskIds = tasksToCheck.map(t => t.id);
@@ -178,13 +178,26 @@ export default function BahrainDailyTasks() {
           .order('created_at', { ascending: false });
           
         const resetPromises: any[] = [];
+        const currentMonth = today.getMonth();
+        const currentYear = today.getFullYear();
         
         for (const task of tasksToCheck) {
           const taskLogs = (logs || []).filter(l => l.task_id === task.id);
           const latestLogDateStr = taskLogs.length > 0 ? taskLogs[0].created_at : task.created_at;
           const latestDate = new Date(latestLogDateStr);
           
-          if (latestDate < today) {
+          let shouldReset = false;
+          let remarks = '';
+          
+          if (task.repeat_daily && latestDate < today) {
+            shouldReset = true;
+            remarks = 'Daily auto-reset';
+          } else if (task.repeat_monthly && (latestDate.getMonth() !== currentMonth || latestDate.getFullYear() !== currentYear)) {
+            shouldReset = true;
+            remarks = 'Monthly auto-reset';
+          }
+          
+          if (shouldReset) {
             resetPromises.push(
               supabase.from('tasks').update({ status: 'Pending' }).eq('id', task.id)
             );
@@ -192,7 +205,7 @@ export default function BahrainDailyTasks() {
               supabase.from('status_log').insert({
                 task_id: task.id,
                 status: 'Pending',
-                remarks: 'Daily auto-reset'
+                remarks: remarks
               })
             );
             task.status = 'Pending';
@@ -341,6 +354,7 @@ export default function BahrainDailyTasks() {
           assigned_to: newTask.assigned_to || null,
           assigned_partners: newTask.assigned_partners,
           repeat_daily: newTask.repeat_daily,
+          repeat_monthly: newTask.repeat_monthly,
           is_daily: true,
           country: taskCountry,
         };
@@ -358,6 +372,7 @@ export default function BahrainDailyTasks() {
           assigned_to: newTask.assigned_to || null,
           assigned_partners: newTask.assigned_partners,
           repeat_daily: newTask.repeat_daily,
+          repeat_monthly: newTask.repeat_monthly,
           country: taskCountry,
           is_daily: true
         });
@@ -468,7 +483,7 @@ export default function BahrainDailyTasks() {
           <p style={{ color: '#c4b5fd', fontSize: '14px', margin: '6px 0 0 0' }}>General day-to-day work tasks — not linked to any company</p>
         </div>
         {isAdminUser && (
-          <button onClick={() => { setEditingTaskId(null); setNewTask({ title: '', priority: 'Medium', deadline: '', description: '', assigned_to: '', assigned_partners: [], repeat_daily: false, status: '' }); setShowTaskModal(true); }}
+          <button onClick={() => { setEditingTaskId(null); setNewTask({ title: '', priority: 'Medium', deadline: '', description: '', assigned_to: '', assigned_partners: [], repeat_daily: false, repeat_monthly: false, status: '' }); setShowTaskModal(true); }}
             style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 24px', background: '#ffffff', color: '#4c1d95', border: 'none', borderRadius: '12px', cursor: 'pointer', fontWeight: 600, fontSize: '14px', boxShadow: '0 4px 14px rgba(0,0,0,0.15)', transition: 'all 0.2s ease', whiteSpace: 'nowrap' }}
             onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 6px 20px rgba(0,0,0,0.2)'; }}
             onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 4px 14px rgba(0,0,0,0.15)'; }}>
@@ -530,6 +545,11 @@ export default function BahrainDailyTasks() {
                     {task.repeat_daily && (
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', padding: '2px 8px', borderRadius: '20px', fontSize: '9px', fontWeight: 700, background: 'linear-gradient(135deg, #7c3aed20, #6d28d920)', color: '#7c3aed', border: '1px solid #7c3aed30', letterSpacing: '0.3px', textTransform: 'uppercase' }}>
                         <Repeat size={10} /> Repeat
+                      </span>
+                    )}
+                    {task.repeat_monthly && (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', padding: '2px 8px', borderRadius: '20px', fontSize: '9px', fontWeight: 700, background: 'linear-gradient(135deg, #2563eb20, #1d4ed820)', color: '#2563eb', border: '1px solid #2563eb30', letterSpacing: '0.3px', textTransform: 'uppercase' }}>
+                        <Repeat size={10} /> Monthly
                       </span>
                     )}
                   </div>
@@ -691,7 +711,7 @@ export default function BahrainDailyTasks() {
                       {isAdminUser && (<>
                         <button onClick={() => { 
                           setEditingTaskId(task.id); 
-                          setNewTask({ title: task.title, priority: task.priority, deadline: task.deadline || '', description: task.description || '', assigned_to: task.assigned_to || '', assigned_partners: task.assigned_partners || [], repeat_daily: task.repeat_daily || false, status: task.status || '' }); 
+                          setNewTask({ title: task.title, priority: task.priority, deadline: task.deadline || '', description: task.description || '', assigned_to: task.assigned_to || '', assigned_partners: task.assigned_partners || [], repeat_daily: task.repeat_daily || false, repeat_monthly: task.repeat_monthly || false, status: task.status || '' }); 
                           setShowTaskModal(true); 
                           setOpenMenuId(null); 
                         }} style={menuItemStyle}>
@@ -753,18 +773,34 @@ export default function BahrainDailyTasks() {
                 <FormField label="Description">
                   <textarea value={newTask.description} onChange={e => setNewTask(p => ({ ...p, description: e.target.value }))} style={{ ...inputStyle, minHeight: '80px' }} />
                 </FormField>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', background: newTask.repeat_daily ? 'linear-gradient(135deg, #7c3aed08, #6d28d910)' : '#f8fafc', borderRadius: '12px', border: newTask.repeat_daily ? '1.5px solid #7c3aed30' : '1.5px solid #e2e8f0', transition: 'all 0.2s ease', cursor: 'pointer' }} onClick={() => setNewTask(p => ({ ...p, repeat_daily: !p.repeat_daily }))}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: newTask.repeat_daily ? 'linear-gradient(135deg, #7c3aed, #6d28d9)' : '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s ease' }}>
-                      <Repeat size={16} color={newTask.repeat_daily ? '#ffffff' : '#94a3b8'} />
+                <div style={{ display: 'flex', gap: '16px' }}>
+                  <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', background: newTask.repeat_daily ? 'linear-gradient(135deg, #7c3aed08, #6d28d910)' : '#f8fafc', borderRadius: '12px', border: newTask.repeat_daily ? '1.5px solid #7c3aed30' : '1.5px solid #e2e8f0', transition: 'all 0.2s ease', cursor: 'pointer' }} onClick={() => setNewTask(p => ({ ...p, repeat_daily: !p.repeat_daily, repeat_monthly: !p.repeat_daily ? false : p.repeat_monthly }))}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: newTask.repeat_daily ? 'linear-gradient(135deg, #7c3aed, #6d28d9)' : '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s ease' }}>
+                        <Repeat size={16} color={newTask.repeat_daily ? '#ffffff' : '#94a3b8'} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>Repeat Daily</div>
+                        <div style={{ fontSize: '12px', color: '#64748b', marginTop: '1px' }}>Task resets automatically every day</div>
+                      </div>
                     </div>
-                    <div>
-                      <div style={{ fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>Repeat Daily</div>
-                      <div style={{ fontSize: '12px', color: '#64748b', marginTop: '1px' }}>Task resets automatically every day</div>
+                    <div style={{ width: '44px', height: '24px', borderRadius: '12px', background: newTask.repeat_daily ? 'linear-gradient(135deg, #7c3aed, #6d28d9)' : '#cbd5e1', position: 'relative', transition: 'all 0.25s ease', boxShadow: newTask.repeat_daily ? '0 2px 8px rgba(124,58,237,0.3)' : 'none' }}>
+                      <div style={{ width: '20px', height: '20px', borderRadius: '50%', background: '#ffffff', position: 'absolute', top: '2px', left: newTask.repeat_daily ? '22px' : '2px', transition: 'all 0.25s ease', boxShadow: '0 1px 3px rgba(0,0,0,0.15)' }} />
                     </div>
                   </div>
-                  <div style={{ width: '44px', height: '24px', borderRadius: '12px', background: newTask.repeat_daily ? 'linear-gradient(135deg, #7c3aed, #6d28d9)' : '#cbd5e1', position: 'relative', transition: 'all 0.25s ease', boxShadow: newTask.repeat_daily ? '0 2px 8px rgba(124,58,237,0.3)' : 'none' }}>
-                    <div style={{ width: '20px', height: '20px', borderRadius: '50%', background: '#ffffff', position: 'absolute', top: '2px', left: newTask.repeat_daily ? '22px' : '2px', transition: 'all 0.25s ease', boxShadow: '0 1px 3px rgba(0,0,0,0.15)' }} />
+                  <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', background: newTask.repeat_monthly ? 'linear-gradient(135deg, #2563eb08, #1d4ed810)' : '#f8fafc', borderRadius: '12px', border: newTask.repeat_monthly ? '1.5px solid #2563eb30' : '1.5px solid #e2e8f0', transition: 'all 0.2s ease', cursor: 'pointer' }} onClick={() => setNewTask(p => ({ ...p, repeat_monthly: !p.repeat_monthly, repeat_daily: !p.repeat_monthly ? false : p.repeat_daily }))}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: newTask.repeat_monthly ? 'linear-gradient(135deg, #3b82f6, #2563eb)' : '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s ease' }}>
+                        <Repeat size={16} color={newTask.repeat_monthly ? '#ffffff' : '#94a3b8'} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>Repeat Monthly</div>
+                        <div style={{ fontSize: '12px', color: '#64748b', marginTop: '1px' }}>Task resets automatically every month</div>
+                      </div>
+                    </div>
+                    <div style={{ width: '44px', height: '24px', borderRadius: '12px', background: newTask.repeat_monthly ? 'linear-gradient(135deg, #3b82f6, #2563eb)' : '#cbd5e1', position: 'relative', transition: 'all 0.25s ease', boxShadow: newTask.repeat_monthly ? '0 2px 8px rgba(37,99,235,0.3)' : 'none' }}>
+                      <div style={{ width: '20px', height: '20px', borderRadius: '50%', background: '#ffffff', position: 'absolute', top: '2px', left: newTask.repeat_monthly ? '22px' : '2px', transition: 'all 0.25s ease', boxShadow: '0 1px 3px rgba(0,0,0,0.15)' }} />
+                    </div>
                   </div>
                 </div>
               </div>

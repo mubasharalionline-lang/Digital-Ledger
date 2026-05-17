@@ -67,6 +67,7 @@ export interface Task {
   description?: string;
   is_daily?: boolean;
   repeat_daily?: boolean;
+  repeat_monthly?: boolean;
   country?: string;
   created_at: string;
   // joined fields

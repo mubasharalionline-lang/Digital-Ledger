@@ -145,7 +145,7 @@ export default function BahrainDashboard() {
       const todayStart = new Date();
       todayStart.setHours(0, 0, 0, 0);
 
-      const tasksToReset = dailyList.filter(t => t.repeat_daily && t.status !== 'Pending');
+      const tasksToReset = dailyList.filter(t => (t.repeat_daily || t.repeat_monthly) && t.status !== 'Pending');
       if (tasksToReset.length > 0) {
         const taskIds = tasksToReset.map(t => t.id);
         const { data: logs } = await supabase
@@ -155,13 +155,26 @@ export default function BahrainDashboard() {
           .order('created_at', { ascending: false });
           
         const resetPromises: any[] = [];
+        const currentMonth = todayStart.getMonth();
+        const currentYear = todayStart.getFullYear();
         
         for (const task of tasksToReset) {
           const taskLogs = (logs || []).filter(l => l.task_id === task.id);
           const latestLogDateStr = taskLogs.length > 0 ? taskLogs[0].created_at : task.created_at;
           const latestDate = new Date(latestLogDateStr);
           
-          if (latestDate < todayStart) {
+          let shouldReset = false;
+          let remarks = '';
+          
+          if (task.repeat_daily && latestDate < todayStart) {
+            shouldReset = true;
+            remarks = 'Daily auto-reset';
+          } else if (task.repeat_monthly && (latestDate.getMonth() !== currentMonth || latestDate.getFullYear() !== currentYear)) {
+            shouldReset = true;
+            remarks = 'Monthly auto-reset';
+          }
+          
+          if (shouldReset) {
             resetPromises.push(
               supabase.from('tasks').update({ status: 'Pending' }).eq('id', task.id)
             );
@@ -169,7 +182,7 @@ export default function BahrainDashboard() {
               supabase.from('status_log').insert({
                 task_id: task.id,
                 status: 'Pending',
-                remarks: 'Daily auto-reset'
+                remarks: remarks
               })
             );
             task.status = 'Pending';
@@ -187,7 +200,7 @@ export default function BahrainDashboard() {
       const completedStatuses = ['completed', 'closed', 'done', 'filed'];
       const pendingCount = dailyList.filter(t => !completedStatuses.includes(t.status?.toLowerCase() || '')).length;
       const completedCount = dailyList.filter(t => completedStatuses.includes(t.status?.toLowerCase() || '')).length;
-      const repeatCount = dailyList.filter(t => t.repeat_daily === true).length;
+      const repeatCount = dailyList.filter(t => t.repeat_daily === true || t.repeat_monthly === true).length;
       const statusBreakdown: Record<string, number> = {};
       dailyList.forEach(t => { statusBreakdown[t.status || 'Unknown'] = (statusBreakdown[t.status || 'Unknown'] || 0) + 1; });
       const newDailyStats = { total: dailyList.length, pending: pendingCount, completed: completedCount, repeatCount, statusBreakdown };
