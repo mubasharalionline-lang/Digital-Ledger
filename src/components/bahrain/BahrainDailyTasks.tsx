@@ -266,13 +266,16 @@ export default function BahrainDailyTasks() {
   // Check for openChat URL param
   useEffect(() => {
     const openChatId = searchParams.get('openChat');
-    if (openChatId && tasks.length > 0 && !detailTask) {
-      viewDetail(openChatId);
+    if (openChatId && tasks.length > 0 && !chatTask) {
+      const task = tasks.find(t => t.id === openChatId);
+      if (task) {
+        openChat(task);
+      }
       const url = new URL(window.location.href);
       url.searchParams.delete('openChat');
       window.history.replaceState({}, '', url);
     }
-  }, [searchParams, tasks, detailTask]);
+  }, [searchParams, tasks, chatTask]);
 
   // On load: scan for unread messages across daily tasks
   useEffect(() => {

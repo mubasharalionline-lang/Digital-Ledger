@@ -244,14 +244,17 @@ export default function BahrainTasks() {
   // Check for openChat URL param
   useEffect(() => {
     const openChatId = searchParams.get('openChat');
-    if (openChatId && tasks.length > 0 && !detailTask) {
-      viewDetail(openChatId);
+    if (openChatId && tasks.length > 0 && !chatTask) {
+      const task = tasks.find(t => t.id === openChatId);
+      if (task) {
+        openChat(task);
+      }
       // Remove it from URL so refreshing doesn't reopen it unnecessarily
       const url = new URL(window.location.href);
       url.searchParams.delete('openChat');
       window.history.replaceState({}, '', url);
     }
-  }, [searchParams, tasks, detailTask]);
+  }, [searchParams, tasks, chatTask]);
 
   // On load: scan for unread messages across all visible tasks
   useEffect(() => {
