@@ -776,9 +776,7 @@ export default function BahrainDashboard() {
             </div>
           )}
         </div>
-
       </div>
-    </div>
     </div>
   );
 }
