@@ -1493,8 +1493,8 @@ export default function BahrainTasks() {
 
       {/* New/Edit Task Modal */}
       {showTaskModal && (
-        <Modal title={editingTaskId ? "Edit Task" : "New Task"} onClose={() => { setShowTaskModal(false); setEditingTaskId(null); }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+        <Modal title={editingTaskId ? "✏️ Edit Task" : "✨ New Task"} onClose={() => { setShowTaskModal(false); setEditingTaskId(null); }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '18px', marginBottom: '20px' }}>
             <FormField label="Company *">
               <select value={newTask.company_id} onChange={e => {
                 if (e.target.value === '__create_new__') {
@@ -1602,20 +1602,22 @@ export default function BahrainTasks() {
               <input type="date" value={newTask.deadline} onChange={e => setNewTask(p => ({ ...p, deadline: e.target.value }))} style={inputStyle} />
             </FormField>
           </div>
-          <FormField label="Description">
-            <textarea value={newTask.description} onChange={e => setNewTask(p => ({ ...p, description: e.target.value }))} placeholder="Task details..." style={{ ...inputStyle, minHeight: '80px', resize: 'vertical' }} />
-          </FormField>
-          <FormField label="Assign To">
-            <MultiSelect
-              options={partners.map(p => ({ id: p.id, label: p.username }))}
-              selected={newTask.assigned_partners}
-              onChange={vals => setNewTask(p => ({ ...p, assigned_partners: vals }))}
-              placeholder="Select Partners"
-            />
-          </FormField>
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '24px', paddingTop: '20px', borderTop: '1px solid #f1f5f9' }}>
-            <button onClick={() => setShowTaskModal(false)} style={{ padding: '11px 24px', background: '#f1f5f9', color: '#475569', border: '1px solid #e2e8f0', borderRadius: '10px', cursor: 'pointer', fontWeight: 600, fontSize: '14px', transition: 'all 0.15s ease' }} onMouseEnter={e => e.currentTarget.style.background = '#e2e8f0'} onMouseLeave={e => e.currentTarget.style.background = '#f1f5f9'}>Cancel</button>
-            <button onClick={saveTask} style={{ padding: '11px 24px', background: 'linear-gradient(135deg, #10b981, #059669)', color: '#fff', border: 'none', borderRadius: '10px', cursor: 'pointer', fontWeight: 600, fontSize: '14px', boxShadow: '0 4px 14px rgba(16,185,129,0.3)', transition: 'all 0.15s ease' }} onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 6px 20px rgba(16,185,129,0.4)'; }} onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 4px 14px rgba(16,185,129,0.3)'; }}>Save Task</button>
+          <div style={{ background: '#f8fafc', borderRadius: '14px', padding: '18px', marginBottom: '18px', border: '1px solid #f1f5f9' }}>
+            <FormField label="📝 Description">
+              <textarea value={newTask.description} onChange={e => setNewTask(p => ({ ...p, description: e.target.value }))} placeholder="Describe task details, requirements, and notes..." style={{ ...inputStyle, minHeight: '90px', resize: 'vertical', background: '#ffffff' }} />
+            </FormField>
+            <FormField label="👥 Assign To">
+              <MultiSelect
+                options={partners.map(p => ({ id: p.id, label: p.username }))}
+                selected={newTask.assigned_partners}
+                onChange={vals => setNewTask(p => ({ ...p, assigned_partners: vals }))}
+                placeholder="Select Partners"
+              />
+            </FormField>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', paddingTop: '20px', borderTop: '1px solid #e2e8f0' }}>
+            <button onClick={() => setShowTaskModal(false)} style={{ padding: '11px 24px', background: '#f1f5f9', color: '#475569', border: '1px solid #e2e8f0', borderRadius: '12px', cursor: 'pointer', fontWeight: 600, fontSize: '14px', transition: 'all 0.15s ease' }} onMouseEnter={e => e.currentTarget.style.background = '#e2e8f0'} onMouseLeave={e => e.currentTarget.style.background = '#f1f5f9'}>Cancel</button>
+            <button onClick={saveTask} style={{ padding: '11px 28px', background: 'linear-gradient(135deg, #10b981, #059669)', color: '#fff', border: 'none', borderRadius: '12px', cursor: 'pointer', fontWeight: 600, fontSize: '14px', boxShadow: '0 4px 14px rgba(16,185,129,0.3)', transition: 'all 0.2s ease', display: 'flex', alignItems: 'center', gap: '8px' }} onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 6px 20px rgba(16,185,129,0.4)'; }} onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 4px 14px rgba(16,185,129,0.3)'; }}>Save Task</button>
           </div>
         </Modal>
       )}
@@ -1911,8 +1913,8 @@ function getStatusesForTask(
 
 function FormField({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', marginBottom: '16px' }}>
-      <label style={{ fontWeight: 600, marginBottom: '8px', color: '#334155', fontSize: '13px', letterSpacing: '0.01em' }}>{label}</label>
+    <div style={{ display: 'flex', flexDirection: 'column', marginBottom: '4px' }}>
+      <label style={{ fontWeight: 600, marginBottom: '8px', color: '#1e293b', fontSize: '13px', letterSpacing: '0.01em', display: 'flex', alignItems: 'center', gap: '4px' }}>{label}</label>
       {children}
     </div>
   );
@@ -1939,9 +1941,9 @@ const dropdownStyle: React.CSSProperties = {
 };
 
 const inputStyle: React.CSSProperties = {
-  padding: '12px 16px', border: '1px solid #cbd5e1', borderRadius: '12px', fontSize: '14px',
+  padding: '12px 16px', border: '1.5px solid #e2e8f0', borderRadius: '12px', fontSize: '14px',
   width: '100%', background: '#ffffff', color: '#0f172a', outline: 'none',
-  transition: 'border-color 0.2s ease, box-shadow 0.2s ease',
+  transition: 'border-color 0.2s ease, box-shadow 0.2s ease', fontWeight: 500,
 };
 
 const menuItemStyle: React.CSSProperties = {
