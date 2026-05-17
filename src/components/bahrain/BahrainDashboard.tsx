@@ -18,6 +18,7 @@ import {
   Repeat,
   CheckCircle2,
   Loader2,
+  MessageCircle,
 } from 'lucide-react';
 
 interface UrgentClient {
@@ -40,6 +41,20 @@ interface PartnerWorkload {
   inProgressTasks: number;
 }
 
+interface RecentMessage {
+  id: string;
+  task_id: string;
+  message: string;
+  created_at: string;
+  sender_name: string;
+  sender_role: string;
+  task_title: string;
+  company_name: string;
+  task_status: string;
+  task_type_name: string;
+  is_daily: boolean;
+}
+
 export default function BahrainDashboard() {
   const [totalTasks, setTotalTasks] = useState(0);
   const [totalDailyTasks, setTotalDailyTasks] = useState(0);
@@ -52,8 +67,59 @@ export default function BahrainDashboard() {
   const [upcomingTasks, setUpcomingTasks] = useState<(Task & { companyName: string; daysLeft: number })[]>([]);
   const [partnerWorkloads, setPartnerWorkloads] = useState<PartnerWorkload[]>([]);
   const [dailyTaskStats, setDailyTaskStats] = useState<{ total: number; pending: number; completed: number; repeatCount: number; statusBreakdown: Record<string, number> }>({ total: 0, pending: 0, completed: 0, repeatCount: 0, statusBreakdown: {} });
+  const [recentMessages, setRecentMessages] = useState<RecentMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
+
+  const loadRecentMessages = useCallback(async () => {
+    try {
+      const dataCountry = getDataCountry();
+      const { data: msgs } = await supabase
+        .from('task_messages')
+        .select('id, task_id, message, created_at, sender_id')
+        .order('created_at', { ascending: false })
+        .limit(20);
+
+      if (!msgs || msgs.length === 0) return;
+
+      const msgTaskIds = [...new Set(msgs.map(m => m.task_id))];
+      const msgSenderIds = [...new Set(msgs.map(m => m.sender_id))];
+
+      const [tasksForMsgs, sendersForMsgs, companiesForMsgs, taskTypesForMsgs] = await Promise.all([
+        supabase.from('tasks').select('id, title, status, company_id, is_daily, task_type_id').in('id', msgTaskIds),
+        supabase.from('users').select('id, username, role').in('id', msgSenderIds),
+        supabase.from('companies').select('id, company_name').eq('country', dataCountry || 'Bahrain'),
+        supabase.from('task_types').select('id, name').eq('country', dataCountry || 'Bahrain'),
+      ]);
+
+      const taskMap = new Map((tasksForMsgs.data || []).map(t => [t.id, t]));
+      const senderMap = new Map((sendersForMsgs.data || []).map(u => [u.id, u]));
+      const companyMap = new Map((companiesForMsgs.data || []).map(c => [c.id, c.company_name]));
+      const taskTypeMap = new Map((taskTypesForMsgs.data || []).map(tt => [tt.id, tt.name]));
+
+      const enriched: RecentMessage[] = msgs.map(m => {
+        const task = taskMap.get(m.task_id);
+        const sender = senderMap.get(m.sender_id);
+        return {
+          id: m.id,
+          task_id: m.task_id,
+          message: m.message,
+          created_at: m.created_at,
+          sender_name: sender?.username || 'Unknown',
+          sender_role: sender?.role || '',
+          task_title: task?.title || 'Unknown Task',
+          company_name: task?.company_id ? (companyMap.get(task.company_id) || '—') : 'Daily Task',
+          task_status: task?.status || '',
+          task_type_name: task?.task_type_id ? (taskTypeMap.get(task.task_type_id) || '') : '',
+          is_daily: task?.is_daily || false,
+        };
+      }).filter(m => m.task_title !== 'Unknown Task');
+
+      setRecentMessages(enriched);
+    } catch (err) {
+      console.error('Messages load error:', err);
+    }
+  }, []);
 
   const loadDashboard = useCallback(async () => {
     const cacheKey = 'dashboard_data_cache_v2';
@@ -85,7 +151,11 @@ export default function BahrainDashboard() {
       }
     }
 
-    if (useCache) return; // Skip expensive DB queries if cache is fresh!
+    if (useCache) {
+      // Still load fresh messages even when dashboard stats are cached
+      await loadRecentMessages();
+      return;
+    }
 
     try {
       const dataCountry = getDataCountry();
@@ -318,6 +388,9 @@ export default function BahrainDashboard() {
         partnerWorkloads: newPartnerWorkloads
       }));
       sessionStorage.setItem('dashboard_data_time_v2', Date.now().toString());
+
+      // Load recent messages (always fresh, not cached)
+      await loadRecentMessages();
       
     } catch (err) {
       console.error('Dashboard load error:', err);
@@ -644,7 +717,68 @@ export default function BahrainDashboard() {
           </div>
         </div>
 
+        {/* Recent Messages */}
+        <div style={{ ...panelStyle, gridColumn: '1 / -1' }}>
+          <div style={panelHeaderStyle}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div style={{ background: 'linear-gradient(135deg, #ede9fe, #f5f3ff)', color: '#7c3aed', width: '36px', height: '36px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><MessageCircle size={18} /></div>
+              <h3 style={{ ...panelTitleStyle, margin: 0 }}>Recent Messages</h3>
+            </div>
+            <span style={badgeStyle}>{recentMessages.length} latest</span>
+          </div>
+          {recentMessages.length === 0 ? (
+            <EmptyState message="No recent messages" icon="💬" />
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '420px', overflowY: 'auto', paddingRight: '4px' }}>
+              {recentMessages.map((msg, idx) => {
+                const timeAgo = getTimeAgo(msg.created_at);
+                const isAdmin = msg.sender_role?.toLowerCase() === 'admin';
+                const avatarColors = ['#8b5cf6','#3b82f6','#10b981','#f59e0b','#ec4899','#06b6d4','#6366f1','#ef4444'];
+                const avatarColor = avatarColors[msg.sender_name.charCodeAt(0) % avatarColors.length];
+                const statusColor = getStatusColor(msg.task_status);
+                return (
+                  <div key={msg.id}
+                    onClick={() => router.push(msg.is_daily ? '/dashboard/daily-tasks' : '/dashboard/tasks')}
+                    style={{
+                      display: 'flex', gap: '14px', padding: '14px 16px', borderRadius: '14px',
+                      cursor: 'pointer', transition: 'all 0.2s ease',
+                      background: idx < 3 ? '#fefce8' : '#ffffff',
+                      border: idx < 3 ? '1px solid #fde68a' : '1px solid #f1f5f9',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.background = '#f8fafc'; e.currentTarget.style.transform = 'translateX(3px)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.05)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = idx < 3 ? '#fefce8' : '#ffffff'; e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = 'none'; }}
+                  >
+                    {/* Avatar */}
+                    <div style={{ width: '38px', height: '38px', borderRadius: '12px', background: `linear-gradient(135deg, ${avatarColor}, ${avatarColor}cc)`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: '14px', fontWeight: 700, color: '#fff', position: 'relative' }}>
+                      {msg.sender_name.charAt(0).toUpperCase()}
+                      {idx < 3 && <span style={{ position: 'absolute', top: '-2px', right: '-2px', width: '10px', height: '10px', borderRadius: '50%', background: '#f59e0b', border: '2px solid #fff' }} />}
+                    </div>
+                    {/* Content */}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px', flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: '13px', fontWeight: 700, color: '#0f172a' }}>{msg.sender_name}</span>
+                        {isAdmin && <span style={{ fontSize: '9px', fontWeight: 700, background: '#ede9fe', color: '#7c3aed', padding: '1px 6px', borderRadius: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Admin</span>}
+                        <span style={{ fontSize: '11px', color: '#94a3b8', marginLeft: 'auto', fontWeight: 500, whiteSpace: 'nowrap' }}>{timeAgo}</span>
+                      </div>
+                      <div style={{ fontSize: '13px', color: '#334155', lineHeight: 1.4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginBottom: '6px' }}>
+                        {msg.message}
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: '11px', fontWeight: 600, color: '#475569', background: '#f1f5f9', padding: '2px 8px', borderRadius: '6px', maxWidth: '160px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{msg.task_title}</span>
+                        {msg.company_name && <span style={{ fontSize: '10px', color: '#64748b' }}>• {msg.company_name}</span>}
+                        {msg.task_type_name && <span style={{ fontSize: '10px', color: '#94a3b8' }}>• {msg.task_type_name}</span>}
+                        <span style={{ fontSize: '10px', fontWeight: 600, color: statusColor, background: `${statusColor}12`, padding: '1px 6px', borderRadius: '4px', marginLeft: 'auto' }}>{msg.task_status}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
       </div>
+    </div>
     </div>
   );
 }
@@ -659,6 +793,22 @@ function getStatusColor(status: string) {
   if (s.includes('urgent') || s.includes('overdue') || s.includes('rework')) return '#ef4444';
   if (s.includes('query') || s.includes('info')) return '#f59e0b';
   return '#64748b';
+}
+
+function getTimeAgo(dateStr: string): string {
+  const now = new Date();
+  const date = new Date(dateStr);
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffMins < 1) return 'Just now';
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffDays === 1) return 'Yesterday';
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
 function StatCard({ icon, label, value, colorHex, onClick }: { icon: React.ReactNode; label: string; value: number; colorHex: string; onClick?: () => void }) {
