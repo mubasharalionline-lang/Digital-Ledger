@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import type { Task, User, StatusLog, TaskMessage } from '@/lib/supabase';
 import { getSession, isAdmin, getDataCountry } from '@/lib/auth';
 import { Plus, X, Eye, Edit2, MessageCircle, Send, CheckCircle2, Search, Filter, Repeat, Trash2, MoreHorizontal, Check } from 'lucide-react';
-import { useRef } from 'react';
 
 // Fixed array of statuses so it alphabetically sorts correctly
 const BAHRAIN_STATUSES = [
@@ -29,6 +29,7 @@ const BAHRAIN_STATUSES = [
 export default function BahrainDailyTasks() {
   const { user: currentUser } = getSession();
   const isAdminUser = isAdmin(currentUser);
+  const searchParams = useSearchParams();
   const canUpdateStatus = isAdminUser || (currentUser?.permissions?.can_update_status ?? true);
 
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -261,6 +262,17 @@ export default function BahrainDailyTasks() {
       return [...prev, taskId];
     });
   }
+
+  // Check for openChat URL param
+  useEffect(() => {
+    const openChatId = searchParams.get('openChat');
+    if (openChatId && tasks.length > 0 && !detailTask) {
+      viewDetail(openChatId);
+      const url = new URL(window.location.href);
+      url.searchParams.delete('openChat');
+      window.history.replaceState({}, '', url);
+    }
+  }, [searchParams, tasks, detailTask]);
 
   // On load: scan for unread messages across daily tasks
   useEffect(() => {

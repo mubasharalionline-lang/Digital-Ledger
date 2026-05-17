@@ -19,6 +19,7 @@ import {
   CheckCircle2,
   Loader2,
   MessageCircle,
+  Trash2,
 } from 'lucide-react';
 
 interface UrgentClient {
@@ -70,6 +71,17 @@ export default function BahrainDashboard() {
   const [recentMessages, setRecentMessages] = useState<RecentMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
+
+  const handleDeleteMessage = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    if (!confirm('Are you sure you want to delete this message?')) return;
+    try {
+      await supabase.from('task_messages').delete().eq('id', id);
+      setRecentMessages(prev => prev.filter(m => m.id !== id));
+    } catch (err) {
+      console.error('Failed to delete message:', err);
+    }
+  };
 
   const loadRecentMessages = useCallback(async () => {
     try {
@@ -732,13 +744,13 @@ export default function BahrainDashboard() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '420px', overflowY: 'auto', paddingRight: '4px' }}>
               {recentMessages.map((msg, idx) => {
                 const timeAgo = getTimeAgo(msg.created_at);
-                const isAdmin = msg.sender_role?.toLowerCase() === 'admin';
+                const isSenderAdmin = msg.sender_role?.toLowerCase() === 'admin';
                 const avatarColors = ['#8b5cf6','#3b82f6','#10b981','#f59e0b','#ec4899','#06b6d4','#6366f1','#ef4444'];
                 const avatarColor = avatarColors[msg.sender_name.charCodeAt(0) % avatarColors.length];
                 const statusColor = getStatusColor(msg.task_status);
                 return (
                   <div key={msg.id}
-                    onClick={() => router.push(msg.is_daily ? '/dashboard/daily-tasks' : '/dashboard/tasks')}
+                    onClick={() => router.push(msg.is_daily ? `/dashboard/daily-tasks?openChat=${msg.task_id}` : `/dashboard/tasks?openChat=${msg.task_id}`)}
                     style={{
                       display: 'flex', gap: '14px', padding: '14px 16px', borderRadius: '14px',
                       cursor: 'pointer', transition: 'all 0.2s ease',
@@ -757,8 +769,17 @@ export default function BahrainDashboard() {
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px', flexWrap: 'wrap' }}>
                         <span style={{ fontSize: '13px', fontWeight: 700, color: '#0f172a' }}>{msg.sender_name}</span>
-                        {isAdmin && <span style={{ fontSize: '9px', fontWeight: 700, background: '#ede9fe', color: '#7c3aed', padding: '1px 6px', borderRadius: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Admin</span>}
+                        {isSenderAdmin && <span style={{ fontSize: '9px', fontWeight: 700, background: '#ede9fe', color: '#7c3aed', padding: '1px 6px', borderRadius: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Admin</span>}
                         <span style={{ fontSize: '11px', color: '#94a3b8', marginLeft: 'auto', fontWeight: 500, whiteSpace: 'nowrap' }}>{timeAgo}</span>
+                        {isAdmin(getSession().user) && (
+                          <div 
+                            onClick={(e) => handleDeleteMessage(e, msg.id)}
+                            style={{ marginLeft: '4px', color: '#ef4444', background: '#fef2f2', padding: '4px', borderRadius: '4px', cursor: 'pointer' }}
+                            title="Delete Message"
+                          >
+                            <Trash2 size={12} />
+                          </div>
+                        )}
                       </div>
                       <div style={{ fontSize: '13px', color: '#334155', lineHeight: 1.4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginBottom: '6px' }}>
                         {msg.message}
