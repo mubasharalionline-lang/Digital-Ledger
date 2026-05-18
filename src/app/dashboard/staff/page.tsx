@@ -236,12 +236,21 @@ export default function StaffPage() {
       .update({ status: 'pending', used_by: null, used_at: null })
       .eq('used_by', userId);
 
-    await supabase.from('users').delete().eq('id', userId);
+    // Delete related task_messages to avoid FK constraint blocks
+    await supabase.from('task_messages').delete().eq('sender_id', userId);
+
+    // Delete the user
+    const { error: delError } = await supabase.from('users').delete().eq('id', userId);
     
+    if (delError) {
+      alert('Failed to delete user: ' + delError.message);
+      return;
+    }
+
     sessionStorage.removeItem('dashboard_data_time_v2');
     sessionStorage.removeItem('tasks_data_time');
     
-    setInviteKey(k => k + 1); // refresh invite panel
+    setInviteKey(k => k + 1);
     loadStaff();
   }
 

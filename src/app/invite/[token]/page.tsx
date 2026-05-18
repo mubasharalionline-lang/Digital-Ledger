@@ -114,7 +114,7 @@ export default function InviteSignupPage({ params }: { params: Promise<{ token: 
         .select('id')
         .eq('username', username.trim())
         .eq('country', invite.country)
-        .single();
+        .maybeSingle();
 
       if (existing) {
         setError('Username already exists in this country. Please choose another.');
