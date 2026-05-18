@@ -102,11 +102,16 @@ export default function BahrainDashboard() {
   const loadRecentMessages = useCallback(async () => {
     try {
       const dataCountry = getDataCountry();
-      const { data: msgs } = await supabase
+      const { data: msgs, error: msgsError } = await supabase
         .from('task_messages')
-        .select('id, task_id, message, created_at, sender_id')
+        .select('id, task_id, message, created_at, sender_id, tasks!inner(country)')
+        .eq('tasks.country', dataCountry || 'Bahrain')
         .order('created_at', { ascending: false })
         .limit(20);
+
+      if (msgsError) {
+        console.error('task_messages fetch error:', msgsError);
+      }
 
       if (!msgs || msgs.length === 0) return;
 
@@ -152,12 +157,17 @@ export default function BahrainDashboard() {
   const loadRecentDescUpdates = useCallback(async () => {
     try {
       const dataCountry = getDataCountry();
-      const { data: logs } = await supabase
+      const { data: logs, error: logsError } = await supabase
         .from('status_log')
-        .select('id, task_id, remarks, created_at, updated_by')
+        .select('id, task_id, remarks, created_at, updated_by, tasks!inner(country)')
         .ilike('remarks', 'Description updated to:%')
+        .eq('tasks.country', dataCountry || 'Bahrain')
         .order('created_at', { ascending: false })
         .limit(20);
+
+      if (logsError) {
+        console.error('status_log fetch error:', logsError);
+      }
 
       if (!logs || logs.length === 0) return;
 
