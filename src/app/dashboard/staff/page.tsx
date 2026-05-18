@@ -229,11 +229,19 @@ export default function StaffPage() {
       return;
     }
     if (!confirm('Are you sure you want to delete this user?')) return;
+
+    // Reset any invite that was used by this user back to pending
+    await supabase
+      .from('partner_invites')
+      .update({ status: 'pending', used_by: null, used_at: null })
+      .eq('used_by', userId);
+
     await supabase.from('users').delete().eq('id', userId);
     
     sessionStorage.removeItem('dashboard_data_time_v2');
     sessionStorage.removeItem('tasks_data_time');
     
+    setInviteKey(k => k + 1); // refresh invite panel
     loadStaff();
   }
 

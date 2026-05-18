@@ -55,6 +55,26 @@ export default function InviteSignupPage({ params }: { params: Promise<{ token: 
       return;
     }
 
+    // If invite was "used" but the user was deleted, reset it back to pending
+    if (data.status === 'used' && data.used_by) {
+      const { data: userExists } = await supabase
+        .from('users')
+        .select('id')
+        .eq('id', data.used_by)
+        .single();
+
+      if (!userExists) {
+        // User was deleted — reset invite to pending
+        await supabase
+          .from('partner_invites')
+          .update({ status: 'pending', used_by: null, used_at: null })
+          .eq('id', data.id);
+        data.status = 'pending';
+        data.used_by = null;
+        data.used_at = null;
+      }
+    }
+
     if (data.status !== 'pending') {
       setInvalid(true);
       setLoading(false);

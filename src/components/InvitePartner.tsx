@@ -33,6 +33,7 @@ export function InvitePartnerModal({
   const [saving, setSaving] = useState(false);
   const [generatedLink, setGeneratedLink] = useState('');
   const [copied, setCopied] = useState(false);
+  const [copiedMessage, setCopiedMessage] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -85,6 +86,33 @@ export function InvitePartnerModal({
     setTimeout(() => setCopied(false), 2000);
   }
 
+  function getInviteMessage() {
+    const country = getDataCountry() || 'our organization';
+    return `Dear Partner,
+
+You have been invited to join Digital Ledger — our secure work management platform.
+
+An account has been prepared for you with the following access:
+• Role: ${role}
+• Country: ${country}
+
+Please use the secure link below to complete your account setup:
+${generatedLink}
+
+This is a one-time invite link. Once you create your account, the link will automatically expire. All your permissions and access levels have been pre-configured.
+
+If you have any questions, please reach out to your account administrator.
+
+Best regards,
+Digital Ledger Team`;
+  }
+
+  function copyMessage() {
+    navigator.clipboard.writeText(getInviteMessage());
+    setCopiedMessage(true);
+    setTimeout(() => setCopiedMessage(false), 2000);
+  }
+
   if (!open) return null;
 
   return (
@@ -125,27 +153,32 @@ export function InvitePartnerModal({
                 </p>
               </div>
 
+              {/* Professional Invite Message */}
               <div style={{
                 background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px',
-                padding: '12px', display: 'flex', alignItems: 'center', gap: '10px',
-                marginBottom: '16px',
+                padding: '16px', marginBottom: '16px',
               }}>
-                <Link2 size={16} color="#64748b" style={{ flexShrink: 0 }} />
-                <code style={{
-                  flex: 1, fontSize: '12px', color: '#334155',
-                  wordBreak: 'break-all', lineHeight: 1.5,
+                <div style={{ fontSize: '11px', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '10px' }}>
+                  Invitation Message
+                </div>
+                <pre style={{
+                  fontSize: '12px', color: '#334155', lineHeight: 1.6,
+                  whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                  margin: 0, fontFamily: 'inherit',
+                  maxHeight: '200px', overflowY: 'auto',
                 }}>
-                  {generatedLink}
-                </code>
+                  {getInviteMessage()}
+                </pre>
               </div>
 
-              <div style={{ display: 'flex', gap: '10px' }}>
-                <button onClick={copyLink} className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }}>
-                  {copied ? <Check size={16} /> : <Copy size={16} />}
-                  {copied ? 'Copied!' : 'Copy Link'}
+              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                <button onClick={copyMessage} className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }}>
+                  {copiedMessage ? <Check size={16} /> : <Copy size={16} />}
+                  {copiedMessage ? 'Copied!' : 'Copy Message'}
                 </button>
-                <button onClick={onClose} className="btn btn-secondary" style={{ flex: 1, justifyContent: 'center' }}>
-                  Done
+                <button onClick={copyLink} className="btn btn-secondary" style={{ flex: 1, justifyContent: 'center' }}>
+                  {copied ? <Check size={16} /> : <Link2 size={16} />}
+                  {copied ? 'Copied!' : 'Copy Link Only'}
                 </button>
               </div>
 
