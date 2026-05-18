@@ -87,7 +87,7 @@ export function InvitePartnerModal({
   }
 
   function getInviteMessage() {
-    return `You've been invited to join Digital Ledger. Please use the link below to set up your account:\n\n${generatedLink}\n\nYour role and permissions have been pre-configured. This link expires after signup.`;
+    return `You've been invited to join Digital Ledger. Please use the secure link below to set up your account:\n\n${generatedLink}\n\nThis is a secure one-time link and will expire after signup.`;
   }
 
   function copyMessage() {
