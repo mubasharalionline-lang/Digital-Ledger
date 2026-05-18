@@ -16,7 +16,9 @@ import {
   Trash2,
   AlertCircle,
   Edit2,
+  Link2,
 } from 'lucide-react';
+import { InvitePartnerModal, InviteManagementPanel } from '@/components/InvitePartner';
 
 export default function StaffPage() {
   const [user, setUser] = useState<User | null>(null);
@@ -43,6 +45,11 @@ export default function StaffPage() {
   
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
+
+  // Invite state
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [inviteKey, setInviteKey] = useState(0);
+  const [activeView, setActiveView] = useState<'staff' | 'invites'>('staff');
 
   useEffect(() => {
     const { user: u } = getSession();
@@ -252,13 +259,51 @@ export default function StaffPage() {
             {staffList.length} {terms.teamMembers}
           </p>
         </div>
-        <button className="btn btn-primary" onClick={openCreateModal}>
-          <Plus size={16} /> {terms.addStaff}
+        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+          <button className="btn btn-secondary" onClick={() => setShowInviteModal(true)} style={{ background: 'linear-gradient(135deg, #eff6ff, #dbeafe)', border: '1px solid #93c5fd', color: '#1d4ed8' }}>
+            <Link2 size={16} /> Invite Partner
+          </button>
+          <button className="btn btn-primary" onClick={openCreateModal}>
+            <Plus size={16} /> {terms.addStaff}
+          </button>
+        </div>
+      </div>
+
+      {/* View Toggle */}
+      <div style={{ display: 'flex', gap: '0', marginBottom: '20px', background: 'var(--bg-tertiary)', borderRadius: '12px', padding: '4px', width: 'fit-content' }}>
+        <button onClick={() => setActiveView('staff')} style={{
+          padding: '8px 20px', borderRadius: '10px', border: 'none', fontSize: '13px', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.2s',
+          background: activeView === 'staff' ? 'var(--bg-secondary)' : 'transparent',
+          color: activeView === 'staff' ? 'var(--text-primary)' : 'var(--text-tertiary)',
+          boxShadow: activeView === 'staff' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+        }}>
+          Team Members
+        </button>
+        <button onClick={() => setActiveView('invites')} style={{
+          padding: '8px 20px', borderRadius: '10px', border: 'none', fontSize: '13px', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.2s',
+          background: activeView === 'invites' ? 'var(--bg-secondary)' : 'transparent',
+          color: activeView === 'invites' ? 'var(--text-primary)' : 'var(--text-tertiary)',
+          boxShadow: activeView === 'invites' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+        }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}><Link2 size={14} /> Invites</span>
         </button>
       </div>
 
+      {/* Invite Management Panel */}
+      {activeView === 'invites' && (
+        <div className="card animate-fadeIn" style={{ padding: '24px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
+            <h2 style={{ fontSize: '18px', fontWeight: 600 }}>Partner Invites</h2>
+            <button className="btn btn-primary" style={{ padding: '8px 16px', fontSize: '13px' }} onClick={() => setShowInviteModal(true)}>
+              <Plus size={14} /> New Invite
+            </button>
+          </div>
+          <InviteManagementPanel key={inviteKey} />
+        </div>
+      )}
+
       {/* Staff Grid */}
-      {loading ? (
+      {activeView === 'staff' && loading ? (
         <div style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
@@ -268,7 +313,7 @@ export default function StaffPage() {
             <div key={i} className="skeleton" style={{ height: '140px', borderRadius: '16px' }} />
           ))}
         </div>
-      ) : staffList.length === 0 ? (
+      ) : activeView === 'staff' && staffList.length === 0 ? (
         <div className="card" style={{ padding: '64px 24px', textAlign: 'center' }}>
           <AlertCircle size={40} style={{ margin: '0 auto 16px', color: 'var(--text-tertiary)', opacity: 0.5 }} />
           <p style={{ fontSize: '16px', fontWeight: 500, color: 'var(--text-secondary)' }}>
@@ -278,7 +323,7 @@ export default function StaffPage() {
             <Plus size={16} /> {terms.addFirstUser}
           </button>
         </div>
-      ) : (
+      ) : activeView === 'staff' ? (
         <div className="stagger-children" style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
@@ -432,7 +477,16 @@ export default function StaffPage() {
             </div>
           ))}
         </div>
-      )}
+      ) : null}
+
+      {/* Invite Partner Modal */}
+      <InvitePartnerModal
+        open={showInviteModal}
+        onClose={() => setShowInviteModal(false)}
+        roles={dynamicRoles}
+        auditors={allAuditors}
+        onCreated={() => setInviteKey(k => k + 1)}
+      />
 
       {/* Add User Modal */}
       {showModal && (
