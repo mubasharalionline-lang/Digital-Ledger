@@ -87,24 +87,7 @@ export function InvitePartnerModal({
   }
 
   function getInviteMessage() {
-    const country = getDataCountry() || 'our organization';
-    return `Dear Partner,
-
-You have been invited to join Digital Ledger — our secure work management platform.
-
-An account has been prepared for you with the following access:
-• Role: ${role}
-• Country: ${country}
-
-Please use the secure link below to complete your account setup:
-${generatedLink}
-
-This is a one-time invite link. Once you create your account, the link will automatically expire. All your permissions and access levels have been pre-configured.
-
-If you have any questions, please reach out to your account administrator.
-
-Best regards,
-Digital Ledger Team`;
+    return `You've been invited to join Digital Ledger. Please use the link below to set up your account:\n\n${generatedLink}\n\nYour role and permissions have been pre-configured. This link expires after signup.`;
   }
 
   function copyMessage() {
