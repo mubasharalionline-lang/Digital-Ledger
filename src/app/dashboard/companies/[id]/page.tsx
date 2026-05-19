@@ -197,6 +197,7 @@ export default function CompanyDetailPage() {
       status: taskStatus,
       priority: taskPriority,
       deadline: taskDeadline || null,
+      country: company?.country || getDataCountry() || 'Bahrain',
     };
 
     if (editingTaskId) {

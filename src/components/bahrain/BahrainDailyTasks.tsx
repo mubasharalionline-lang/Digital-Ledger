@@ -941,7 +941,7 @@ export default function BahrainDailyTasks() {
                         {msg.message}
                       </div>
                       <div style={{ fontSize: '10px', color: '#95A5A6', marginTop: '4px', textAlign: isMine ? 'right' : 'left' }}>
-                        {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        {new Date(msg.created_at).toLocaleString([], { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                       </div>
                     </div>
                   );

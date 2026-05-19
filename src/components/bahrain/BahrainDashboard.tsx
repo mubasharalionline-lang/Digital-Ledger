@@ -830,7 +830,7 @@ export default function BahrainDashboard() {
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '420px', overflowY: 'auto', paddingRight: '4px' }}>
               {recentMessages.map((msg, idx) => {
-                const timeAgo = getTimeAgo(msg.created_at);
+                const timeAgo = formatDateTime(msg.created_at);
                 const isSenderAdmin = msg.sender_role?.toLowerCase() === 'admin';
                 const avatarColors = ['#8b5cf6','#3b82f6','#10b981','#f59e0b','#ec4899','#06b6d4','#6366f1','#ef4444'];
                 const avatarColor = avatarColors[msg.sender_name.charCodeAt(0) % avatarColors.length];
@@ -899,7 +899,7 @@ export default function BahrainDashboard() {
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '420px', overflowY: 'auto', paddingRight: '4px' }}>
               {recentDescUpdates.map((update, idx) => {
-                const timeAgo = getTimeAgo(update.created_at);
+                const timeAgo = formatDateTime(update.created_at);
                 const avatarColors = ['#8b5cf6','#3b82f6','#10b981','#f59e0b','#ec4899','#06b6d4','#6366f1','#ef4444'];
                 const avatarColor = avatarColors[update.updated_by_name.charCodeAt(0) % avatarColors.length];
                 const statusColor = getStatusColor(update.task_status);
@@ -961,20 +961,9 @@ function getStatusColor(status: string) {
   return '#64748b';
 }
 
-function getTimeAgo(dateStr: string): string {
-  const now = new Date();
+function formatDateTime(dateStr: string): string {
   const date = new Date(dateStr);
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
-  const diffDays = Math.floor(diffMs / 86400000);
-
-  if (diffMins < 1) return 'Just now';
-  if (diffMins < 60) return `${diffMins}m ago`;
-  if (diffHours < 24) return `${diffHours}h ago`;
-  if (diffDays === 1) return 'Yesterday';
-  if (diffDays < 7) return `${diffDays}d ago`;
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return date.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
 function StatCard({ icon, label, value, colorHex, onClick }: { icon: React.ReactNode; label: string; value: number; colorHex: string; onClick?: () => void }) {

@@ -181,9 +181,15 @@ export default function BahrainTasks() {
   }, [openMenuId]);
 
   // Filter tasks
+  // Determine if the user is actively looking for completed tasks via filter or search
+  const isCompletedFilterActive = filterStatus && (filterStatus.toLowerCase() === 'complete' || filterStatus.toLowerCase() === 'completed');
+  const isSearchActive = search.trim().length > 0;
+
   const filtered = tasks.filter(t => {
     const sl = (t.status || '').toLowerCase();
-    if (sl === 'complete' || sl === 'completed') {
+    // Hide completed tasks by default, but show them when the user
+    // explicitly filters by a completed status or uses the search bar
+    if ((sl === 'complete' || sl === 'completed') && !isCompletedFilterActive && !isSearchActive) {
       return false;
     }
 
@@ -566,6 +572,7 @@ export default function BahrainTasks() {
         assigned_partners: assignArray,
         status: firstStatus,
         auditor_id: newTask.auditor_id || null,
+        country: dataCountry || 'Bahrain',
       }).select().single();
       resultError = error;
       resultData = data;
@@ -914,12 +921,41 @@ export default function BahrainTasks() {
                   }
                 });
                 const top20 = Array.from(taskMap.values()).slice(0, 20);
+                // Fetch missing user information
+                const unresolvedIds = new Set<string>();
+                const { user: sessionUser } = getSession();
+                top20.forEach(log => {
+                  if (log.updated_by && !partners.find(p => p.id === log.updated_by) && log.updated_by !== sessionUser?.id) {
+                    unresolvedIds.add(log.updated_by);
+                  }
+                });
+                
+                let extraUsers: { id: string; username: string }[] = [];
+                if (unresolvedIds.size > 0) {
+                  const { data: fetchedUsers } = await supabase
+                    .from('users')
+                    .select('id, username')
+                    .in('id', Array.from(unresolvedIds));
+                  extraUsers = fetchedUsers || [];
+                }
+
                 // Enrich with task + user info
                 const enriched = top20.map((log: any) => {
                   const task = tasks.find(t => t.id === log.task_id);
                   const company = task ? companies.find(c => c.id === task.company_id) : null;
-                  const updater = partners.find(p => p.id === log.updated_by);
-                  return { ...log, task, company, updaterName: updater?.username || 'Unknown' };
+                  let updaterName = 'Unknown';
+                  
+                  const localPartner = partners.find(p => p.id === log.updated_by);
+                  if (localPartner) {
+                    updaterName = localPartner.username;
+                  } else if (sessionUser && log.updated_by === sessionUser.id) {
+                    updaterName = sessionUser.username;
+                  } else {
+                    const extra = extraUsers.find(u => u.id === log.updated_by);
+                    if (extra) updaterName = extra.username;
+                  }
+                  
+                  return { ...log, task, company, updaterName };
                 });
                 setRecentActivityLogs(enriched);
               }
@@ -1790,7 +1826,7 @@ export default function BahrainTasks() {
                         {msg.message}
                       </div>
                       <div style={{ fontSize: '10px', color: '#94A3B8', marginTop: '4px', textAlign: isMine ? 'right' : 'left', marginLeft: isMine ? 0 : '12px', marginRight: isMine ? '12px' : 0 }}>
-                        {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        {new Date(msg.created_at).toLocaleString([], { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                       </div>
                     </div>
                   );
