@@ -48,6 +48,7 @@ export interface Company {
   industry?: string;
   fy_end?: string;
   compliance_type?: string;
+  google_drive_link?: string;
   created_at: string;
 }
 

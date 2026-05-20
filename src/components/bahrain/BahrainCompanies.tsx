@@ -1,19 +1,36 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import type { Company } from '@/lib/supabase';
 import { getDataCountry, getSession, isAdmin } from '@/lib/auth';
-import { Plus, Trash2, X, Building2, Search } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { Plus, Trash2, X, Building2, Search, FolderOpen, FileText, BarChart3, Settings, ExternalLink, Link as LinkIcon, Pencil } from 'lucide-react';
 
 export default function BahrainCompanies() {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [quickActionsCompany, setQuickActionsCompany] = useState<Company | null>(null);
+  const quickActionsRef = useRef<HTMLDivElement>(null);
   const dataCountry = getDataCountry();
+  const router = useRouter();
 
-  const [form, setForm] = useState({ name: '', country: dataCountry || 'Bahrain', tax_registration: '', industry: '', compliance_type: '' });
+  const [form, setForm] = useState({ name: '', country: dataCountry || 'Bahrain', tax_registration: '', industry: '', compliance_type: '', google_drive_link: '' });
+
+  // Click-outside handler for Quick Actions panel
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (quickActionsRef.current && !quickActionsRef.current.contains(event.target as Node)) {
+        setQuickActionsCompany(null);
+      }
+    }
+    if (quickActionsCompany) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [quickActionsCompany]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -43,24 +60,34 @@ export default function BahrainCompanies() {
   async function save() {
     // Always use the current data country — strict separation
     const companyCountry = dataCountry || 'Bahrain';
-    if (!form.name) { alert('Please fill required fields'); return; }
-    const { error } = await supabase.from('companies').insert({
-      company_name: form.name,
-      country: companyCountry,
-      tax_registration: form.tax_registration || null,
-      industry: form.industry || null,
-      compliance_type: form.compliance_type || null,
-      notes: '',
-      status: 'Active',
-    });
-    if (error) { alert('Error: ' + error.message); return; }
-    
-    sessionStorage.removeItem('dashboard_data_time_v2');
-    sessionStorage.removeItem('tasks_data_time');
-    
-    setShowModal(false);
-    setForm({ name: '', country: dataCountry || 'Bahrain', tax_registration: '', industry: '', compliance_type: '' });
-    loadData();
+
+    if (form.google_drive_link && !form.google_drive_link.startsWith('https://')) {
+      alert('Google Drive link must start with https://');
+      return;
+    }
+
+    try {
+      const { error } = await supabase.from('companies').insert({
+        company_name: form.name.trim(),
+        country: companyCountry,
+        tax_registration: form.tax_registration.trim(),
+        industry: form.industry.trim(),
+        compliance_type: form.compliance_type.trim(),
+        google_drive_link: form.google_drive_link.trim() || null,
+        notes: '',
+        status: 'Active',
+      });
+      if (error) { throw error; }
+      
+      sessionStorage.removeItem('dashboard_data_time_v2');
+      sessionStorage.removeItem('tasks_data_time');
+      
+      setShowModal(false);
+      setForm({ name: '', country: companyCountry, tax_registration: '', industry: '', compliance_type: '', google_drive_link: '' });
+      loadData();
+    } catch (e: any) {
+      alert('Error: ' + e.message);
+    }
   }
 
   async function remove(id: string) {
@@ -74,6 +101,15 @@ export default function BahrainCompanies() {
   }
 
   const filtered = companies.filter(c => !searchTerm || c.company_name.toLowerCase().includes(searchTerm.toLowerCase()));
+
+  const listCell = { padding: '14px 16px', fontSize: '13px', color: '#475569' };
+  const Field = ({ label, children }: { label: string, children: React.ReactNode }) => (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+      <label style={{ fontSize: '12px', fontWeight: 600, color: '#64748b' }}>{label}</label>
+      {children}
+    </div>
+  );
+  const inpStyle = { padding: '10px 14px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '14px', outline: 'none' };
 
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '80px 20px' }}>
@@ -148,9 +184,10 @@ export default function BahrainCompanies() {
                 const colors = ['#3b82f6','#8b5cf6','#10b981','#f59e0b','#06b6d4','#ec4899','#6366f1','#ef4444'];
                 const accent = colors[idx % colors.length];
                 return (
-                  <tr key={c.id} style={{ borderBottom: '1px solid #f1f5f9', transition: 'background 0.15s' }}
+                  <tr key={c.id} style={{ borderBottom: '1px solid #f1f5f9', transition: 'background 0.15s', cursor: 'pointer', position: 'relative' }}
                     onMouseEnter={e => e.currentTarget.style.background = '#fafbfc'}
                     onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                    onClick={() => setQuickActionsCompany(prev => prev?.id === c.id ? null : c)}
                   >
                     <td style={{ padding: '14px 16px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -174,7 +211,7 @@ export default function BahrainCompanies() {
                     </td>
                     {isAdmin(getSession().user) && (
                       <td style={{ padding: '14px 16px' }}>
-                        <button onClick={() => remove(c.id)} style={{
+                        <button onClick={(e) => { e.stopPropagation(); remove(c.id); }} style={{
                           display: 'flex', alignItems: 'center', gap: '5px', padding: '6px 14px',
                           background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca',
                           borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: 600,
@@ -185,6 +222,100 @@ export default function BahrainCompanies() {
                         >
                           <Trash2 size={12} /> Delete
                         </button>
+                      </td>
+                    )}
+                    {/* Quick Actions Panel */}
+                    {quickActionsCompany?.id === c.id && (
+                      <td colSpan={isAdmin(getSession().user) ? 7 : 6} style={{ padding: 0, position: 'relative' }}>
+                        <div ref={quickActionsRef} onClick={e => e.stopPropagation()} style={{
+                          position: 'absolute', top: '4px', right: '16px', zIndex: 50,
+                          background: '#ffffff', borderRadius: '16px', padding: '8px',
+                          boxShadow: '0 12px 40px -8px rgba(15,23,42,0.18), 0 4px 12px -2px rgba(15,23,42,0.08)',
+                          border: '1px solid rgba(226,232,240,0.8)', minWidth: '240px',
+                          animation: 'fadeIn 0.15s ease-out',
+                        }}>
+                          {/* Panel Header */}
+                          <div style={{ padding: '10px 14px 12px', borderBottom: '1px solid #f1f5f9', marginBottom: '4px' }}>
+                            <div style={{ fontSize: '13px', fontWeight: 700, color: '#0f172a', letterSpacing: '-0.01em' }}>{c.company_name}</div>
+                            <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 500, marginTop: '2px' }}>Quick Actions</div>
+                          </div>
+
+                          {/* View/Edit Action */}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              router.push(`/dashboard/companies/${c.id}`);
+                            }}
+                            style={{
+                              display: 'flex', alignItems: 'center', gap: '12px', width: '100%',
+                              padding: '10px 14px', border: 'none', borderRadius: '10px',
+                              background: 'transparent', cursor: 'pointer',
+                              transition: 'background 0.15s ease', textAlign: 'left',
+                            }}
+                            onMouseEnter={e => { e.currentTarget.style.background = '#f8fafc'; }}
+                            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                          >
+                            <div style={{ width: '34px', height: '34px', borderRadius: '10px', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, border: '1px solid #f1f5f9' }}>
+                              <Pencil size={16} color="#475569" />
+                            </div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: '13px', fontWeight: 600, color: '#0f172a' }}>View & Edit Company</div>
+                              <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 500, marginTop: '1px' }}>
+                                Manage details, staff, and tasks
+                              </div>
+                            </div>
+                          </button>
+
+                          {/* Google Drive Action */}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (c.google_drive_link) {
+                                window.open(c.google_drive_link, '_blank', 'noopener,noreferrer');
+                              }
+                              setQuickActionsCompany(null);
+                            }}
+                            style={{
+                              display: 'flex', alignItems: 'center', gap: '12px', width: '100%',
+                              padding: '10px 14px', border: 'none', borderRadius: '10px',
+                              background: 'transparent', cursor: c.google_drive_link ? 'pointer' : 'default',
+                              transition: 'background 0.15s ease', textAlign: 'left',
+                              opacity: c.google_drive_link ? 1 : 0.7,
+                            }}
+                            onMouseEnter={e => { if (c.google_drive_link) e.currentTarget.style.background = '#f0fdf4'; }}
+                            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                          >
+                            <div style={{ width: '34px', height: '34px', borderRadius: '10px', background: c.google_drive_link ? '#f0fdf4' : '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, border: c.google_drive_link ? '1px solid #dcfce7' : '1px solid #f1f5f9' }}>
+                              <FolderOpen size={16} color={c.google_drive_link ? '#16a34a' : '#94a3b8'} />
+                            </div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: '13px', fontWeight: 600, color: c.google_drive_link ? '#0f172a' : '#475569' }}>Open Google Drive</div>
+                              <div style={{ fontSize: '11px', color: c.google_drive_link ? '#16a34a' : '#94a3b8', fontWeight: 500, marginTop: '1px' }}>
+                                {c.google_drive_link ? 'Open folder in new tab' : 'No Google Drive linked yet'}
+                              </div>
+                            </div>
+                            {c.google_drive_link && <ExternalLink size={14} color="#94a3b8" />}
+                          </button>
+
+                          {/* Future Actions (disabled placeholders) */}
+                          {[
+                            { id: 'reports', label: 'Reports', icon: <BarChart3 size={16} color="#f59e0b" />, sub: 'Coming soon', iconBg: '#fffbeb', iconBorder: '#fef3c7' },
+                          ].map(action => (
+                            <div key={action.id} style={{
+                              display: 'flex', alignItems: 'center', gap: '12px',
+                              padding: '10px 14px', borderRadius: '10px', opacity: 0.65,
+                              cursor: 'not-allowed',
+                            }}>
+                              <div style={{ width: '34px', height: '34px', borderRadius: '10px', background: action.iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, border: `1px solid ${action.iconBorder}` }}>
+                                {action.icon}
+                              </div>
+                              <div style={{ flex: 1 }}>
+                                <div style={{ fontSize: '13px', fontWeight: 600, color: '#475569' }}>{action.label}</div>
+                                <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 500, marginTop: '1px' }}>{action.sub}</div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       </td>
                     )}
                   </tr>
@@ -251,6 +382,23 @@ export default function BahrainCompanies() {
                 <div style={{ gridColumn: '1 / -1' }}>
                   <Field label="Compliance Type">
                     <input value={form.compliance_type} onChange={e => setForm(p => ({ ...p, compliance_type: e.target.value }))} placeholder="e.g., VAT, Corporate Tax, Audit" style={inpStyle} />
+                  </Field>
+                </div>
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <Field label="Google Drive Folder Link">
+                    <div style={{ position: 'relative' }}>
+                      <LinkIcon size={16} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                      <input
+                        value={form.google_drive_link}
+                        onChange={e => setForm(p => ({ ...p, google_drive_link: e.target.value }))}
+                        placeholder="https://drive.google.com/drive/folders/..."
+                        type="url"
+                        style={{ ...inpStyle, paddingLeft: '40px' }}
+                      />
+                    </div>
+                    {form.google_drive_link && !form.google_drive_link.startsWith('https://') && (
+                      <span style={{ fontSize: '11px', color: '#ef4444', fontWeight: 500, marginTop: '4px', display: 'block' }}>Link must start with https://</span>
+                    )}
                   </Field>
                 </div>
               </div>

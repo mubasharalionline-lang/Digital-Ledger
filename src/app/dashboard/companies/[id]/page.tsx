@@ -25,6 +25,9 @@ import {
   Clock,
   Briefcase,
   MessageCircle,
+  FolderOpen,
+  ExternalLink,
+  Link as LinkIcon,
 } from 'lucide-react';
 
 export default function CompanyDetailPage() {
@@ -66,6 +69,7 @@ export default function CompanyDetailPage() {
   const [editDueDate, setEditDueDate] = useState('');
   const [editStatus, setEditStatus] = useState('Yet to Start');
   const [editStaffList, setEditStaffList] = useState<{ id: string; role: string; username: string }[]>([]);
+  const [editGoogleDriveLink, setEditGoogleDriveLink] = useState('');
   const [savingCompany, setSavingCompany] = useState(false);
 
   useEffect(() => {
@@ -132,6 +136,7 @@ export default function CompanyDetailPage() {
       role: cs.role,
       username: cs.user?.username || ''
     })));
+    setEditGoogleDriveLink(company.google_drive_link || '');
     setShowEditModal(true);
   }
 
@@ -140,6 +145,11 @@ export default function CompanyDetailPage() {
     if (!editName.trim()) return;
     setSavingCompany(true);
 
+    // Validate Google Drive link if provided
+    if (editGoogleDriveLink && !editGoogleDriveLink.startsWith('https://')) {
+      alert('Google Drive link must start with https://'); return;
+    }
+
     await supabase.from('companies').update({
       company_name: editName.trim(),
       job: editJob.trim() || null,
@@ -147,6 +157,7 @@ export default function CompanyDetailPage() {
       start_date: editStartDate || null,
       due_date: editDueDate || null,
       status: editStatus,
+      google_drive_link: editGoogleDriveLink.trim() || null,
     }).eq('id', id);
 
     // Delete old staff links
@@ -382,6 +393,16 @@ export default function CompanyDetailPage() {
           })()}
           {isAdmin(user) && (
             <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
+              {company.google_drive_link && (
+                <button
+                  onClick={() => window.open(company.google_drive_link!, '_blank', 'noopener,noreferrer')}
+                  className="btn btn-secondary"
+                  style={{ padding: '7px 12px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}
+                  title="Open Google Drive Folder"
+                >
+                  <FolderOpen size={14} /> Drive
+                </button>
+              )}
               <button onClick={openEditModal} className="btn btn-secondary" style={{ padding: '7px 12px', fontSize: '13px' }}>
                 <Pencil size={14} /> Edit
               </button>
@@ -664,11 +685,26 @@ export default function CompanyDetailPage() {
                   style={{
                     padding: '16px 14px',
                     borderRadius: '14px',
-                    background: gen.bg,
+                    background: gen.link ? `linear-gradient(135deg, ${gen.color}, ${gen.color}dd)` : gen.bg,
                     textAlign: 'center',
-                    opacity: gen.link ? 1 : 0.7,
+                    opacity: gen.link ? 1 : 0.6,
                     cursor: gen.link ? 'pointer' : 'not-allowed',
                     transition: 'all 0.2s ease',
+                    boxShadow: gen.link ? `0 6px 16px ${gen.color}35` : 'none',
+                    border: gen.link ? 'none' : `1px solid ${gen.bg}`,
+                    transform: gen.link ? 'translateY(-1px)' : 'none',
+                  }}
+                  onMouseEnter={e => {
+                    if (gen.link) {
+                      e.currentTarget.style.transform = 'translateY(-3px)';
+                      e.currentTarget.style.boxShadow = `0 8px 24px ${gen.color}45`;
+                    }
+                  }}
+                  onMouseLeave={e => {
+                    if (gen.link) {
+                      e.currentTarget.style.transform = 'translateY(-1px)';
+                      e.currentTarget.style.boxShadow = `0 6px 16px ${gen.color}35`;
+                    }
                   }}
                 >
                   <div style={{
@@ -676,24 +712,24 @@ export default function CompanyDetailPage() {
                     alignItems: 'center',
                     justifyContent: 'center',
                     marginBottom: '8px',
-                    color: gen.color,
+                    color: gen.link ? '#ffffff' : gen.color,
                   }}>
                     {gen.icon}
                   </div>
                   <div style={{
-                    fontSize: '12px',
-                    fontWeight: 600,
-                    color: gen.color,
+                    fontSize: '13px',
+                    fontWeight: 700,
+                    color: gen.link ? '#ffffff' : gen.color,
                     lineHeight: 1.3,
                   }}>
                     {gen.name}
                   </div>
                   <div style={{
-                    fontSize: '10px',
-                    color: 'var(--text-tertiary)',
+                    fontSize: '11px',
+                    color: gen.link ? 'rgba(255,255,255,0.85)' : 'var(--text-tertiary)',
                     marginTop: '4px',
                   }}>
-                    {gen.link ? 'Available' : 'Coming Soon'}
+                    {gen.link ? 'Generate Now' : 'Coming Soon'}
                   </div>
                 </div>
               ))}
@@ -844,6 +880,23 @@ export default function CompanyDetailPage() {
                 <label className="label">Notes</label>
                 <textarea className="input" placeholder="Optional notes"
                   value={editNotes} onChange={e => setEditNotes(e.target.value)} rows={2} style={{ resize: 'vertical' }} />
+              </div>
+              <div style={{ marginBottom: '14px' }}>
+                <label className="label">Google Drive Folder Link</label>
+                <div style={{ position: 'relative' }}>
+                  <LinkIcon size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-tertiary)' }} />
+                  <input
+                    className="input"
+                    type="url"
+                    placeholder="https://drive.google.com/drive/folders/..."
+                    value={editGoogleDriveLink}
+                    onChange={e => setEditGoogleDriveLink(e.target.value)}
+                    style={{ paddingLeft: '36px' }}
+                  />
+                </div>
+                {editGoogleDriveLink && !editGoogleDriveLink.startsWith('https://') && (
+                  <span style={{ fontSize: '11px', color: 'var(--danger)', fontWeight: 500, marginTop: '4px', display: 'block' }}>Link must start with https://</span>
+                )}
               </div>
               <div style={{ marginBottom: '24px' }}>
                 <label className="label">{terms.assignStaff}</label>

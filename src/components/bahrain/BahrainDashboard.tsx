@@ -557,18 +557,6 @@ export default function BahrainDashboard() {
         .timeline-item {
           position: relative;
         }
-        .timeline-line {
-          position: absolute;
-          left: 40px; /* aligns with center of avatar */
-          top: 42px; /* starts from bottom of avatar */
-          bottom: -28px; /* extends to next item */
-          width: 2px;
-          background: #f1f5f9;
-          z-index: 0;
-        }
-        .timeline-item:last-child .timeline-line {
-          display: none;
-        }
 
         /* entrance animation */
         @keyframes fadeInUp {
@@ -647,29 +635,112 @@ export default function BahrainDashboard() {
               <EmptyState message="No urgent clients right now" icon="🎉" />
             ) : (
               urgentClients.map(({ company, tasks, overdueCount }) => (
-                <div key={company.id} onClick={() => router.push(`/dashboard/tasks?company=${company.id}`)}
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px', border: '1px solid #f1f5f9', borderRadius: '16px', background: '#ffffff', cursor: 'pointer', transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)', position: 'relative', overflow: 'hidden', flexShrink: 0 }}
-                  onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 12px 24px -8px rgba(239, 68, 68, 0.15)'; e.currentTarget.style.borderColor = '#fca5a5'; }}
-                  onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.borderColor = '#f1f5f9'; }}
+                <div key={company.id}
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    padding: '16px',
+                    border: '1px solid #f1f5f9',
+                    borderRadius: '16px',
+                    background: '#ffffff',
+                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                    position: 'relative',
+                    overflow: 'hidden',
+                    flexShrink: 0
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                    e.currentTarget.style.boxShadow = '0 12px 24px -8px rgba(239, 68, 68, 0.15)';
+                    e.currentTarget.style.borderColor = '#fca5a5';
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.transform = 'none';
+                    e.currentTarget.style.boxShadow = 'none';
+                    e.currentTarget.style.borderColor = '#f1f5f9';
+                  }}
                 >
                   <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '4px', background: 'linear-gradient(to bottom, #ef4444, #f87171)' }} />
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                    <div style={{ width: '42px', height: '42px', borderRadius: '12px', background: '#fef2f2', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                      <AlertTriangle size={20} strokeWidth={2.5} />
-                    </div>
-                    <div>
-                      <div style={{ fontSize: '15px', fontWeight: 700, color: '#0f172a', marginBottom: '4px', letterSpacing: '-0.01em' }}>{company.company_name}</div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: 500, flexWrap: 'wrap' }}>
-                        <span style={{ color: '#ef4444', background: '#fef2f2', padding: '2px 8px', borderRadius: '6px' }}>{tasks.length} task{tasks.length > 1 ? 's' : ''}</span>
-                        {overdueCount > 0 && <span style={{ color: '#b91c1c', display: 'flex', alignItems: 'center', gap: '4px' }}><div style={{ width: '4px', height: '4px', borderRadius: '50%', background: '#b91c1c' }}/> {overdueCount} overdue</span>}
+                  
+                  {/* Company Header Row */}
+                  <div 
+                    onClick={() => router.push(`/dashboard/tasks?company=${company.id}`)}
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', width: '100%' }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px', minWidth: 0, flex: 1 }}>
+                      <div style={{ width: '42px', height: '42px', borderRadius: '12px', background: '#fef2f2', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <AlertTriangle size={20} strokeWidth={2.5} />
+                      </div>
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <div style={{ fontSize: '15px', fontWeight: 700, color: '#0f172a', marginBottom: '4px', letterSpacing: '-0.01em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {company.company_name}
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: 500, flexWrap: 'wrap' }}>
+                          <span style={{ color: '#ef4444', background: '#fef2f2', padding: '2px 8px', borderRadius: '6px' }}>
+                            {tasks.length} task{tasks.length > 1 ? 's' : ''}
+                          </span>
+                          {overdueCount > 0 && (
+                            <span style={{ color: '#b91c1c', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <div style={{ width: '4px', height: '4px', borderRadius: '50%', background: '#b91c1c' }}/>
+                              {overdueCount} overdue
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
+                    <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', transition: 'all 0.2s ease', marginLeft: '8px' }}
+                      onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'}
+                      onMouseLeave={e => e.currentTarget.style.background = '#f8fafc'}
+                    >
+                      <ChevronRight size={18} />
+                    </div>
                   </div>
-                  <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', transition: 'all 0.2s ease' }}
-                    onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'}
-                    onMouseLeave={e => e.currentTarget.style.background = '#f8fafc'}
-                  >
-                    <ChevronRight size={18} />
+
+                  {/* Tasks List with Priority Badges */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '14px', borderTop: '1px solid #f1f5f9', paddingTop: '12px' }}>
+                    {tasks.map(task => {
+                      const prio = getPriorityInfo(task.priority);
+                      return (
+                        <div 
+                          key={task.id}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            router.push(`/dashboard/tasks?openDesc=${task.id}`);
+                          }}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            gap: '12px',
+                            padding: '6px 8px',
+                            borderRadius: '8px',
+                            transition: 'background 0.2s ease',
+                            cursor: 'pointer'
+                          }}
+                          onMouseEnter={e => { e.currentTarget.style.background = '#f8fafc'; }}
+                          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                        >
+                          <span style={{ fontSize: '13px', color: '#475569', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                            {task.title}
+                          </span>
+                          <span style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            fontSize: '11px',
+                            fontWeight: 700,
+                            color: prio.color,
+                            background: prio.bg,
+                            border: `1px solid ${prio.border}`,
+                            padding: '2px 8px',
+                            borderRadius: '6px',
+                            whiteSpace: 'nowrap',
+                            flexShrink: 0
+                          }}>
+                            <span style={{ fontSize: '10px' }}>{prio.emoji}</span> {prio.label}
+                          </span>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               ))
@@ -964,27 +1035,43 @@ export default function BahrainDashboard() {
                 
                 return (
                   <div key={msg.id} className="timeline-item"
-                    onClick={() => router.push(msg.is_daily ? `/dashboard/daily-tasks?openChat=${msg.task_id}` : `/dashboard/tasks?openChat=${msg.task_id}`)}
                     style={{
-                      display: 'flex', gap: '16px', padding: '16px 20px', borderRadius: '18px',
-                      cursor: 'pointer', transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
-                      background: idx < 3 ? '#fbfcfe' : '#ffffff',
-                      border: idx < 3 ? '1px solid rgba(59, 130, 246, 0.15)' : '1px solid rgba(226, 232, 240, 0.8)',
+                      display: 'flex', gap: '16px', alignItems: 'flex-start',
+                      position: 'relative'
                     }}
-                    onMouseEnter={e => { e.currentTarget.style.background = '#f8fafc'; e.currentTarget.style.transform = 'translateX(4px)'; e.currentTarget.style.boxShadow = '0 8px 24px -10px rgba(0,0,0,0.06)'; }}
-                    onMouseLeave={e => { e.currentTarget.style.background = idx < 3 ? '#fbfcfe' : '#ffffff'; e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = 'none'; }}
                   >
-                    {/* Vertical timeline line */}
-                    <div className="timeline-line" />
+                    {/* Vertical timeline line segment */}
+                    {idx < recentMessages.length - 1 && (
+                      <div style={{
+                        position: 'absolute',
+                        left: '21px', // center of the 42px avatar
+                        top: '42px',  // starts from bottom of avatar
+                        bottom: '-16px', // extends through the 16px gap to the next item's top
+                        width: '2px',
+                        background: '#e2e8f0',
+                        zIndex: 1
+                      }} />
+                    )}
 
                     {/* Avatar */}
-                    <div style={{ width: '42px', height: '42px', borderRadius: '14px', background: `linear-gradient(135deg, ${avatarColor}, ${avatarColor}cc)`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: '15px', fontWeight: 800, color: '#fff', position: 'relative', boxShadow: '0 4px 10px rgba(0,0,0,0.08)', zIndex: 1 }}>
+                    <div style={{ width: '42px', height: '42px', borderRadius: '14px', background: `linear-gradient(135deg, ${avatarColor}, ${avatarColor}cc)`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: '15px', fontWeight: 800, color: '#fff', position: 'relative', boxShadow: '0 4px 10px rgba(0,0,0,0.08)', zIndex: 2 }}>
                       {msg.sender_name.charAt(0).toUpperCase()}
-                      {idx < 3 && <span style={{ position: 'absolute', top: '-2px', right: '-2px', width: '10px', height: '10px', borderRadius: '50%', background: '#3b82f6', border: '2px solid #fff' }} />}
+                      {idx < 3 && <span style={{ position: 'absolute', top: '-2px', right: '-2px', width: '10px', height: '10px', borderRadius: '50%', background: '#3b82f6', border: '2px solid #fff', zIndex: 3 }} />}
                     </div>
                     
-                    {/* Message Bubble Panel */}
-                    <div style={{ flex: 1, minWidth: 0, zIndex: 1 }}>
+                    {/* Clickable Card on the right */}
+                    <div
+                      onClick={() => router.push(msg.is_daily ? `/dashboard/daily-tasks?openChat=${msg.task_id}` : `/dashboard/tasks?openChat=${msg.task_id}`)}
+                      style={{
+                        flex: 1, minWidth: 0, padding: '16px 20px', borderRadius: '18px',
+                        cursor: 'pointer', transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+                        background: idx < 3 ? '#fbfcfe' : '#ffffff',
+                        border: idx < 3 ? '1px solid rgba(59, 130, 246, 0.15)' : '1px solid rgba(226, 232, 240, 0.8)',
+                        zIndex: 2,
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.background = '#f8fafc'; e.currentTarget.style.transform = 'translateX(4px)'; e.currentTarget.style.boxShadow = '0 8px 24px -10px rgba(0,0,0,0.06)'; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = idx < 3 ? '#fbfcfe' : '#ffffff'; e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = 'none'; }}
+                    >
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', flexWrap: 'wrap' }}>
                         <span style={{ fontSize: '14px', fontWeight: 700, color: '#0f172a' }}>{msg.sender_name}</span>
                         <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 600 }}>posted update</span>
@@ -999,9 +1086,9 @@ export default function BahrainDashboard() {
                         <span style={{ fontSize: '11px', fontWeight: 700, color: '#475569', background: '#f1f5f9', padding: '3px 10px', borderRadius: '8px', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {msg.task_title}
                         </span>
-                        {msg.company_name && <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 500 }}>• {msg.company_name}</span>}
-                        {msg.task_type_name && <span style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 500 }}>• {msg.task_type_name}</span>}
-                        {msg.is_daily && <span style={{ fontSize: '10px', fontWeight: 700, color: '#7c3aed', background: '#f5f3ff', padding: '1px 6px', borderRadius: '4px' }}>Daily</span>}
+                        {msg.company_name && <span style={{ fontSize: '10px', fontWeight: 600, color: '#2563eb', background: '#eff6ff', border: '1px solid #dbeafe', padding: '2px 8px', borderRadius: '6px', whiteSpace: 'nowrap' }}>{msg.company_name}</span>}
+                        {msg.task_type_name && <span style={{ fontSize: '10px', fontWeight: 600, color: '#ea580c', background: '#fff7ed', border: '1px solid #ffedd5', padding: '2px 8px', borderRadius: '6px', whiteSpace: 'nowrap' }}>{msg.task_type_name}</span>}
+                        {msg.is_daily && <span style={{ fontSize: '10px', fontWeight: 700, color: '#7c3aed', background: '#f5f3ff', border: '1px solid #ede9fe', padding: '2px 8px', borderRadius: '6px' }}>Daily</span>}
                         
                         {/* Delete Button for Admin */}
                         {isAdmin(getSession().user) && (
@@ -1046,28 +1133,44 @@ export default function BahrainDashboard() {
                 const statusColor = getStatusColor(update.task_status);
                 
                 return (
-                  <div key={update.id}
-                    onClick={() => router.push(update.is_daily ? `/dashboard/daily-tasks?openDesc=${update.task_id}` : `/dashboard/tasks?openDesc=${update.task_id}`)}
+                  <div key={update.id} className="timeline-item"
                     style={{
-                      display: 'flex', gap: '16px', padding: '16px 20px', borderRadius: '18px',
-                      cursor: 'pointer', transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
-                      background: idx < 3 ? '#fcfdfd' : '#ffffff',
-                      border: idx < 3 ? '1px solid rgba(16, 185, 129, 0.15)' : '1px solid rgba(226, 232, 240, 0.8)',
+                      display: 'flex', gap: '16px', alignItems: 'flex-start',
+                      position: 'relative'
                     }}
-                    onMouseEnter={e => { e.currentTarget.style.background = '#f8fafc'; e.currentTarget.style.transform = 'translateX(4px)'; e.currentTarget.style.boxShadow = '0 8px 24px -10px rgba(0,0,0,0.06)'; }}
-                    onMouseLeave={e => { e.currentTarget.style.background = idx < 3 ? '#fcfdfd' : '#ffffff'; e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = 'none'; }}
                   >
-                    {/* Vertical timeline line */}
-                    <div className="timeline-line" />
+                    {/* Vertical timeline line segment */}
+                    {idx < recentDescUpdates.length - 1 && (
+                      <div style={{
+                        position: 'absolute',
+                        left: '21px', // center of the 42px avatar
+                        top: '42px',  // starts from bottom of avatar
+                        bottom: '-16px', // extends through the 16px gap to the next item's top
+                        width: '2px',
+                        background: '#e2e8f0',
+                        zIndex: 1
+                      }} />
+                    )}
 
                     {/* Avatar */}
-                    <div style={{ width: '42px', height: '42px', borderRadius: '14px', background: `linear-gradient(135deg, ${avatarColor}, ${avatarColor}cc)`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: '15px', fontWeight: 800, color: '#fff', position: 'relative', boxShadow: '0 4px 10px rgba(0,0,0,0.08)', zIndex: 1 }}>
+                    <div style={{ width: '42px', height: '42px', borderRadius: '14px', background: `linear-gradient(135deg, ${avatarColor}, ${avatarColor}cc)`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: '15px', fontWeight: 800, color: '#fff', position: 'relative', boxShadow: '0 4px 10px rgba(0,0,0,0.08)', zIndex: 2 }}>
                       {update.updated_by_name.charAt(0).toUpperCase()}
-                      {idx < 3 && <span style={{ position: 'absolute', top: '-2px', right: '-2px', width: '10px', height: '10px', borderRadius: '50%', background: '#10b981', border: '2px solid #fff' }} />}
+                      {idx < 3 && <span style={{ position: 'absolute', top: '-2px', right: '-2px', width: '10px', height: '10px', borderRadius: '50%', background: '#10b981', border: '2px solid #fff', zIndex: 3 }} />}
                     </div>
                     
-                    {/* Content */}
-                    <div style={{ flex: 1, minWidth: 0, zIndex: 1 }}>
+                    {/* Clickable Card on the right */}
+                    <div
+                      onClick={() => router.push(update.is_daily ? `/dashboard/daily-tasks?openDesc=${update.task_id}` : `/dashboard/tasks?openDesc=${update.task_id}`)}
+                      style={{
+                        flex: 1, minWidth: 0, padding: '16px 20px', borderRadius: '18px',
+                        cursor: 'pointer', transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+                        background: idx < 3 ? '#fcfdfd' : '#ffffff',
+                        border: idx < 3 ? '1px solid rgba(16, 185, 129, 0.15)' : '1px solid rgba(226, 232, 240, 0.8)',
+                        zIndex: 2,
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.background = '#f8fafc'; e.currentTarget.style.transform = 'translateX(4px)'; e.currentTarget.style.boxShadow = '0 8px 24px -10px rgba(0,0,0,0.06)'; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = idx < 3 ? '#fcfdfd' : '#ffffff'; e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = 'none'; }}
+                    >
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', flexWrap: 'wrap' }}>
                         <span style={{ fontSize: '14px', fontWeight: 700, color: '#0f172a' }}>{update.updated_by_name}</span>
                         <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 600 }}>updated description</span>
@@ -1083,9 +1186,9 @@ export default function BahrainDashboard() {
                         <span style={{ fontSize: '11px', fontWeight: 700, color: '#475569', background: '#f1f5f9', padding: '3px 10px', borderRadius: '8px', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {update.task_title}
                         </span>
-                        {update.company_name && <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 500 }}>• {update.company_name}</span>}
-                        {update.task_type_name && <span style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 500 }}>• {update.task_type_name}</span>}
-                        {update.assigned_to_name !== 'Unassigned' && <span style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 500 }}>• 👤 {update.assigned_to_name}</span>}
+                        {update.company_name && <span style={{ fontSize: '10px', fontWeight: 600, color: '#2563eb', background: '#eff6ff', border: '1px solid #dbeafe', padding: '2px 8px', borderRadius: '6px', whiteSpace: 'nowrap' }}>{update.company_name}</span>}
+                        {update.task_type_name && <span style={{ fontSize: '10px', fontWeight: 600, color: '#ea580c', background: '#fff7ed', border: '1px solid #ffedd5', padding: '2px 8px', borderRadius: '6px', whiteSpace: 'nowrap' }}>{update.task_type_name}</span>}
+                        {update.assigned_to_name !== 'Unassigned' && <span style={{ fontSize: '10px', fontWeight: 600, color: '#9333ea', background: '#faf5ff', border: '1px solid #f3e8ff', padding: '2px 8px', borderRadius: '6px', whiteSpace: 'nowrap' }}>👤 {update.assigned_to_name}</span>}
                         <span style={{ fontSize: '10px', fontWeight: 700, color: statusColor, background: `${statusColor}12`, padding: '2px 8px', borderRadius: '6px', marginLeft: 'auto', textTransform: 'capitalize' }}>
                           {update.task_status}
                         </span>
@@ -1154,6 +1257,43 @@ function getStatusColor(status: string) {
 function formatDateTime(dateStr: string): string {
   const date = new Date(dateStr);
   return date.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+function getPriorityInfo(priority: string) {
+  const p = priority ? priority.trim().toLowerCase() : '';
+  if (p === 'urgent' || p === 'critical') {
+    return {
+      label: 'Urgent',
+      emoji: '🔴',
+      bg: '#fef2f2',
+      border: '#fee2e2',
+      color: '#ef4444'
+    };
+  } else if (p === 'high') {
+    return {
+      label: 'High',
+      emoji: '🟠',
+      bg: '#fff7ed',
+      border: '#ffedd5',
+      color: '#f97316'
+    };
+  } else if (p === 'medium') {
+    return {
+      label: 'Medium',
+      emoji: '🟡',
+      bg: '#fefce8',
+      border: '#fef9c3',
+      color: '#ca8a04'
+    };
+  } else {
+    return {
+      label: 'Low',
+      emoji: '🟢',
+      bg: '#f0fdf4',
+      border: '#dcfce7',
+      color: '#16a34a'
+    };
+  }
 }
 
 function StatCard({ 
