@@ -88,6 +88,16 @@ export default function BahrainDashboard() {
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
+  const [formattedDate, setFormattedDate] = useState('');
+  useEffect(() => {
+    setFormattedDate(new Date().toLocaleDateString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    }));
+  }, []);
+
   const handleDeleteMessage = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
     if (!confirm('Are you sure you want to delete this message?')) return;
@@ -513,34 +523,116 @@ export default function BahrainDashboard() {
   const greet = (() => { const h = new Date().getHours(); return h < 12 ? 'Good Morning' : h < 17 ? 'Good Afternoon' : 'Good Evening'; })();
 
   return (
-    <div style={{ paddingBottom: '40px', maxWidth: '1200px', margin: '0 auto' }}>
+    <div className="animate-fade-up" style={{ paddingBottom: '40px', maxWidth: '1200px', margin: '0 auto' }}>
+      <style dangerouslySetInnerHTML={{ __html: `
+        /* custom scrollbars */
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 6px;
+          height: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background: #cbd5e1;
+          border-radius: 10px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: #94a3b8;
+        }
+
+        /* pulse animations */
+        @keyframes warningPulse {
+          0%, 100% { transform: scale(1); opacity: 1; box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+          50% { transform: scale(1.15); opacity: 0.8; box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
+        }
+        .pulse-warning {
+          animation: warningPulse 2s infinite ease-in-out;
+        }
+
+        /* timeline styles */
+        .timeline-container {
+          position: relative;
+        }
+        .timeline-item {
+          position: relative;
+        }
+        .timeline-line {
+          position: absolute;
+          left: 40px; /* aligns with center of avatar */
+          top: 42px; /* starts from bottom of avatar */
+          bottom: -28px; /* extends to next item */
+          width: 2px;
+          background: #f1f5f9;
+          z-index: 0;
+        }
+        .timeline-item:last-child .timeline-line {
+          display: none;
+        }
+
+        /* entrance animation */
+        @keyframes fadeInUp {
+          from {
+            opacity: 0;
+            transform: translateY(16px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+        .animate-fade-up {
+          animation: fadeInUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+      `}} />
       
-      <div style={{ marginBottom: '32px', padding: '32px 36px', background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 40%, #334155 100%)', borderRadius: '24px', color: '#fff', position: 'relative', overflow: 'hidden', boxShadow: '0 8px 32px rgba(15,23,42,0.2)' }}>
-        <div style={{ position: 'absolute', top: '-40px', right: '-20px', width: '200px', height: '200px', borderRadius: '50%', background: 'rgba(59,130,246,0.08)' }} />
-        <div style={{ position: 'absolute', bottom: '-60px', right: '100px', width: '160px', height: '160px', borderRadius: '50%', background: 'rgba(139,92,246,0.06)' }} />
-        <div style={{ position: 'relative', zIndex: 1 }}>
-          <p style={{ fontSize: '13px', color: '#64748b', margin: '0 0 4px 0', fontWeight: 600, letterSpacing: '0.5px', textTransform: 'uppercase' }}>{greet}</p>
-          <h1 style={{ fontSize: '28px', fontWeight: 800, color: '#fff', margin: '0 0 8px 0', letterSpacing: '-0.5px' }}>Dashboard Overview</h1>
-          <p style={{ fontSize: '14px', color: '#94a3b8', margin: 0 }}>Monitor tasks, clients, and deadlines across your operations.</p>
+      <div style={{ marginBottom: '32px', padding: '36px 40px', background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 45%, #0f172a 100%)', borderRadius: '24px', color: '#fff', position: 'relative', overflow: 'hidden', boxShadow: '0 12px 40px rgba(15,23,42,0.25)', border: '1px solid rgba(255,255,255,0.05)' }}>
+        {/* Glowing mesh background */}
+        <div className="welcome-glow-1" style={{ position: 'absolute', top: '-60px', right: '-40px', width: '250px', height: '250px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(59,130,246,0.15) 0%, rgba(59,130,246,0) 70%)', filter: 'blur(20px)' }} />
+        <div className="welcome-glow-2" style={{ position: 'absolute', bottom: '-80px', right: '120px', width: '200px', height: '200px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(139,92,246,0.12) 0%, rgba(139,92,246,0) 70%)', filter: 'blur(20px)' }} />
+        <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
+            <div>
+              <p style={{ fontSize: '12px', color: '#38bdf8', margin: '0 0 6px 0', fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase' }}>{greet}</p>
+              <h1 style={{ fontSize: '32px', fontWeight: 850, color: '#fff', margin: '0 0 6px 0', letterSpacing: '-0.8px', lineHeight: 1.1 }}>Operations Console</h1>
+            </div>
+            {formattedDate && (
+              <div style={{ background: 'rgba(255, 255, 255, 0.04)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '14px', padding: '8px 16px', fontSize: '13px', color: '#94a3b8', fontWeight: 600, backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <CalendarDays size={14} style={{ color: '#38bdf8' }} />
+                {formattedDate}
+              </div>
+            )}
+          </div>
+          <div style={{ borderTop: '1px solid rgba(255, 255, 255, 0.08)', paddingTop: '16px', marginTop: '8px' }}>
+            <p style={{ fontSize: '15px', color: '#cbd5e1', margin: 0, fontWeight: 500, lineHeight: 1.5 }}>
+              You have <span style={{ color: overdueTasks > 0 ? '#f87171' : '#34d399', fontWeight: 700 }}>{overdueTasks}</span> overdue task{overdueTasks !== 1 ? 's' : ''} out of <span style={{ color: '#fff', fontWeight: 700 }}>{totalTasks}</span> total task{totalTasks !== 1 ? 's' : ''}.{' '}
+              {urgentClients.length > 0 ? (
+                <span>
+                  There are <span style={{ color: '#fbbf24', fontWeight: 700 }}>{urgentClients.length}</span> urgent client{urgentClients.length !== 1 ? 's' : ''} requiring immediate follow-up.
+                </span>
+              ) : (
+                <span style={{ color: '#94a3b8' }}>All operations are running smoothly with no urgent issues.</span>
+              )}
+            </p>
+          </div>
         </div>
       </div>
 
       {/* Stats Grid */}
       <div className="dashboard-stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '32px' }}>
         <StatCard icon={<ListTodo size={22} />} label="Total Tasks" value={totalTasks} colorHex="#3b82f6" onClick={() => router.push('/dashboard/tasks')} />
-        <StatCard icon={<AlertTriangle size={22} />} label="Overdue" value={overdueTasks} colorHex="#ef4444" onClick={() => router.push('/dashboard/tasks')} />
+        <StatCard icon={<AlertTriangle size={22} />} label="Overdue" value={overdueTasks} colorHex="#ef4444" onClick={() => router.push('/dashboard/tasks')} showWarningPulse={overdueTasks > 0} />
         {isAdmin(getSession().user) && (
           <>
             <StatCard icon={<UsersIcon size={22} />} label="Partners" value={activePartners} colorHex="#10b981" onClick={() => router.push('/dashboard/staff')} />
             <StatCard icon={<Building2 size={22} />} label="Companies" value={totalCompanies} colorHex="#f59e0b" onClick={() => router.push('/dashboard/companies')} />
-            <StatCard icon={<CalendarDays size={22} />} label="Daily Tasks" value={totalDailyTasks} colorHex="#8b5cf6" onClick={() => router.push('/dashboard/daily-tasks')} />
+            <StatCard icon={<CalendarDays size={22} />} label="Daily Tasks" value={totalDailyTasks} colorHex="#8b5cf6" onClick={() => router.push('/dashboard/daily-tasks')} percentage={dailyTaskStats.total > 0 ? Math.round((dailyTaskStats.completed / dailyTaskStats.total) * 100) : 0} subtitle={`${dailyTaskStats.completed} of ${dailyTaskStats.total} done`} />
           </>
         )}
       </div>
 
       <div className="dashboard-panels-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '20px' }}>
 
-        
         {/* Urgent Clients */}
         <div style={panelStyle}>
           <div style={panelHeaderStyle}>
@@ -550,7 +642,7 @@ export default function BahrainDashboard() {
             </div>
             <span style={badgeStyle}>Due ≤ 7 days</span>
           </div>
-          <div style={listContainerStyle}>
+          <div className="custom-scrollbar" style={listContainerStyle}>
             {urgentClients.length === 0 ? (
               <EmptyState message="No urgent clients right now" icon="🎉" />
             ) : (
@@ -594,7 +686,7 @@ export default function BahrainDashboard() {
                 <h3 style={{ ...panelTitleStyle, margin: 0 }}>Tasks by Category</h3>
               </div>
             </div>
-            <div style={listContainerStyle}>
+            <div className="custom-scrollbar" style={listContainerStyle}>
               {taskTypeStats.map(({ taskType, count, companies }, idx) => {
                 const colors = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ec4899', '#14b8a6'];
                 const c = colors[idx % colors.length];
@@ -642,7 +734,7 @@ export default function BahrainDashboard() {
               </div>
               <span style={badgeStyle}>{partnerWorkloads.length} active</span>
             </div>
-            <div style={listContainerStyle}>
+            <div className="custom-scrollbar" style={listContainerStyle}>
               {partnerWorkloads.map((pw, idx) => {
                 const { partner, totalTasks: total, completedTasks, overdueTasks: overdue, inProgressTasks } = pw;
                 const pct = total > 0 ? Math.round((completedTasks / total) * 100) : 0;
@@ -740,13 +832,6 @@ export default function BahrainDashboard() {
                   })}
                 </div>
               )}
-              <div onClick={() => router.push('/dashboard/daily-tasks')}
-                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '10px', borderRadius: '10px', background: '#f5f3ff', color: '#7c3aed', fontSize: '13px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s ease', border: '1px solid #ddd6fe40' }}
-                onMouseEnter={e => { e.currentTarget.style.background = '#ede9fe'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
-                onMouseLeave={e => { e.currentTarget.style.background = '#f5f3ff'; e.currentTarget.style.transform = 'none'; }}
-              >
-                View All Daily Tasks <ArrowUpRight size={14} />
-              </div>
             </div>
           </div>
         )}
@@ -754,29 +839,39 @@ export default function BahrainDashboard() {
         {/* Tasks by Status */}
         <div style={panelStyle}>
           <div style={panelHeaderStyle}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <div style={{ background: '#eff6ff', color: '#3b82f6', width: '36px', height: '36px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><BarChart3 size={18} /></div>
-              <h3 style={{ ...panelTitleStyle, margin: 0 }}>Tasks by Status</h3>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ background: '#fffbeb', color: '#d97706', width: '38px', height: '38px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid rgba(217, 119, 6, 0.15)' }}>
+                <CheckCircle2 size={18} />
+              </div>
+              <h3 style={panelTitleStyle}>Tasks by Status</h3>
             </div>
+            <span style={badgeStyle}>{Object.keys(statusCounts).length} status type{Object.keys(statusCounts).length !== 1 ? 's' : ''}</span>
           </div>
-          <div style={{ ...listContainerStyle, gap: '14px' }}>
+          
+          <div className="custom-scrollbar" style={listContainerStyle}>
             {Object.keys(statusCounts).length === 0 ? (
-              <EmptyState message="No status data available" />
+              <EmptyState message="No tasks found to categorize status" icon="📈" />
             ) : (
-              Object.entries(statusCounts)
-                .sort((a, b) => b[1] - a[1])
-                .map(([status, count]) => {
-                const pct = totalTasks > 0 ? (count / totalTasks * 100) : 0;
-                const barColor = getStatusColor(status);
+              Object.entries(statusCounts).map(([status, count]) => {
+                const color = getStatusColor(status);
+                const pct = totalTasks > 0 ? Math.round((count / totalTasks) * 100) : 0;
                 return (
                   <div key={status} onClick={() => router.push(`/dashboard/tasks?status=${encodeURIComponent(status)}`)}
-                    style={{ display: 'flex', alignItems: 'center', gap: '14px', cursor: 'pointer', padding: '2px 0' }}
+                    style={{ padding: '16px 20px', background: '#ffffff', borderRadius: '18px', border: '1px solid rgba(226, 232, 240, 0.8)', cursor: 'pointer', transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)', flexShrink: 0 }}
+                    onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = `0 12px 24px -8px ${color}12`; e.currentTarget.style.borderColor = `${color}30`; }}
+                    onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.borderColor = 'rgba(226, 232, 240, 0.8)'; }}
                   >
-                    <div style={{ width: '120px', fontSize: '13px', color: '#334155', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{status}</div>
-                    <div style={{ flex: 1, background: '#f1f5f9', height: '10px', borderRadius: '5px', overflow: 'hidden' }}>
-                      <div style={{ width: `${pct}%`, height: '100%', background: `linear-gradient(90deg, ${barColor}, ${barColor}bb)`, borderRadius: '5px', transition: 'width 1s ease-out', minWidth: count > 0 ? '4px' : '0px' }} />
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: color }} />
+                        <span style={{ fontSize: '13px', fontWeight: 700, color: '#334155', textTransform: 'capitalize' }}>{status}</span>
+                      </div>
+                      <span style={{ fontSize: '12px', fontWeight: 800, color, background: `${color}10`, padding: '2px 8px', borderRadius: '6px' }}>{count}</span>
                     </div>
-                    <div style={{ minWidth: '36px', textAlign: 'center', fontSize: '13px', fontWeight: 700, color: barColor, background: `${barColor}12`, padding: '2px 8px', borderRadius: '6px' }}>{count}</div>
+                    {/* Status Progress Bar */}
+                    <div style={{ background: '#f1f5f9', height: '5px', borderRadius: '3px', overflow: 'hidden' }}>
+                      <div style={{ width: `${pct}%`, height: '100%', background: color, borderRadius: '3px', transition: 'width 1s ease-out' }} />
+                    </div>
                   </div>
                 );
               })
@@ -787,95 +882,138 @@ export default function BahrainDashboard() {
         {/* Upcoming Deadlines */}
         <div style={panelStyle}>
           <div style={panelHeaderStyle}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <div style={{ background: '#fffbeb', color: '#f59e0b', width: '36px', height: '36px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Clock size={18} /></div>
-              <h3 style={{ ...panelTitleStyle, margin: 0 }}>Upcoming Deadlines</h3>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ background: '#fef3c7', color: '#d97706', width: '38px', height: '38px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid rgba(217, 119, 6, 0.15)' }}>
+                <Clock size={18} />
+              </div>
+              <h3 style={panelTitleStyle}>Upcoming Deadlines</h3>
             </div>
+            <span style={badgeStyle}>{upcomingTasks.length} active</span>
           </div>
-          <div style={listContainerStyle}>
+          
+          <div className="custom-scrollbar" style={listContainerStyle}>
             {upcomingTasks.length === 0 ? (
-              <EmptyState message="No upcoming deadlines" icon="✅" />
+              <EmptyState message="No upcoming tasks or deadlines" icon="📅" />
             ) : (
               upcomingTasks.map(task => (
                 <div key={task.id} onClick={() => router.push('/dashboard/tasks')}
-                  style={{ padding: '14px 16px', borderRadius: '12px', cursor: 'pointer', transition: 'all 0.2s ease', background: task.daysLeft < 0 ? '#fef2f2' : '#fffbeb', border: `1px solid ${task.daysLeft < 0 ? '#fecaca' : '#fde68a'}`, borderLeft: `4px solid ${task.daysLeft < 0 ? '#ef4444' : '#f59e0b'}` }}
-                  onMouseEnter={e => { e.currentTarget.style.transform = 'translateX(4px)'; }}
-                  onMouseLeave={e => { e.currentTarget.style.transform = 'none'; }}
+                  style={{ 
+                    padding: '16px 20px', 
+                    borderRadius: '18px', 
+                    cursor: 'pointer', 
+                    transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)', 
+                    background: task.daysLeft < 0 ? '#fef2f2' : '#ffffff', 
+                    border: `1px solid ${task.daysLeft < 0 ? 'rgba(239, 68, 68, 0.15)' : 'rgba(226, 232, 240, 0.8)'}`, 
+                    borderLeft: `4px solid ${task.daysLeft < 0 ? '#ef4444' : '#f59e0b'}`,
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.01)',
+                    flexShrink: 0
+                  }}
+                  onMouseEnter={e => { 
+                    e.currentTarget.style.transform = 'translateX(6px)'; 
+                    e.currentTarget.style.boxShadow = task.daysLeft < 0 ? '0 10px 20px -8px rgba(239, 68, 68, 0.12)' : '0 10px 20px -8px rgba(245, 158, 11, 0.12)';
+                    e.currentTarget.style.borderColor = task.daysLeft < 0 ? '#fca5a5' : '#fde68a';
+                  }}
+                  onMouseLeave={e => { 
+                    e.currentTarget.style.transform = 'none'; 
+                    e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.01)';
+                    e.currentTarget.style.borderColor = task.daysLeft < 0 ? 'rgba(239, 68, 68, 0.15)' : 'rgba(226, 232, 240, 0.8)';
+                  }}
                 >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '6px' }}>
-                    <div style={{ fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>{task.companyName}</div>
-                    <span style={{ fontSize: '11px', fontWeight: 700, padding: '3px 10px', borderRadius: '20px', background: task.daysLeft < 0 ? '#fee2e2' : '#fef3c7', color: task.daysLeft < 0 ? '#dc2626' : '#d97706' }}>
-                      {task.daysLeft < 0 ? `${Math.abs(task.daysLeft)}d overdue` : `${task.daysLeft}d left`}
-                    </span>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px' }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: '14px', fontWeight: 700, color: '#1e293b', marginBottom: '4px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{task.title}</div>
+                      <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 600 }}>{task.companyName}</div>
+                    </div>
+                    <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                      {task.daysLeft < 0 ? (
+                        <span style={{ fontSize: '11px', fontWeight: 800, color: '#b91c1c', background: '#fef2f2', padding: '2px 8px', borderRadius: '6px' }}>Overdue</span>
+                      ) : (
+                        <span style={{ fontSize: '11px', fontWeight: 800, color: '#b45309', background: '#fffbeb', padding: '2px 8px', borderRadius: '6px' }}>{task.daysLeft} d left</span>
+                      )}
+                      <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '4px', fontWeight: 500 }}>
+                        {new Date(task.deadline).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      </div>
+                    </div>
                   </div>
-                  <div style={{ fontSize: '13px', color: '#475569', marginBottom: '6px' }}>{task.title}</div>
-                  <div style={{ fontSize: '12px', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '4px' }}><Clock size={12} /> Due: {task.deadline}</div>
                 </div>
               ))
             )}
           </div>
         </div>
 
-        {/* Recent Messages */}
+        {/* Recent Messages (Activity Feed) */}
         <div style={{ ...panelStyle, gridColumn: '1 / -1' }}>
           <div style={panelHeaderStyle}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <div style={{ background: 'linear-gradient(135deg, #ede9fe, #f5f3ff)', color: '#7c3aed', width: '36px', height: '36px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><MessageCircle size={18} /></div>
-              <h3 style={{ ...panelTitleStyle, margin: 0 }}>Recent Messages</h3>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ background: '#e0f2fe', color: '#0284c7', width: '38px', height: '38px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid rgba(2, 132, 199, 0.15)' }}>
+                <MessageCircle size={18} />
+              </div>
+              <h3 style={panelTitleStyle}>Recent Message Center</h3>
             </div>
-            <span style={badgeStyle}>{recentMessages.length} latest</span>
+            <span style={badgeStyle}>Global Feed</span>
           </div>
+          
           {recentMessages.length === 0 ? (
-            <EmptyState message="No recent messages" icon="💬" />
+            <EmptyState message="No messages posted yet" icon="💬" />
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '420px', overflowY: 'auto', paddingRight: '4px' }}>
+            <div className="custom-scrollbar timeline-container" style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '450px', overflowY: 'auto', paddingRight: '4px' }}>
               {recentMessages.map((msg, idx) => {
                 const timeAgo = formatDateTime(msg.created_at);
-                const isSenderAdmin = msg.sender_role?.toLowerCase() === 'admin';
-                const avatarColors = ['#8b5cf6','#3b82f6','#10b981','#f59e0b','#ec4899','#06b6d4','#6366f1','#ef4444'];
+                const avatarColors = ['#4f46e5','#06b6d4','#10b981','#3b82f6','#ec4899','#f59e0b','#ef4444','#8b5cf6'];
                 const avatarColor = avatarColors[msg.sender_name.charCodeAt(0) % avatarColors.length];
-                const statusColor = getStatusColor(msg.task_status);
+                
                 return (
-                  <div key={msg.id}
+                  <div key={msg.id} className="timeline-item"
                     onClick={() => router.push(msg.is_daily ? `/dashboard/daily-tasks?openChat=${msg.task_id}` : `/dashboard/tasks?openChat=${msg.task_id}`)}
                     style={{
-                      display: 'flex', gap: '14px', padding: '14px 16px', borderRadius: '14px',
-                      cursor: 'pointer', transition: 'all 0.2s ease',
-                      background: idx < 3 ? '#fefce8' : '#ffffff',
-                      border: idx < 3 ? '1px solid #fde68a' : '1px solid #f1f5f9',
+                      display: 'flex', gap: '16px', padding: '16px 20px', borderRadius: '18px',
+                      cursor: 'pointer', transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+                      background: idx < 3 ? '#fbfcfe' : '#ffffff',
+                      border: idx < 3 ? '1px solid rgba(59, 130, 246, 0.15)' : '1px solid rgba(226, 232, 240, 0.8)',
                     }}
-                    onMouseEnter={e => { e.currentTarget.style.background = '#f8fafc'; e.currentTarget.style.transform = 'translateX(3px)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.05)'; }}
-                    onMouseLeave={e => { e.currentTarget.style.background = idx < 3 ? '#fefce8' : '#ffffff'; e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = 'none'; }}
+                    onMouseEnter={e => { e.currentTarget.style.background = '#f8fafc'; e.currentTarget.style.transform = 'translateX(4px)'; e.currentTarget.style.boxShadow = '0 8px 24px -10px rgba(0,0,0,0.06)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = idx < 3 ? '#fbfcfe' : '#ffffff'; e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = 'none'; }}
                   >
+                    {/* Vertical timeline line */}
+                    <div className="timeline-line" />
+
                     {/* Avatar */}
-                    <div style={{ width: '38px', height: '38px', borderRadius: '12px', background: `linear-gradient(135deg, ${avatarColor}, ${avatarColor}cc)`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: '14px', fontWeight: 700, color: '#fff', position: 'relative' }}>
+                    <div style={{ width: '42px', height: '42px', borderRadius: '14px', background: `linear-gradient(135deg, ${avatarColor}, ${avatarColor}cc)`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: '15px', fontWeight: 800, color: '#fff', position: 'relative', boxShadow: '0 4px 10px rgba(0,0,0,0.08)', zIndex: 1 }}>
                       {msg.sender_name.charAt(0).toUpperCase()}
-                      {idx < 3 && <span style={{ position: 'absolute', top: '-2px', right: '-2px', width: '10px', height: '10px', borderRadius: '50%', background: '#f59e0b', border: '2px solid #fff' }} />}
+                      {idx < 3 && <span style={{ position: 'absolute', top: '-2px', right: '-2px', width: '10px', height: '10px', borderRadius: '50%', background: '#3b82f6', border: '2px solid #fff' }} />}
                     </div>
-                    {/* Content */}
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px', flexWrap: 'wrap' }}>
-                        <span style={{ fontSize: '13px', fontWeight: 700, color: '#0f172a' }}>{msg.sender_name}</span>
-                        {isSenderAdmin && <span style={{ fontSize: '9px', fontWeight: 700, background: '#ede9fe', color: '#7c3aed', padding: '1px 6px', borderRadius: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Admin</span>}
+                    
+                    {/* Message Bubble Panel */}
+                    <div style={{ flex: 1, minWidth: 0, zIndex: 1 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: '14px', fontWeight: 700, color: '#0f172a' }}>{msg.sender_name}</span>
+                        <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 600 }}>posted update</span>
                         <span style={{ fontSize: '11px', color: '#94a3b8', marginLeft: 'auto', fontWeight: 500, whiteSpace: 'nowrap' }}>{timeAgo}</span>
-                        {isAdmin(getSession().user) && (
-                          <div 
-                            onClick={(e) => handleDeleteMessage(e, msg.id)}
-                            style={{ marginLeft: '4px', color: '#ef4444', background: '#fef2f2', padding: '4px', borderRadius: '4px', cursor: 'pointer' }}
-                            title="Delete Message"
-                          >
-                            <Trash2 size={12} />
-                          </div>
-                        )}
                       </div>
-                      <div style={{ fontSize: '13px', color: '#334155', lineHeight: 1.4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginBottom: '6px' }}>
+                      
+                      <div style={{ fontSize: '14px', color: '#334155', lineHeight: 1.45, marginBottom: '10px', wordBreak: 'break-word', fontWeight: 500 }}>
                         {msg.message}
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                        <span style={{ fontSize: '11px', fontWeight: 600, color: '#475569', background: '#f1f5f9', padding: '2px 8px', borderRadius: '6px', maxWidth: '160px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{msg.task_title}</span>
-                        {msg.company_name && <span style={{ fontSize: '10px', color: '#64748b' }}>• {msg.company_name}</span>}
-                        {msg.task_type_name && <span style={{ fontSize: '10px', color: '#94a3b8' }}>• {msg.task_type_name}</span>}
-                        <span style={{ fontSize: '10px', fontWeight: 600, color: statusColor, background: `${statusColor}12`, padding: '1px 6px', borderRadius: '4px', marginLeft: 'auto' }}>{msg.task_status}</span>
+                      
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: '11px', fontWeight: 700, color: '#475569', background: '#f1f5f9', padding: '3px 10px', borderRadius: '8px', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {msg.task_title}
+                        </span>
+                        {msg.company_name && <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 500 }}>• {msg.company_name}</span>}
+                        {msg.task_type_name && <span style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 500 }}>• {msg.task_type_name}</span>}
+                        {msg.is_daily && <span style={{ fontSize: '10px', fontWeight: 700, color: '#7c3aed', background: '#f5f3ff', padding: '1px 6px', borderRadius: '4px' }}>Daily</span>}
+                        
+                        {/* Delete Button for Admin */}
+                        {isAdmin(getSession().user) && (
+                          <button onClick={e => handleDeleteMessage(e, msg.id)}
+                            style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', marginLeft: 'auto', padding: '4px', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s ease' }}
+                            onMouseEnter={e => { e.currentTarget.style.color = '#ef4444'; e.currentTarget.style.background = '#fef2f2'; }}
+                            onMouseLeave={e => { e.currentTarget.style.color = '#94a3b8'; e.currentTarget.style.background = 'none'; }}
+                            title="Delete message"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -885,57 +1023,72 @@ export default function BahrainDashboard() {
           )}
         </div>
 
-        {/* Recent Task Description Updates */}
-        <div style={{ ...panelStyle, gridColumn: '1 / -1', marginTop: '20px' }}>
+        {/* Recent Description Updates (Activity Feed) */}
+        <div style={{ ...panelStyle, gridColumn: '1 / -1' }}>
           <div style={panelHeaderStyle}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <div style={{ background: 'linear-gradient(135deg, #dcfce7, #ecfdf5)', color: '#16a34a', width: '36px', height: '36px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Edit2 size={18} /></div>
-              <h3 style={{ ...panelTitleStyle, margin: 0 }}>Recent Description Updates</h3>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ background: '#f0fdf4', color: '#16a34a', width: '38px', height: '38px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid rgba(22, 163, 74, 0.15)' }}>
+                <Edit2 size={16} />
+              </div>
+              <h3 style={panelTitleStyle}>Recent Log Activity</h3>
             </div>
-            <span style={badgeStyle}>{recentDescUpdates.length} latest</span>
+            <span style={badgeStyle}>System Logs</span>
           </div>
+          
           {recentDescUpdates.length === 0 ? (
-            <EmptyState message="No recent description updates" icon="📝" />
+            <EmptyState message="No description updates found" icon="📝" />
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '420px', overflowY: 'auto', paddingRight: '4px' }}>
+            <div className="custom-scrollbar timeline-container" style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '450px', overflowY: 'auto', paddingRight: '4px' }}>
               {recentDescUpdates.map((update, idx) => {
                 const timeAgo = formatDateTime(update.created_at);
                 const avatarColors = ['#8b5cf6','#3b82f6','#10b981','#f59e0b','#ec4899','#06b6d4','#6366f1','#ef4444'];
                 const avatarColor = avatarColors[update.updated_by_name.charCodeAt(0) % avatarColors.length];
                 const statusColor = getStatusColor(update.task_status);
+                
                 return (
                   <div key={update.id}
                     onClick={() => router.push(update.is_daily ? `/dashboard/daily-tasks?openDesc=${update.task_id}` : `/dashboard/tasks?openDesc=${update.task_id}`)}
                     style={{
-                      display: 'flex', gap: '14px', padding: '14px 16px', borderRadius: '14px',
-                      cursor: 'pointer', transition: 'all 0.2s ease',
-                      background: idx < 3 ? '#f0fdf4' : '#ffffff',
-                      border: idx < 3 ? '1px solid #bbf7d0' : '1px solid #f1f5f9',
+                      display: 'flex', gap: '16px', padding: '16px 20px', borderRadius: '18px',
+                      cursor: 'pointer', transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+                      background: idx < 3 ? '#fcfdfd' : '#ffffff',
+                      border: idx < 3 ? '1px solid rgba(16, 185, 129, 0.15)' : '1px solid rgba(226, 232, 240, 0.8)',
                     }}
-                    onMouseEnter={e => { e.currentTarget.style.background = '#f8fafc'; e.currentTarget.style.transform = 'translateX(3px)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.05)'; }}
-                    onMouseLeave={e => { e.currentTarget.style.background = idx < 3 ? '#f0fdf4' : '#ffffff'; e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = 'none'; }}
+                    onMouseEnter={e => { e.currentTarget.style.background = '#f8fafc'; e.currentTarget.style.transform = 'translateX(4px)'; e.currentTarget.style.boxShadow = '0 8px 24px -10px rgba(0,0,0,0.06)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = idx < 3 ? '#fcfdfd' : '#ffffff'; e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = 'none'; }}
                   >
+                    {/* Vertical timeline line */}
+                    <div className="timeline-line" />
+
                     {/* Avatar */}
-                    <div style={{ width: '38px', height: '38px', borderRadius: '12px', background: `linear-gradient(135deg, ${avatarColor}, ${avatarColor}cc)`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: '14px', fontWeight: 700, color: '#fff', position: 'relative' }}>
+                    <div style={{ width: '42px', height: '42px', borderRadius: '14px', background: `linear-gradient(135deg, ${avatarColor}, ${avatarColor}cc)`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: '15px', fontWeight: 800, color: '#fff', position: 'relative', boxShadow: '0 4px 10px rgba(0,0,0,0.08)', zIndex: 1 }}>
                       {update.updated_by_name.charAt(0).toUpperCase()}
-                      {idx < 3 && <span style={{ position: 'absolute', top: '-2px', right: '-2px', width: '10px', height: '10px', borderRadius: '50%', background: '#22c55e', border: '2px solid #fff' }} />}
+                      {idx < 3 && <span style={{ position: 'absolute', top: '-2px', right: '-2px', width: '10px', height: '10px', borderRadius: '50%', background: '#10b981', border: '2px solid #fff' }} />}
                     </div>
+                    
                     {/* Content */}
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px', flexWrap: 'wrap' }}>
-                        <span style={{ fontSize: '13px', fontWeight: 700, color: '#0f172a' }}>{update.updated_by_name}</span>
-                        <span style={{ fontSize: '11px', color: '#64748b' }}>updated description</span>
+                    <div style={{ flex: 1, minWidth: 0, zIndex: 1 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: '14px', fontWeight: 700, color: '#0f172a' }}>{update.updated_by_name}</span>
+                        <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 600 }}>updated description</span>
                         <span style={{ fontSize: '11px', color: '#94a3b8', marginLeft: 'auto', fontWeight: 500, whiteSpace: 'nowrap' }}>{timeAgo}</span>
                       </div>
-                      <div style={{ fontSize: '13px', color: '#334155', lineHeight: 1.4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginBottom: '6px' }}>
+                      
+                      {/* blockquote layout */}
+                      <div style={{ fontSize: '13px', color: '#475569', lineHeight: 1.5, background: '#f8fafc', padding: '10px 14px', borderRadius: '10px', borderLeft: '3px solid #10b981', margin: '8px 0', fontFamily: 'monospace', wordBreak: 'break-all' }}>
                         "{update.description_preview}"
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                        <span style={{ fontSize: '11px', fontWeight: 600, color: '#475569', background: '#f1f5f9', padding: '2px 8px', borderRadius: '6px', maxWidth: '160px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{update.task_title}</span>
-                        {update.company_name && <span style={{ fontSize: '10px', color: '#64748b' }}>• {update.company_name}</span>}
-                        {update.task_type_name && <span style={{ fontSize: '10px', color: '#94a3b8' }}>• {update.task_type_name}</span>}
-                        {update.assigned_to_name !== 'Unassigned' && <span style={{ fontSize: '10px', color: '#94a3b8' }}>• 👤 {update.assigned_to_name}</span>}
-                        <span style={{ fontSize: '10px', fontWeight: 600, color: statusColor, background: `${statusColor}12`, padding: '1px 6px', borderRadius: '4px', marginLeft: 'auto' }}>{update.task_status}</span>
+                      
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginTop: '6px' }}>
+                        <span style={{ fontSize: '11px', fontWeight: 700, color: '#475569', background: '#f1f5f9', padding: '3px 10px', borderRadius: '8px', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {update.task_title}
+                        </span>
+                        {update.company_name && <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 500 }}>• {update.company_name}</span>}
+                        {update.task_type_name && <span style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 500 }}>• {update.task_type_name}</span>}
+                        {update.assigned_to_name !== 'Unassigned' && <span style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 500 }}>• 👤 {update.assigned_to_name}</span>}
+                        <span style={{ fontSize: '10px', fontWeight: 700, color: statusColor, background: `${statusColor}12`, padding: '2px 8px', borderRadius: '6px', marginLeft: 'auto', textTransform: 'capitalize' }}>
+                          {update.task_status}
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -952,13 +1105,50 @@ export default function BahrainDashboard() {
 // --- Component & Style Definitions ---
 
 function getStatusColor(status: string) {
-  const s = status.toLowerCase();
-  if (s.includes('completed') || s.includes('closed') || s.includes('done') || s.includes('filed')) return '#10b981';
-  if (s.includes('review') || s.includes('waiting') || s.includes('draft')) return '#8b5cf6';
-  if (s.includes('progress') || s.includes('active') || s.includes('started')) return '#3b82f6';
-  if (s.includes('urgent') || s.includes('overdue') || s.includes('rework')) return '#ef4444';
-  if (s.includes('query') || s.includes('info')) return '#f59e0b';
-  return '#64748b';
+  const s = status.trim().toLowerCase();
+
+  // 1. Success / Completed / Done / Submitted (Emerald / Teal / Cyan / Green)
+  if (s === 'completed' || s === 'done' || s.includes('submitted')) return '#047857'; // Emerald 700
+  if (s === 'closed') return '#065f46';    // Emerald 800
+  if (s === 'filed' || s.includes('file')) return '#0e7490';     // Cyan 700
+  if (s.includes('received')) return '#16a34a'; // Green 600
+
+  // 2. Query / Info / Ask (Yellow / Gold) - Check before general pending/waiting
+  if (s.includes('query') || s.includes('info') || s.includes('question') || s.includes('letter') || s.includes('confirmation')) return '#a16207'; // Yellow 700
+
+  // 3. Review / Verification / Auditor / Approval (Purple / Violet)
+  if (s.includes('review') || s.includes('auditor') || s.includes('approval') || s.includes('validation')) return '#6d28d9'; // Purple 700
+
+  // 4. Financials / Billing / Accounting (Indigo / Violet)
+  if (s.includes('payment') || s.includes('financial') || s.includes('billing') || s.includes('invoice') || s.includes('xero')) return '#4338ca'; // Indigo 700
+
+  // 5. Active / Work / In Progress (Blue / Sky)
+  if (s === 'in progress' || s === 'progress' || s.includes('progress') || s.includes('progess')) return '#1d4ed8'; // Blue 700
+  if (s === 'active' || s === 'started' || s === 'running') return '#1e40af'; // Blue 800
+  if (s.includes('checklist')) return '#0369a1'; // Sky 700
+
+  // 6. Danger / Alerts (Red / Rose)
+  if (s === 'overdue') return '#b91c1c';   // Red 700
+  if (s === 'urgent' || s === 'high') return '#991b1b'; // Red 800
+  if (s === 'rework' || s === 'blocked') return '#be123c'; // Rose 700
+
+  // 7. Pending / Deferred / Awaiting (Amber / Orange)
+  if (s === 'pending' || s.includes('yet to start') || s.includes('not started')) return '#b45309';   // Amber 700
+  if (s.includes('hold') || s.includes('waiting') || s.includes('awaited') || s.includes('pending')) return '#c2410c'; // Orange 700
+
+  // 8. Info / Draft / Default
+  if (s === 'new' || s === 'created') return '#0369a1'; // Sky 700
+  if (s === 'draft' || s === 'memo') return '#475569'; // Slate 700
+
+  // Broad Fallbacks
+  if (s.includes('completed') || s.includes('closed') || s.includes('done') || s.includes('filed')) return '#047857';
+  if (s.includes('review') || s.includes('waiting') || s.includes('draft') || s.includes('auditor')) return '#6d28d9';
+  if (s.includes('progress') || s.includes('active') || s.includes('started')) return '#1d4ed8';
+  if (s.includes('urgent') || s.includes('overdue') || s.includes('rework') || s.includes('block')) return '#b91c1c';
+  if (s.includes('query') || s.includes('info') || s.includes('question')) return '#a16207';
+  if (s.includes('financial') || s.includes('billing') || s.includes('invoice')) return '#4338ca';
+
+  return '#475569'; // Default Slate 700
 }
 
 function formatDateTime(dateStr: string): string {
@@ -966,55 +1156,154 @@ function formatDateTime(dateStr: string): string {
   return date.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
-function StatCard({ icon, label, value, colorHex, onClick }: { icon: React.ReactNode; label: string; value: number; colorHex: string; onClick?: () => void }) {
+function StatCard({ 
+  icon, 
+  label, 
+  value, 
+  colorHex, 
+  onClick, 
+  percentage, 
+  showWarningPulse,
+  subtitle 
+}: { 
+  icon: React.ReactNode; 
+  label: string; 
+  value: number; 
+  colorHex: string; 
+  onClick?: () => void; 
+  percentage?: number; 
+  showWarningPulse?: boolean;
+  subtitle?: string;
+}) {
+  const radius = 18;
+  const stroke = 3;
+  const normalizedRadius = radius - stroke * 2;
+  const circumference = normalizedRadius * 2 * Math.PI;
+  const strokeDashoffset = percentage !== undefined ? circumference - (percentage / 100) * circumference : 0;
+
   return (
     <div onClick={onClick} style={{
-      background: '#ffffff', border: '1px solid #f1f5f9', borderRadius: '18px', padding: '22px 24px',
-      boxShadow: '0 1px 3px rgba(0,0,0,0.04)', cursor: onClick ? 'pointer' : 'default',
-      transition: 'all 0.25s cubic-bezier(0.4,0,0.2,1)', display: 'flex', flexDirection: 'column', gap: '16px',
-      position: 'relative', overflow: 'hidden',
+      background: '#ffffff', 
+      border: '1px solid rgba(226, 232, 240, 0.8)', 
+      borderRadius: '22px', 
+      padding: '24px 28px',
+      boxShadow: '0 4px 20px -2px rgba(15,23,42,0.02), 0 2px 8px -1px rgba(15,23,42,0.02)', 
+      cursor: onClick ? 'pointer' : 'default',
+      transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)', 
+      display: 'flex', 
+      flexDirection: 'column', 
+      gap: '16px',
+      position: 'relative', 
+      overflow: 'hidden',
     }}
-      onMouseEnter={e => { if (!onClick) return; e.currentTarget.style.transform = 'translateY(-4px)'; e.currentTarget.style.boxShadow = `0 12px 28px ${colorHex}18, 0 4px 10px rgba(0,0,0,0.04)`; e.currentTarget.style.borderColor = `${colorHex}40`; }}
-      onMouseLeave={e => { if (!onClick) return; e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.04)'; e.currentTarget.style.borderColor = '#f1f5f9'; }}
+      onMouseEnter={e => { 
+        if (!onClick) return; 
+        e.currentTarget.style.transform = 'translateY(-6px)'; 
+        e.currentTarget.style.boxShadow = `0 20px 30px -10px ${colorHex}22, 0 8px 16px -8px rgba(15,23,42,0.06)`; 
+        e.currentTarget.style.borderColor = `${colorHex}50`; 
+      }}
+      onMouseLeave={e => { 
+        if (!onClick) return; 
+        e.currentTarget.style.transform = 'none'; 
+        e.currentTarget.style.boxShadow = '0 4px 20px -2px rgba(15,23,42,0.02), 0 2px 8px -1px rgba(15,23,42,0.02)'; 
+        e.currentTarget.style.borderColor = 'rgba(226, 232, 240, 0.8)'; 
+      }}
     >
-      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '3px', background: `linear-gradient(90deg, ${colorHex}, ${colorHex}88)`, borderRadius: '18px 18px 0 0' }} />
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <div style={{ color: '#64748b', fontSize: '13px', fontWeight: 600, letterSpacing: '0.02em' }}>{label}</div>
-        <div style={{ background: `${colorHex}10`, color: colorHex, padding: '10px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{icon}</div>
+      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '4px', background: `linear-gradient(90deg, ${colorHex}, ${colorHex}aa)`, borderRadius: '22px 22px 0 0' }} />
+      
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ color: '#64748b', fontSize: '13px', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase' }}>{label}</div>
+        <div style={{ position: 'relative' }}>
+          <div style={{ background: `${colorHex}08`, color: colorHex, padding: '10px', borderRadius: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: `1px solid ${colorHex}15` }}>
+            {icon}
+          </div>
+          {showWarningPulse && (
+            <span className="pulse-warning" style={{ position: 'absolute', top: '-3px', right: '-3px', width: '10px', height: '10px', borderRadius: '50%', background: '#ef4444', border: '2px solid #fff' }} />
+          )}
+        </div>
       </div>
-      <div style={{ fontSize: '36px', fontWeight: 800, color: '#0f172a', lineHeight: 1, letterSpacing: '-1px' }}>{value}</div>
-      {onClick && <div style={{ fontSize: '12px', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 500 }}>View details <ArrowUpRight size={12} /></div>}
+      
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '10px' }}>
+        <div style={{ fontSize: '38px', fontWeight: 900, color: '#0f172a', lineHeight: 1, letterSpacing: '-1.5px' }}>
+          {value}
+        </div>
+        
+        {percentage !== undefined && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }} title={`${percentage}% Completed`}>
+            <span style={{ fontSize: '12px', fontWeight: 700, color: colorHex }}>{percentage}%</span>
+            <svg height="30" width="30" style={{ transform: 'rotate(-90deg)', flexShrink: 0 }}>
+              <circle
+                stroke={`${colorHex}15`}
+                fill="transparent"
+                strokeWidth={stroke}
+                r={normalizedRadius}
+                cx="15"
+                cy="15"
+              />
+              <circle
+                stroke={colorHex}
+                fill="transparent"
+                strokeWidth={stroke}
+                strokeDasharray={circumference + ' ' + circumference}
+                style={{ strokeDashoffset, transition: 'stroke-dashoffset 0.8s cubic-bezier(0.16, 1, 0.3, 1)' }}
+                strokeLinecap="round"
+                r={normalizedRadius}
+                cx="15"
+                cy="15"
+              />
+            </svg>
+          </div>
+        )}
+      </div>
+      
+      {subtitle && (
+        <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 600, marginTop: '-8px' }}>
+          {subtitle}
+        </div>
+      )}
+      
+      {onClick && (
+        <div style={{ fontSize: '12px', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 600, marginTop: '2px' }}>
+          View details <ArrowUpRight size={12} style={{ color: colorHex }} />
+        </div>
+      )}
     </div>
   );
 }
 
 function EmptyState({ message, icon }: { message: string; icon?: string }) {
   return (
-    <div style={{ textAlign: 'center', padding: '40px 20px', color: '#94a3b8', background: '#f8fafc', borderRadius: '12px', border: '1px dashed #e2e8f0' }}>
+    <div style={{ textAlign: 'center', padding: '40px 20px', color: '#94a3b8', background: '#f8fafc', borderRadius: '16px', border: '1px dashed #e2e8f0' }}>
       {icon && <div style={{ fontSize: '28px', marginBottom: '10px' }}>{icon}</div>}
-      <div style={{ fontSize: '14px', fontWeight: 500 }}>{message}</div>
+      <div style={{ fontSize: '14px', fontWeight: 600 }}>{message}</div>
     </div>
   );
 }
 
 const panelStyle: React.CSSProperties = {
-  background: '#ffffff', border: '1px solid #f1f5f9', borderRadius: '20px', padding: '24px',
-  boxShadow: '0 1px 3px rgba(0,0,0,0.04)', display: 'flex', flexDirection: 'column', height: '100%',
-  transition: 'box-shadow 0.2s ease',
+  background: '#ffffff', 
+  border: '1px solid rgba(226, 232, 240, 0.8)', 
+  borderRadius: '24px', 
+  padding: '28px',
+  boxShadow: '0 10px 30px -10px rgba(15,23,42,0.03)', 
+  display: 'flex', 
+  flexDirection: 'column', 
+  height: '100%',
+  transition: 'box-shadow 0.3s cubic-bezier(0.16, 1, 0.3, 1), transform 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
 };
 
 const panelHeaderStyle: React.CSSProperties = {
-  display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px',
+  display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '22px',
 };
 
 const panelTitleStyle: React.CSSProperties = {
-  fontSize: '16px', fontWeight: 700, color: '#0f172a', margin: 0, letterSpacing: '-0.2px',
+  fontSize: '16px', fontWeight: 800, color: '#0f172a', margin: 0, letterSpacing: '-0.3px',
 };
 
 const badgeStyle: React.CSSProperties = {
-  fontSize: '12px', color: '#64748b', background: '#f1f5f9', padding: '4px 12px', borderRadius: '20px', fontWeight: 600,
+  fontSize: '11px', color: '#475569', background: '#f1f5f9', padding: '4px 12px', borderRadius: '20px', fontWeight: 700, letterSpacing: '0.02em',
 };
 
 const listContainerStyle: React.CSSProperties = {
-  display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '380px', overflowY: 'auto', paddingRight: '4px',
+  display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '380px', overflowY: 'auto', paddingRight: '4px',
 };

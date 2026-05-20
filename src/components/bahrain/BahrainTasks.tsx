@@ -814,13 +814,56 @@ export default function BahrainTasks() {
   };
 
   const statusColor = (s: string) => {
-    const sl = s.toLowerCase();
-    if (sl.includes('closed') || sl.includes('complete') || sl.includes('filed')) return { bg: '#ECFDF5', color: '#059669', border: '#A7F3D0' };
-    if (sl.includes('review') || sl.includes('ready')) return { bg: '#F5F3FF', color: '#7C3AED', border: '#DDD6FE' };
-    if (sl.includes('progress') || sl.includes('active')) return { bg: '#EFF6FF', color: '#2563EB', border: '#BFDBFE' };
-    if (sl.includes('query') || sl.includes('waiting')) return { bg: '#FFFBEB', color: '#D97706', border: '#FDE68A' };
-    if (sl.includes('not started')) return { bg: '#F3F4F6', color: '#6B7280', border: '#D1D5DB' };
-    return { bg: '#F3F4F6', color: '#6B7280', border: '#D1D5DB' };
+    if (!s) return { bg: '#47556912', color: '#475569', border: '#47556924' };
+    const sl = s.trim().toLowerCase();
+    let hex = '#475569'; // Default Slate 700
+
+    // 1. Success / Completed / Done / Submitted (Emerald / Teal / Cyan / Green)
+    if (sl === 'completed' || sl === 'done' || sl.includes('submitted')) hex = '#047857'; // Emerald 700
+    else if (sl === 'closed') hex = '#065f46';    // Emerald 800
+    else if (sl === 'filed' || sl.includes('file')) hex = '#0e7490';     // Cyan 700
+    else if (sl.includes('received')) hex = '#16a34a'; // Green 600
+
+    // 2. Query / Info / Ask (Yellow / Gold)
+    else if (sl.includes('query') || sl.includes('info') || sl.includes('question') || sl.includes('letter') || sl.includes('confirmation')) hex = '#a16207'; // Yellow 700
+
+    // 3. Review / Verification / Auditor / Approval (Purple / Violet)
+    else if (sl.includes('review') || sl.includes('auditor') || sl.includes('approval') || sl.includes('validation')) hex = '#6d28d9'; // Purple 700
+
+    // 4. Financials / Billing / Accounting (Indigo / Violet)
+    else if (sl.includes('payment') || sl.includes('financial') || sl.includes('billing') || sl.includes('invoice') || sl.includes('xero')) hex = '#4338ca'; // Indigo 700
+
+    // 5. Active / Work / In Progress (Blue / Sky)
+    else if (sl === 'in progress' || sl === 'progress' || sl.includes('progress') || sl.includes('progess')) hex = '#1d4ed8'; // Blue 700
+    else if (sl === 'active' || sl === 'started' || sl === 'running') hex = '#1e40af'; // Blue 800
+    else if (sl.includes('checklist')) hex = '#0369a1'; // Sky 700
+
+    // 6. Danger / Alerts (Red / Rose)
+    else if (sl === 'overdue') hex = '#b91c1c';   // Red 700
+    else if (sl === 'urgent' || sl === 'high') hex = '#991b1b'; // Red 800
+    else if (sl === 'rework' || sl === 'blocked') hex = '#be123c'; // Rose 700
+
+    // 7. Pending / Deferred / Awaiting (Amber / Orange)
+    else if (sl === 'pending' || sl.includes('yet to start') || sl.includes('not started')) hex = '#b45309';   // Amber 700
+    else if (sl.includes('hold') || sl.includes('waiting') || sl.includes('awaited') || sl.includes('pending')) hex = '#c2410c'; // Orange 700
+
+    // 8. Info / Draft / Default
+    else if (sl === 'new' || sl === 'created') hex = '#0369a1'; // Sky 700
+    else if (sl === 'draft' || sl === 'memo') hex = '#475569'; // Slate 700
+
+    // Broad Fallbacks
+    else if (sl.includes('completed') || sl.includes('closed') || sl.includes('done') || sl.includes('filed')) hex = '#047857';
+    else if (sl.includes('review') || sl.includes('waiting') || sl.includes('draft') || sl.includes('auditor')) hex = '#6d28d9';
+    else if (sl.includes('progress') || sl.includes('active') || sl.includes('started')) hex = '#1d4ed8';
+    else if (sl.includes('urgent') || sl.includes('overdue') || sl.includes('rework') || sl.includes('block')) hex = '#b91c1c';
+    else if (sl.includes('query') || sl.includes('info') || sl.includes('question')) hex = '#a16207';
+    else if (sl.includes('financial') || sl.includes('billing') || sl.includes('invoice')) hex = '#4338ca';
+
+    return {
+      bg: `${hex}12`,
+      color: hex,
+      border: `${hex}24`
+    };
   };
 
   if (loading) return <div style={{ textAlign: 'center', padding: '60px', color: '#7F8C8D' }}>Loading tasks...</div>;
