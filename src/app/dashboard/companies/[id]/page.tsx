@@ -83,11 +83,11 @@ export default function CompanyDetailPage() {
     setLoading(true);
     const dataCountry = getDataCountry();
 
-    let staffQuery = supabase.from('users').select('*').neq('role', 'admin');
+    let staffQuery = supabase.from('users').select('id, username, role, country, created_at').neq('role', 'admin');
     if (dataCountry) staffQuery = staffQuery.eq('country', dataCountry);
 
     const [companyRes, tasksRes, staffRes, allStaffRes] = await Promise.all([
-      supabase.from('companies').select('*').eq('id', id).single(),
+      supabase.from('companies').select('id, company_name, notes, job, start_date, due_date, status, country, google_drive_link, created_at').eq('id', id).single(),
       supabase.from('tasks')
         .select('*, assignee:users!tasks_assigned_to_fkey(username)')
         .eq('company_id', id)

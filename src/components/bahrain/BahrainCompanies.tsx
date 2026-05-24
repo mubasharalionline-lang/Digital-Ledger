@@ -38,7 +38,7 @@ export default function BahrainCompanies() {
     const isAdminUser = isAdmin(currentUser);
     
     // Fetch all companies for the country
-    let { data } = await supabase.from('companies').select('*').eq('country', dataCountry || 'Bahrain').order('company_name');
+    let { data } = await supabase.from('companies').select('id, company_name, country, tax_registration, industry, compliance_type, status, google_drive_link, notes, created_at').eq('country', dataCountry || 'Bahrain').order('company_name');
     
     // If not admin, only show companies they have tasks for
     if (!isAdminUser && currentUser && data) {

@@ -64,10 +64,10 @@ export default function StaffPage() {
   async function loadStaff() {
     setLoading(true);
     const dataCountry = getDataCountry();
-    let usersQuery = supabase.from('users').select('*').order('created_at', { ascending: false });
+    let usersQuery = supabase.from('users').select('id, username, role, country, permissions, created_at').order('created_at', { ascending: false });
     if (dataCountry) usersQuery = usersQuery.eq('country', dataCountry);
 
-    let tasksQuery = supabase.from('tasks').select('*, company:companies(company_name)');
+    let tasksQuery = supabase.from('tasks').select('id, title, company_id, assigned_to, assigned_partners, status, priority, deadline, country, is_daily, company:companies(company_name)');
       if (dataCountry) tasksQuery = tasksQuery.eq('country', dataCountry);
 
     const [usersRes, tasksRes, rolesRes, auditorsRes] = await Promise.all([
@@ -77,8 +77,8 @@ export default function StaffPage() {
         ? supabase.from('roles').select('name').eq('country', dataCountry) 
         : supabase.from('roles').select('name'),
       dataCountry
-        ? supabase.from('auditors').select('*').eq('country', dataCountry).order('name')
-        : supabase.from('auditors').select('*').order('name')
+        ? supabase.from('auditors').select('id, name, country').eq('country', dataCountry).order('name')
+        : supabase.from('auditors').select('id, name, country').order('name')
     ]);
 
     const users = usersRes.data || [];

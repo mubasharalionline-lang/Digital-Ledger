@@ -32,7 +32,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
   const loadCountries = useCallback(async () => {
     try {
-      const { data, error } = await supabase.from('countries').select('*').order('name');
+      const { data, error } = await supabase.from('countries').select('id, code, name, flag').order('name');
       if (!error && data && data.length > 0) { setCountries(data); return; }
     } catch {}
     // Fallback if table doesn't exist yet

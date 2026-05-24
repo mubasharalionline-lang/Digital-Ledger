@@ -107,21 +107,21 @@ export default function BahrainTasks() {
 
     // Fetch fresh data (runs in background if we had cache)
     try {
-      let usersQuery = supabase.from('users').select('*').order('created_at', { ascending: false });
+      let usersQuery = supabase.from('users').select('id, username, role, country, permissions, created_at').order('created_at', { ascending: false });
       if (dataCountry) {
         usersQuery = usersQuery.eq('country', dataCountry);
       }
 
       const [compsRes, ttRes, usersRes, statusRes, audRes] = await Promise.all([
-        supabase.from('companies').select('*').eq('country', dataCountry || 'Bahrain'),
-        supabase.from('task_types').select('*').eq('active', true).eq('country', dataCountry || 'Bahrain'),
+        supabase.from('companies').select('id, company_name, notes, country, created_at').eq('country', dataCountry || 'Bahrain'),
+        supabase.from('task_types').select('id, name, category, jurisdiction, status_options, active, created_at').eq('active', true).eq('country', dataCountry || 'Bahrain'),
         usersQuery,
         dataCountry
           ? supabase.from('statuses').select('name, active, task_type_ids').eq('country', dataCountry)
           : supabase.from('statuses').select('name, active, task_type_ids'),
         dataCountry
-          ? supabase.from('auditors').select('*').eq('country', dataCountry).order('name')
-          : supabase.from('auditors').select('*').order('name')
+          ? supabase.from('auditors').select('id, name, country').eq('country', dataCountry).order('name')
+          : supabase.from('auditors').select('id, name, country').order('name')
       ]);
 
       const companyList = compsRes.data || [];
@@ -143,7 +143,7 @@ export default function BahrainTasks() {
       const companyIds = companyList.map(c => c.id);
       let taskList: Task[] = [];
       if (companyIds.length > 0) {
-        const { data: t } = await supabase.from('tasks').select('*').in('company_id', companyIds).neq('is_daily', true);
+        const { data: t } = await supabase.from('tasks').select('id, title, company_id, assigned_to, assigned_partners, status, priority, deadline, admin_note, task_type_id, task_type_ids, auditor_id, description, is_daily, country, created_at').in('company_id', companyIds).neq('is_daily', true);
         taskList = t || [];
       }
 
@@ -227,6 +227,11 @@ export default function BahrainTasks() {
 
   // --- Unread message tracking ---
   const [unreadTasks, setUnreadTasks] = useState<string[]>([]);
+  const chatTaskRef = useRef(chatTask);
+  useEffect(() => {
+    chatTaskRef.current = chatTask;
+  }, [chatTask]);
+
 
   // Get last-read timestamps from localStorage
   function getLastReadMap(): Record<string, string> {
@@ -292,7 +297,10 @@ export default function BahrainTasks() {
         .neq('sender_id', currentUser.id)
         .order('created_at', { ascending: false });
 
-      if (!allMsgs || allMsgs.length === 0) return;
+      if (!allMsgs || allMsgs.length === 0) {
+        setUnreadTasks([]);
+        return;
+      }
 
       const unread: string[] = [];
       for (const msg of allMsgs) {
@@ -302,15 +310,19 @@ export default function BahrainTasks() {
           unread.push(msg.task_id);
         }
       }
-      if (unread.length > 0) {
-        setUnreadTasks(unread);
-      }
+      setUnreadTasks(unread);
     })();
   }, [currentUser, tasks]);
 
+
+  // Keep a ref to tasks so the realtime callback always reads the latest
+  // without re-creating the subscription on every task state change.
+  const tasksRef = useRef(tasks);
+  useEffect(() => { tasksRef.current = tasks; }, [tasks]);
+
   // Listen for realtime task_messages
   useEffect(() => {
-    if (!currentUser || tasks.length === 0) return;
+    if (!currentUser || tasksRef.current.length === 0) return;
 
     const channel = supabase
       .channel('task_messages_changes')
@@ -321,7 +333,7 @@ export default function BahrainTasks() {
           const newMessage = payload.new as TaskMessage;
           if (newMessage.sender_id === currentUser.id) return;
 
-          const relatedTask = tasks.find(t => t.id === newMessage.task_id);
+          const relatedTask = tasksRef.current.find(t => t.id === newMessage.task_id);
           if (!relatedTask) return;
 
           const isAssigned = isAdminUser ||
@@ -330,19 +342,26 @@ export default function BahrainTasks() {
             userAuditorAccess.includes(relatedTask.auditor_id || '');
 
           if (isAssigned) {
-            addUnreadTask(newMessage.task_id);
+            if (chatTaskRef.current && chatTaskRef.current.id === newMessage.task_id) {
+              const map = getLastReadMap();
+              map[newMessage.task_id] = new Date().toISOString();
+              localStorage.setItem('task_last_read', JSON.stringify(map));
+              loadMessages(newMessage.task_id);
+            } else {
+              addUnreadTask(newMessage.task_id);
 
-            const notifId = Math.random().toString(36).substring(7);
-            const shortMsg = newMessage.message.length > 30 ? newMessage.message.substring(0, 30) + '...' : newMessage.message;
-            setNotifications(prev => [...prev, {
-              id: notifId,
-              message: `New message on Task #${relatedTask.id.slice(0, 6)}: "${shortMsg}"`,
-              taskId: relatedTask.id
-            }]);
+              const notifId = Math.random().toString(36).substring(7);
+              const shortMsg = newMessage.message.length > 30 ? newMessage.message.substring(0, 30) + '...' : newMessage.message;
+              setNotifications(prev => [...prev, {
+                id: notifId,
+                message: `New message on Task #${relatedTask.id.slice(0, 6)}: "${shortMsg}"`,
+                taskId: relatedTask.id
+              }]);
 
-            setTimeout(() => {
-              setNotifications(prev => prev.filter(n => n.id !== notifId));
-            }, 6000);
+              setTimeout(() => {
+                setNotifications(prev => prev.filter(n => n.id !== notifId));
+              }, 6000);
+            }
           }
         }
       )
@@ -351,7 +370,8 @@ export default function BahrainTasks() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [currentUser, tasks, isAdminUser]);
+  }, [currentUser, isAdminUser]);
+
 
   // Inline status update
   async function handleStatusChange(taskId: string, newStatus: string) {
@@ -623,7 +643,7 @@ export default function BahrainTasks() {
 
     const { data: logs, error } = await supabase
       .from('status_log')
-      .select('*')
+      .select('id, task_id, status, updated_by, remarks, created_at')
       .eq('task_id', taskId)
       .order('created_at', { ascending: false });
     if (error) console.error('Status log error:', error);
@@ -952,9 +972,9 @@ export default function BahrainTasks() {
             try {
               const { data: logs } = await supabase
                 .from('status_log')
-                .select('*')
+                .select('id, task_id, status, updated_by, remarks, created_at')
                 .order('created_at', { ascending: false })
-                .limit(1000);
+                .limit(200);
               if (logs) {
                 // Group by task_id, get latest per task, take top 20
                 const taskMap = new Map<string, any>();
@@ -1517,29 +1537,30 @@ export default function BahrainTasks() {
                   <td style={{ ...compactCell, position: 'relative', width: '44px' }}>
                     <button onClick={e => { e.stopPropagation(); setOpenMenuId(isMenuOpen ? null : task.id); }}
                       style={{
-                        background: isMenuOpen ? '#f1f5f9' : (hasUnread ? '#fef2f2' : 'transparent'),
-                        border: hasUnread ? '1.5px solid #fca5a5' : 'none',
-                        cursor: 'pointer', borderRadius: '10px', padding: '7px',
+                        background: isMenuOpen ? '#f1f5f9' : 'transparent',
+                        border: 'none',
+                        cursor: 'pointer', borderRadius: '8px', padding: '6px',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        transition: 'all 0.2s ease', position: 'relative',
+                        transition: 'all 0.15s ease', position: 'relative',
+                        marginLeft: 'auto',
+                        marginRight: '4px',
+                        width: '32px',
+                        height: '32px',
                       }}
-                      onMouseEnter={e => { e.currentTarget.style.background = hasUnread ? '#fee2e2' : '#f1f5f9'; e.currentTarget.style.transform = 'scale(1.05)'; }}
-                      onMouseLeave={e => { if (!isMenuOpen) { e.currentTarget.style.background = hasUnread ? '#fef2f2' : 'transparent'; } e.currentTarget.style.transform = 'scale(1)'; }}>
-                      <MoreHorizontal size={18} color={hasUnread ? '#ef4444' : '#64748b'} />
+                      onMouseEnter={e => { e.currentTarget.style.background = '#f1f5f9'; }}
+                      onMouseLeave={e => { if (!isMenuOpen) { e.currentTarget.style.background = 'transparent'; } }}>
+                      <MoreHorizontal size={18} color="#64748b" />
                       {hasUnread && (
                         <span style={{
-                          position: 'absolute', top: '-4px', right: '-4px',
-                          minWidth: '18px', height: '18px',
-                          background: 'linear-gradient(135deg, #ef4444, #dc2626)',
-                          borderRadius: '9px', border: '2px solid #ffffff',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          fontSize: '9px', fontWeight: 700, color: '#ffffff',
-                          letterSpacing: '-0.02em', padding: '0 4px',
-                          boxShadow: '0 2px 6px rgba(239, 68, 68, 0.4)',
-                          animation: 'notif-pulse 2s ease-in-out infinite, notif-bounce 2s ease-in-out infinite',
-                        }}>
-                          <MessageCircle size={9} />
-                        </span>
+                          position: 'absolute',
+                          top: '3px',
+                          right: '3px',
+                          width: '6px',
+                          height: '6px',
+                          background: '#f43f5e',
+                          borderRadius: '50%',
+                          boxShadow: '0 0 0 2px #ffffff',
+                        }} />
                       )}
                     </button>
                     {isMenuOpen && (
@@ -1548,18 +1569,17 @@ export default function BahrainTasks() {
                         <button onClick={() => { viewDetail(task.id); setOpenMenuId(null); }} style={menuItemStyle}>
                           <Eye size={14} color="#3b82f6" /> View Details
                         </button>
-                        <button onClick={() => { openChat(task); setOpenMenuId(null); }} style={{ ...menuItemStyle, display: 'flex', alignItems: 'center', background: hasUnread ? '#fef2f2' : undefined }}>
-                          <MessageCircle size={14} color={hasUnread ? '#ef4444' : '#8b5cf6'} style={{ marginRight: '8px' }} />
-                          <span style={{ fontWeight: hasUnread ? 600 : 500, color: hasUnread ? '#dc2626' : undefined }}>Messages</span>
+                        <button onClick={() => { openChat(task); setOpenMenuId(null); }} style={{ ...menuItemStyle, display: 'flex', alignItems: 'center' }}>
+                          <MessageCircle size={14} color="#8b5cf6" style={{ marginRight: '8px' }} />
+                          <span style={{ fontWeight: 500 }}>Messages</span>
                           {hasUnread && (
                             <span style={{
                               marginLeft: 'auto',
-                              background: 'linear-gradient(135deg, #ef4444, #dc2626)',
-                              color: 'white', fontSize: '10px', padding: '2px 8px',
-                              borderRadius: '10px', fontWeight: 700,
-                              boxShadow: '0 1px 4px rgba(239,68,68,0.3)',
-                              animation: 'notif-bounce 2s ease-in-out infinite',
-                            }}>NEW</span>
+                              width: '6px',
+                              height: '6px',
+                              background: '#f43f5e',
+                              borderRadius: '50%',
+                            }} />
                           )}
                         </button>
                         {canManageTask(task) && (<>

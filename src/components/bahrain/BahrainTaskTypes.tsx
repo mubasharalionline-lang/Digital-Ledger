@@ -24,7 +24,7 @@ export default function BahrainTaskTypes() {
     setLoading(true);
     const dataCountry = getDataCountry();
     const { data } = await supabase.from('task_types')
-      .select('*')
+      .select('id, name, category, jurisdiction, status_options, description, active, created_at, country')
       .eq('country', dataCountry || 'Bahrain')
       .order('created_at', { ascending: false });
     setTaskTypes(data || []);

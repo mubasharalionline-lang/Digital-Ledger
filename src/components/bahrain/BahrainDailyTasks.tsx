@@ -146,6 +146,7 @@ export default function BahrainDailyTasks() {
       // Invalidate caches so other pages (Staff, Dashboard) fetch fresh data
       sessionStorage.removeItem('dashboard_data_time_v2');
       sessionStorage.removeItem('tasks_data_time');
+      sessionStorage.removeItem('daily_tasks_data_time');
     } catch (e) {
       console.error(e);
     }
@@ -196,9 +197,33 @@ export default function BahrainDailyTasks() {
   }
 
   const loadData = useCallback(async () => {
+    const cacheKey = 'daily_tasks_data_cache';
+    const cacheTimeKey = 'daily_tasks_data_time';
+    const cachedData = sessionStorage.getItem(cacheKey);
+    const cacheTime = sessionStorage.getItem(cacheTimeKey);
+
+    let hadCache = false;
+
+    // Show cached data instantly for zero-wait UI
+    if (cachedData && cacheTime) {
+      const age = Date.now() - parseInt(cacheTime);
+      try {
+        const parsed = JSON.parse(cachedData);
+        setPartners(parsed.partners || []);
+        setTasks(parsed.tasks || []);
+        if (parsed.dynamicStatuses && parsed.dynamicStatuses.length > 0) {
+          setDynamicStatuses(parsed.dynamicStatuses);
+        }
+        setLoading(false);
+        hadCache = true;
+        // If cache is fresh (< 2 min), skip network entirely
+        if (age < 2 * 60 * 1000) return;
+      } catch (e) { }
+    }
+
     setLoading(true);
     try {
-      let usersQuery = supabase.from('users').select('*').order('created_at', { ascending: false });
+      let usersQuery = supabase.from('users').select('id, username, role, country, permissions, created_at').order('created_at', { ascending: false });
       if (dataCountry) usersQuery = usersQuery.eq('country', dataCountry);
 
       const statusQuery = dataCountry 
@@ -206,7 +231,7 @@ export default function BahrainDailyTasks() {
         : supabase.from('statuses').select('name, active');
 
       const tasksQuery = supabase.from('tasks')
-        .select('*')
+        .select('id, title, company_id, assigned_to, assigned_partners, status, priority, deadline, admin_note, description, is_daily, repeat_daily, repeat_monthly, country, created_at')
         .eq('is_daily', true)
         .eq('country', dataCountry || 'Bahrain')
         .order('created_at', { ascending: false });
@@ -275,11 +300,22 @@ export default function BahrainDailyTasks() {
       setTasks(tasksData);
 
       const dbStatuses = statusRes.data?.filter(s => s.active !== false).map(s => s.name) || [];
+      const resolvedStatuses = dbStatuses.length > 0
+        ? dbStatuses.sort((a: string, b: string) => a.localeCompare(b))
+        : (!dataCountry || dataCountry === 'Bahrain' ? [...BAHRAIN_STATUSES].sort((a, b) => a.localeCompare(b)) : []);
       if (dbStatuses.length > 0) {
-        setDynamicStatuses(dbStatuses.sort((a, b) => a.localeCompare(b)));
+        setDynamicStatuses(resolvedStatuses);
       } else {
-        setDynamicStatuses(!dataCountry || dataCountry === 'Bahrain' ? [...BAHRAIN_STATUSES].sort((a, b) => a.localeCompare(b)) : []);
+        setDynamicStatuses(resolvedStatuses);
       }
+
+      // Save cache
+      sessionStorage.setItem(cacheKey, JSON.stringify({
+        partners: usersRes.data || [],
+        tasks: tasksData,
+        dynamicStatuses: resolvedStatuses,
+      }));
+      sessionStorage.setItem(cacheTimeKey, Date.now().toString());
 
     } catch (err) {
       console.error(err);
@@ -291,6 +327,26 @@ export default function BahrainDailyTasks() {
 
   // --- Unread message tracking ---
   const [unreadTasks, setUnreadTasks] = useState<string[]>([]);
+  
+  const chatTaskRef = useRef(chatTask);
+  useEffect(() => {
+    chatTaskRef.current = chatTask;
+  }, [chatTask]);
+
+  async function refreshChatMessages(taskId: string) {
+    const { data } = await supabase.from('task_messages')
+      .select('*, sender:users!sender_id(username, role)')
+      .eq('task_id', taskId)
+      .order('created_at', { ascending: true });
+    
+    const enrichedMessages = (data || []).map(msg => ({
+      ...msg,
+      sender: msg.sender || { username: 'Unknown', role: 'staff' }
+    }));
+    
+    setMessages(enrichedMessages as any);
+  }
+
 
   function getLastReadMap(): Record<string, string> {
     try {
@@ -351,7 +407,10 @@ export default function BahrainDailyTasks() {
         .neq('sender_id', currentUser.id)
         .order('created_at', { ascending: false });
 
-      if (!allMsgs || allMsgs.length === 0) return;
+      if (!allMsgs || allMsgs.length === 0) {
+        setUnreadTasks([]);
+        return;
+      }
 
       const unread: string[] = [];
       for (const msg of allMsgs) {
@@ -361,11 +420,10 @@ export default function BahrainDailyTasks() {
           unread.push(msg.task_id);
         }
       }
-      if (unread.length > 0) {
-        setUnreadTasks(unread);
-      }
+      setUnreadTasks(unread);
     })();
   }, [currentUser, tasks]);
+
 
   // Realtime messages for notifications
   useEffect(() => {
@@ -380,21 +438,29 @@ export default function BahrainDailyTasks() {
 
         const isAssigned = task.assigned_to === currentUser.id || (task.assigned_partners && task.assigned_partners.includes(currentUser.id));
         if (isAssigned || isAdminUser) {
-          addUnreadTask(msg.task_id);
+          if (chatTaskRef.current && chatTaskRef.current.id === msg.task_id) {
+            const map = getLastReadMap();
+            map[msg.task_id] = new Date().toISOString();
+            localStorage.setItem('task_last_read', JSON.stringify(map));
+            refreshChatMessages(msg.task_id);
+          } else {
+            addUnreadTask(msg.task_id);
 
-          const { data: sender } = await supabase.from('users').select('username').eq('id', msg.sender_id).single();
-          const senderName = sender?.username || 'Someone';
-          
-          const notifId = Date.now().toString();
-          setNotifications(prev => [...prev, { id: notifId, message: `${senderName}: ${msg.message.substring(0, 30)}${msg.message.length > 30 ? '...' : ''}`, taskId: msg.task_id }]);
-          
-          setTimeout(() => {
-            setNotifications(prev => prev.filter(n => n.id !== notifId));
-          }, 5000);
+            const { data: sender } = await supabase.from('users').select('username').eq('id', msg.sender_id).single();
+            const senderName = sender?.username || 'Someone';
+            
+            const notifId = Date.now().toString();
+            setNotifications(prev => [...prev, { id: notifId, message: `${senderName}: ${msg.message.substring(0, 30)}${msg.message.length > 30 ? '...' : ''}`, taskId: msg.task_id }]);
+            
+            setTimeout(() => {
+              setNotifications(prev => prev.filter(n => n.id !== notifId));
+            }, 5000);
+          }
         }
       }).subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [currentUser, isAdminUser]);
+
 
   const filtered = tasks.filter(t => {
     const isAssigned = (t.assigned_partners && t.assigned_partners.includes(currentUser?.id || '')) || t.assigned_to === currentUser?.id;
@@ -765,12 +831,31 @@ export default function BahrainDailyTasks() {
                 </td>
                 <td style={{ ...compactCell, position: 'relative', width: '40px' }}>
                   <button onClick={e => { e.stopPropagation(); setOpenMenuId(isMenuOpen ? null : task.id); }}
-                    style={{ background: isMenuOpen ? '#f1f5f9' : 'transparent', border: 'none', cursor: 'pointer', borderRadius: '8px', padding: '5px', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.15s', position: 'relative' }}
+                    style={{
+                      background: isMenuOpen ? '#f1f5f9' : 'transparent',
+                      border: 'none',
+                      cursor: 'pointer', borderRadius: '8px', padding: '6px',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      transition: 'all 0.15s ease', position: 'relative',
+                      marginLeft: 'auto',
+                      marginRight: '4px',
+                      width: '32px',
+                      height: '32px',
+                    }}
                     onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'}
                     onMouseLeave={e => { if (!isMenuOpen) e.currentTarget.style.background = 'transparent'; }}>
                     <MoreHorizontal size={16} color="#64748b" />
                     {unreadTasks.includes(task.id) && (
-                      <span style={{ position: 'absolute', top: '2px', right: '2px', width: '6px', height: '6px', backgroundColor: '#ef4444', borderRadius: '50%', border: '1px solid white' }} />
+                      <span style={{
+                        position: 'absolute',
+                        top: '3px',
+                        right: '3px',
+                        width: '6px',
+                        height: '6px',
+                        background: '#f43f5e',
+                        borderRadius: '50%',
+                        boxShadow: '0 0 0 2px #ffffff',
+                      }} />
                     )}
                   </button>
                   {isMenuOpen && (
@@ -782,9 +867,16 @@ export default function BahrainDailyTasks() {
                       <button onClick={() => { openChat(task); setOpenMenuId(null); }} style={{...menuItemStyle, display: 'flex', alignItems: 'center'}}>
                         <MessageCircle size={14} color="#8b5cf6" style={{marginRight: '8px'}} /> Messages
                         {unreadTasks.includes(task.id) && (
-                          <span style={{ marginLeft: 'auto', background: '#ef4444', color: 'white', fontSize: '9px', padding: '1px 5px', borderRadius: '10px', fontWeight: 600 }}>New</span>
+                          <span style={{
+                            marginLeft: 'auto',
+                            width: '6px',
+                            height: '6px',
+                            background: '#f43f5e',
+                            borderRadius: '50%',
+                          }} />
                         )}
                       </button>
+
                       {isAdminUser && (<>
                         <button onClick={() => { 
                           setEditingTaskId(task.id); 

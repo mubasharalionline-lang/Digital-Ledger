@@ -41,9 +41,9 @@ export default function EditsPage() {
     const country = getDataCountry();
     
     try {
-      let statusQuery = supabase.from('statuses').select('*').order('created_at', { ascending: true });
-      let rolesQuery = supabase.from('roles').select('*').order('created_at', { ascending: true });
-      let auditorsQuery = supabase.from('auditors').select('*').order('created_at', { ascending: true });
+      let statusQuery = supabase.from('statuses').select('id, name, active, task_type_ids, country, created_at').order('created_at', { ascending: true });
+      let rolesQuery = supabase.from('roles').select('id, name, country, created_at').order('created_at', { ascending: true });
+      let auditorsQuery = supabase.from('auditors').select('id, name, country, created_at').order('created_at', { ascending: true });
       let ttQuery = supabase.from('task_types').select('id, name, active').eq('active', true).order('name');
       
       if (country) {

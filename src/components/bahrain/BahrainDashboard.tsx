@@ -50,12 +50,14 @@ interface RecentMessage {
   created_at: string;
   sender_name: string;
   sender_role: string;
+  sender_id: string;
   task_title: string;
   company_name: string;
   task_status: string;
   task_type_name: string;
   is_daily: boolean;
 }
+
 
 interface RecentDescUpdate {
   id: string;
@@ -80,13 +82,17 @@ export default function BahrainDashboard() {
   const [urgentClients, setUrgentClients] = useState<UrgentClient[]>([]);
   const [taskTypeStats, setTaskTypeStats] = useState<TaskTypeStats[]>([]);
   const [statusCounts, setStatusCounts] = useState<Record<string, number>>({});
-  const [upcomingTasks, setUpcomingTasks] = useState<(Task & { companyName: string; daysLeft: number })[]>([]);
+  const [urgentTasks, setUrgentTasks] = useState<(Task & { companyName: string; assignedName: string; daysLeft: number })[]>([]);
   const [partnerWorkloads, setPartnerWorkloads] = useState<PartnerWorkload[]>([]);
   const [dailyTaskStats, setDailyTaskStats] = useState<{ total: number; pending: number; completed: number; repeatCount: number; statusBreakdown: Record<string, number> }>({ total: 0, pending: 0, completed: 0, repeatCount: 0, statusBreakdown: {} });
   const [recentMessages, setRecentMessages] = useState<RecentMessage[]>([]);
   const [recentDescUpdates, setRecentDescUpdates] = useState<RecentDescUpdate[]>([]);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
+
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [lastReadMap, setLastReadMap] = useState<Record<string, string>>({});
+
 
   const [formattedDate, setFormattedDate] = useState('');
   useEffect(() => {
@@ -97,6 +103,16 @@ export default function BahrainDashboard() {
       day: 'numeric'
     }));
   }, []);
+
+  useEffect(() => {
+    const { user } = getSession();
+    setCurrentUser(user);
+    try {
+      const raw = localStorage.getItem('task_last_read');
+      if (raw) setLastReadMap(JSON.parse(raw));
+    } catch {}
+  }, []);
+
 
   const handleDeleteMessage = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
@@ -150,6 +166,7 @@ export default function BahrainDashboard() {
           created_at: m.created_at,
           sender_name: sender?.username || 'Unknown',
           sender_role: sender?.role || '',
+          sender_id: m.sender_id,
           task_title: task?.title || 'Unknown Task',
           company_name: task?.company_id ? (companyMap.get(task.company_id) || '—') : 'Daily Task',
           task_status: task?.status || '',
@@ -248,7 +265,7 @@ export default function BahrainDashboard() {
           setUrgentClients(parsed.urgentClients);
           setTaskTypeStats(parsed.taskTypeStats);
           setStatusCounts(parsed.statusCounts);
-          setUpcomingTasks(parsed.upcomingTasks);
+          setUrgentTasks(parsed.urgentTasks || []);
           if (parsed.partnerWorkloads) setPartnerWorkloads(parsed.partnerWorkloads);
           setLoading(false);
           useCache = true;
@@ -270,9 +287,9 @@ export default function BahrainDashboard() {
 
       // Fire all independent queries simultaneously
       const [companiesRes, usersRes, taskTypesRes] = await Promise.all([
-        supabase.from('companies').select('*').eq('country', dataCountry || 'Bahrain'),
-        dataCountry ? supabase.from('users').select('*').eq('country', dataCountry).neq('role', 'admin') : supabase.from('users').select('*').neq('role', 'admin'),
-        supabase.from('task_types').select('*').eq('country', dataCountry || 'Bahrain')
+        supabase.from('companies').select('id, company_name, notes, country, created_at').eq('country', dataCountry || 'Bahrain'),
+        dataCountry ? supabase.from('users').select('id, username, role, country, created_at').eq('country', dataCountry).neq('role', 'admin') : supabase.from('users').select('id, username, role, country, created_at').neq('role', 'admin'),
+        supabase.from('task_types').select('id, name, category, jurisdiction, active, country, created_at').eq('country', dataCountry || 'Bahrain')
       ]);
 
       const companyList = companiesRes.data || [];
@@ -285,7 +302,7 @@ export default function BahrainDashboard() {
       let taskList: Task[] = [];
       const userAuditorAccess: string[] = currentUser?.permissions?.auditor_access || [];
       if (companyIds.length > 0) {
-        let taskQuery = supabase.from('tasks').select('*').in('company_id', companyIds).neq('is_daily', true);
+        let taskQuery = supabase.from('tasks').select('id, title, company_id, assigned_to, assigned_partners, status, priority, deadline, task_type_id, task_type_ids, auditor_id, description, is_daily, country, created_at').in('company_id', companyIds).neq('is_daily', true);
         if (!isAdminUser && currentUser && userAuditorAccess.length === 0) {
           // Simple case: no auditor access, just fetch assigned tasks
           taskQuery = taskQuery.eq('assigned_to', currentUser.id);
@@ -310,7 +327,7 @@ export default function BahrainDashboard() {
       // Fetch daily tasks with full data for statistics
       const taskCountry = dataCountry || 'Bahrain';
       const dailyQuery = supabase.from('tasks')
-        .select('*')
+        .select('id, title, status, repeat_daily, repeat_monthly, is_daily, country, created_at')
         .eq('is_daily', true)
         .eq('country', taskCountry);
 
@@ -446,20 +463,32 @@ export default function BahrainDashboard() {
       taskList.forEach(t => { newStatusCounts[t.status] = (newStatusCounts[t.status] || 0) + 1; });
       setStatusCounts(newStatusCounts);
 
-      // Upcoming deadlines
-      const newUpcomingTasks = taskList
-        .filter(t => t.status !== 'Closed' && t.status !== 'Completed')
-        .sort((a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime())
-        .slice(0, 5)
+      const usersList = usersRes.data || [];
+
+      // Urgent tasks
+      const newUrgentTasks = taskList
+        .filter(t => t.status !== 'Closed' && t.status !== 'Completed' && t.priority === 'Urgent')
         .map(t => {
           const company = companyList.find(c => c.id === t.company_id);
           const daysLeft = Math.ceil((new Date(t.deadline).getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-          return { ...t, companyName: company?.company_name || 'Unknown', daysLeft };
+          const assignedUser = usersList.find(u => u.id === t.assigned_to);
+          return {
+            ...t,
+            companyName: company?.company_name || 'Unknown',
+            assignedName: assignedUser?.username || 'Unassigned',
+            daysLeft
+          };
+        })
+        .sort((a, b) => {
+          const aOverdue = a.daysLeft < 0;
+          const bOverdue = b.daysLeft < 0;
+          if (aOverdue && !bOverdue) return -1;
+          if (!aOverdue && bOverdue) return 1;
+          return new Date(a.deadline).getTime() - new Date(b.deadline).getTime();
         });
-      setUpcomingTasks(newUpcomingTasks);
+      setUrgentTasks(newUrgentTasks);
 
       // Partner workload
-      const usersList = usersRes.data || [];
       const newPartnerWorkloads: PartnerWorkload[] = usersList.map(partner => {
         const partnerTasks = taskList.filter(t => 
           t.assigned_to === partner.id || (t.assigned_partners && t.assigned_partners.includes(partner.id))
@@ -490,7 +519,7 @@ export default function BahrainDashboard() {
         urgentClients: newUrgentClients,
         taskTypeStats: serializableTaskTypeStats,
         statusCounts: newStatusCounts,
-        upcomingTasks: newUpcomingTasks,
+        urgentTasks: newUrgentTasks,
         partnerWorkloads: newPartnerWorkloads
       }));
       sessionStorage.setItem('dashboard_data_time_v2', Date.now().toString());
@@ -950,64 +979,85 @@ export default function BahrainDashboard() {
           </div>
         </div>
 
-        {/* Upcoming Deadlines */}
+        {/* Urgent Tasks */}
         <div style={panelStyle}>
           <div style={panelHeaderStyle}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <div style={{ background: '#fef3c7', color: '#d97706', width: '38px', height: '38px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid rgba(217, 119, 6, 0.15)' }}>
-                <Clock size={18} />
+              <div style={{ background: '#fef2f2', color: '#ef4444', width: '38px', height: '38px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid rgba(239, 68, 68, 0.15)' }}>
+                <AlertTriangle size={18} />
               </div>
-              <h3 style={panelTitleStyle}>Upcoming Deadlines</h3>
+              <h3 style={panelTitleStyle}>Urgent Tasks</h3>
             </div>
-            <span style={badgeStyle}>{upcomingTasks.length} active</span>
+            <span style={badgeStyle}>{urgentTasks.length} urgent</span>
           </div>
           
           <div className="custom-scrollbar" style={listContainerStyle}>
-            {upcomingTasks.length === 0 ? (
-              <EmptyState message="No upcoming tasks or deadlines" icon="📅" />
+            {urgentTasks.length === 0 ? (
+              <EmptyState message="No urgent tasks found" icon="📅" />
             ) : (
-              upcomingTasks.map(task => (
-                <div key={task.id} onClick={() => router.push('/dashboard/tasks')}
-                  style={{ 
-                    padding: '16px 20px', 
-                    borderRadius: '18px', 
-                    cursor: 'pointer', 
-                    transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)', 
-                    background: task.daysLeft < 0 ? '#fef2f2' : '#ffffff', 
-                    border: `1px solid ${task.daysLeft < 0 ? 'rgba(239, 68, 68, 0.15)' : 'rgba(226, 232, 240, 0.8)'}`, 
-                    borderLeft: `4px solid ${task.daysLeft < 0 ? '#ef4444' : '#f59e0b'}`,
-                    boxShadow: '0 2px 8px rgba(0,0,0,0.01)',
-                    flexShrink: 0
-                  }}
-                  onMouseEnter={e => { 
-                    e.currentTarget.style.transform = 'translateX(6px)'; 
-                    e.currentTarget.style.boxShadow = task.daysLeft < 0 ? '0 10px 20px -8px rgba(239, 68, 68, 0.12)' : '0 10px 20px -8px rgba(245, 158, 11, 0.12)';
-                    e.currentTarget.style.borderColor = task.daysLeft < 0 ? '#fca5a5' : '#fde68a';
-                  }}
-                  onMouseLeave={e => { 
-                    e.currentTarget.style.transform = 'none'; 
-                    e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.01)';
-                    e.currentTarget.style.borderColor = task.daysLeft < 0 ? 'rgba(239, 68, 68, 0.15)' : 'rgba(226, 232, 240, 0.8)';
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px' }}>
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: '14px', fontWeight: 700, color: '#1e293b', marginBottom: '4px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{task.title}</div>
-                      <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 600 }}>{task.companyName}</div>
-                    </div>
-                    <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                      {task.daysLeft < 0 ? (
-                        <span style={{ fontSize: '11px', fontWeight: 800, color: '#b91c1c', background: '#fef2f2', padding: '2px 8px', borderRadius: '6px' }}>Overdue</span>
-                      ) : (
-                        <span style={{ fontSize: '11px', fontWeight: 800, color: '#b45309', background: '#fffbeb', padding: '2px 8px', borderRadius: '6px' }}>{task.daysLeft} d left</span>
-                      )}
-                      <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '4px', fontWeight: 500 }}>
-                        {new Date(task.deadline).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+              urgentTasks.map(task => {
+                const isOverdue = task.daysLeft < 0;
+                
+                return (
+                  <div key={task.id} onClick={() => router.push('/dashboard/tasks')}
+                    style={{ 
+                      padding: '16px 20px', 
+                      borderRadius: '18px', 
+                      cursor: 'pointer', 
+                      transition: 'all 0.2s ease-in-out', 
+                      background: isOverdue ? 'linear-gradient(135deg, #fffefe, #fff5f5)' : '#ffffff', 
+                      border: `1px solid ${isOverdue ? 'rgba(239, 68, 68, 0.25)' : 'rgba(226, 232, 240, 0.8)'}`, 
+                      borderLeft: `4px solid #ef4444`,
+                      boxShadow: isOverdue ? '0 4px 12px rgba(239, 68, 68, 0.04)' : '0 2px 8px rgba(0,0,0,0.01)',
+                      flexShrink: 0
+                    }}
+                    onMouseEnter={e => { 
+                      e.currentTarget.style.background = isOverdue ? 'linear-gradient(135deg, #fff5f5, #ffebee)' : '#f8fafc';
+                      e.currentTarget.style.boxShadow = isOverdue ? '0 6px 16px rgba(239, 68, 68, 0.08)' : '0 4px 12px rgba(0,0,0,0.03)';
+                      e.currentTarget.style.borderColor = isOverdue ? '#ef4444' : '#cbd5e1';
+                    }}
+                    onMouseLeave={e => { 
+                      e.currentTarget.style.background = isOverdue ? 'linear-gradient(135deg, #fffefe, #fff5f5)' : '#ffffff';
+                      e.currentTarget.style.boxShadow = isOverdue ? '0 4px 12px rgba(239, 68, 68, 0.04)' : '0 2px 8px rgba(0,0,0,0.01)';
+                      e.currentTarget.style.borderColor = isOverdue ? 'rgba(239, 68, 68, 0.25)' : 'rgba(226, 232, 240, 0.8)';
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <div style={{ fontSize: '14px', fontWeight: 700, color: isOverdue ? '#991b1b' : '#1e293b', marginBottom: '4px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {task.title}
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: '11px', color: '#475569', fontWeight: 600 }}>{task.companyName}</span>
+                          <span style={{ color: '#cbd5e1', fontSize: '10px' }}>•</span>
+                          <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 500 }}>Assigned: <strong style={{ color: '#475569' }}>{task.assignedName}</strong></span>
+                        </div>
+                      </div>
+                      
+                      <div style={{ textAlign: 'right', flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <span style={{ fontSize: '10px', fontWeight: 700, color: '#ef4444', background: '#fef2f2', border: '1px solid rgba(239, 68, 68, 0.2)', padding: '2px 6px', borderRadius: '6px', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                            🔴 Urgent
+                          </span>
+                          <span style={{ fontSize: '10px', fontWeight: 600, color: '#475569', background: '#f1f5f9', padding: '2px 6px', borderRadius: '6px' }}>
+                            {task.status}
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          {isOverdue ? (
+                            <span style={{ fontSize: '11px', fontWeight: 800, color: '#b91c1c', background: '#fef2f2', padding: '1px 6px', borderRadius: '4px' }}>Overdue</span>
+                          ) : (
+                            <span style={{ fontSize: '11px', fontWeight: 800, color: '#b45309', background: '#fffbeb', padding: '1px 6px', borderRadius: '4px' }}>{task.daysLeft}d left</span>
+                          )}
+                          <span style={{ fontSize: '10px', color: '#94a3b8', fontWeight: 500 }}>
+                            {new Date(task.deadline).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                          </span>
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>
@@ -1028,50 +1078,53 @@ export default function BahrainDashboard() {
             <EmptyState message="No messages posted yet" icon="💬" />
           ) : (
             <div className="custom-scrollbar timeline-container" style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '450px', overflowY: 'auto', paddingRight: '4px' }}>
-              {recentMessages.map((msg, idx) => {
-                const timeAgo = formatDateTime(msg.created_at);
-                const avatarColors = ['#4f46e5','#06b6d4','#10b981','#3b82f6','#ec4899','#f59e0b','#ef4444','#8b5cf6'];
-                const avatarColor = avatarColors[msg.sender_name.charCodeAt(0) % avatarColors.length];
-                
-                return (
-                  <div key={msg.id} className="timeline-item"
-                    style={{
-                      display: 'flex', gap: '16px', alignItems: 'flex-start',
-                      position: 'relative'
-                    }}
-                  >
-                    {/* Vertical timeline line segment */}
-                    {idx < recentMessages.length - 1 && (
-                      <div style={{
-                        position: 'absolute',
-                        left: '21px', // center of the 42px avatar
-                        top: '42px',  // starts from bottom of avatar
-                        bottom: '-16px', // extends through the 16px gap to the next item's top
-                        width: '2px',
-                        background: '#e2e8f0',
-                        zIndex: 1
-                      }} />
-                    )}
-
-                    {/* Avatar */}
-                    <div style={{ width: '42px', height: '42px', borderRadius: '14px', background: `linear-gradient(135deg, ${avatarColor}, ${avatarColor}cc)`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: '15px', fontWeight: 800, color: '#fff', position: 'relative', boxShadow: '0 4px 10px rgba(0,0,0,0.08)', zIndex: 2 }}>
-                      {msg.sender_name.charAt(0).toUpperCase()}
-                      {idx < 3 && <span style={{ position: 'absolute', top: '-2px', right: '-2px', width: '10px', height: '10px', borderRadius: '50%', background: '#3b82f6', border: '2px solid #fff', zIndex: 3 }} />}
-                    </div>
-                    
-                    {/* Clickable Card on the right */}
-                    <div
-                      onClick={() => router.push(msg.is_daily ? `/dashboard/daily-tasks?openChat=${msg.task_id}` : `/dashboard/tasks?openChat=${msg.task_id}`)}
-                      style={{
-                        flex: 1, minWidth: 0, padding: '16px 20px', borderRadius: '18px',
-                        cursor: 'pointer', transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
-                        background: idx < 3 ? '#fbfcfe' : '#ffffff',
-                        border: idx < 3 ? '1px solid rgba(59, 130, 246, 0.15)' : '1px solid rgba(226, 232, 240, 0.8)',
-                        zIndex: 2,
-                      }}
-                      onMouseEnter={e => { e.currentTarget.style.background = '#f8fafc'; e.currentTarget.style.transform = 'translateX(4px)'; e.currentTarget.style.boxShadow = '0 8px 24px -10px rgba(0,0,0,0.06)'; }}
-                      onMouseLeave={e => { e.currentTarget.style.background = idx < 3 ? '#fbfcfe' : '#ffffff'; e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = 'none'; }}
-                    >
+               {recentMessages.map((msg, idx) => {
+                 const timeAgo = formatDateTime(msg.created_at);
+                 const avatarColors = ['#4f46e5','#06b6d4','#10b981','#3b82f6','#ec4899','#f59e0b','#ef4444','#8b5cf6'];
+                 const avatarColor = avatarColors[msg.sender_name.charCodeAt(0) % avatarColors.length];
+                 
+                 const lastRead = lastReadMap[msg.task_id];
+                 const isUnread = msg.sender_id !== currentUser?.id && (!lastRead || new Date(msg.created_at) > new Date(lastRead));
+                 
+                 return (
+                   <div key={msg.id} className="timeline-item"
+                     style={{
+                       display: 'flex', gap: '16px', alignItems: 'flex-start',
+                       position: 'relative'
+                     }}
+                   >
+                     {/* Vertical timeline line segment */}
+                     {idx < recentMessages.length - 1 && (
+                       <div style={{
+                         position: 'absolute',
+                         left: '21px', // center of the 42px avatar
+                         top: '42px',  // starts from bottom of avatar
+                         bottom: '-16px', // extends through the 16px gap to the next item's top
+                         width: '2px',
+                         background: '#e2e8f0',
+                         zIndex: 1
+                       }} />
+                     )}
+ 
+                     {/* Avatar */}
+                     <div style={{ width: '42px', height: '42px', borderRadius: '14px', background: `linear-gradient(135deg, ${avatarColor}, ${avatarColor}cc)`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: '15px', fontWeight: 800, color: '#fff', position: 'relative', boxShadow: '0 4px 10px rgba(0,0,0,0.08)', zIndex: 2 }}>
+                       {msg.sender_name.charAt(0).toUpperCase()}
+                       {isUnread && <span style={{ position: 'absolute', top: '-2px', right: '-2px', width: '8px', height: '8px', borderRadius: '50%', background: '#f43f5e', border: '2px solid #fff', zIndex: 3 }} />}
+                     </div>
+                     
+                     {/* Clickable Card on the right */}
+                     <div
+                       onClick={() => router.push(msg.is_daily ? `/dashboard/daily-tasks?openChat=${msg.task_id}` : `/dashboard/tasks?openChat=${msg.task_id}`)}
+                       style={{
+                         flex: 1, minWidth: 0, padding: '16px 20px', borderRadius: '18px',
+                         cursor: 'pointer', transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+                         background: isUnread ? '#fafbfe' : '#ffffff',
+                         border: isUnread ? '1px solid rgba(59, 130, 246, 0.15)' : '1px solid rgba(226, 232, 240, 0.8)',
+                         zIndex: 2,
+                       }}
+                       onMouseEnter={e => { e.currentTarget.style.background = '#f8fafc'; e.currentTarget.style.transform = 'translateX(4px)'; e.currentTarget.style.boxShadow = '0 8px 24px -10px rgba(0,0,0,0.06)'; }}
+                       onMouseLeave={e => { e.currentTarget.style.background = isUnread ? '#fafbfe' : '#ffffff'; e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = 'none'; }}
+                     >
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', flexWrap: 'wrap' }}>
                         <span style={{ fontSize: '14px', fontWeight: 700, color: '#0f172a' }}>{msg.sender_name}</span>
                         <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 600 }}>posted update</span>

@@ -33,10 +33,10 @@ export default function BahrainReports() {
     setLoading(true);
     try {
       const [compRes, usersRes, ttRes, audRes] = await Promise.all([
-        supabase.from('companies').select('*').eq('country', dataCountry),
-        dataCountry ? supabase.from('users').select('*').eq('country', dataCountry) : supabase.from('users').select('*'),
-        supabase.from('task_types').select('*').eq('country', dataCountry),
-        dataCountry ? supabase.from('auditors').select('*').eq('country', dataCountry) : supabase.from('auditors').select('*'),
+        supabase.from('companies').select('id, company_name, notes, country, tax_registration, industry, fy_end, status, created_at').eq('country', dataCountry),
+        dataCountry ? supabase.from('users').select('id, username, role, country, email, created_at').eq('country', dataCountry) : supabase.from('users').select('id, username, role, country, email, created_at'),
+        supabase.from('task_types').select('id, name, category, jurisdiction, active, country, created_at').eq('country', dataCountry),
+        dataCountry ? supabase.from('auditors').select('id, name, country').eq('country', dataCountry) : supabase.from('auditors').select('id, name, country'),
       ]);
       const compList = compRes.data || [];
       const partnerList = usersRes.data || [];
@@ -50,7 +50,7 @@ export default function BahrainReports() {
       const ids = compList.map(c => c.id);
       let taskList: Task[] = [];
       if (ids.length > 0) {
-        const { data } = await supabase.from('tasks').select('*').in('company_id', ids);
+        const { data } = await supabase.from('tasks').select('id, title, company_id, assigned_to, assigned_partners, status, priority, deadline, task_type_id, task_type_ids, auditor_id, description, is_daily, created_at').in('company_id', ids);
         taskList = data || [];
       }
       setAllTasks(taskList);

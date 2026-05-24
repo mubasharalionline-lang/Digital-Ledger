@@ -26,7 +26,7 @@ function deleteCookie(name: string) {
 export async function loginUser(username: string, password: string, country?: string): Promise<User | null> {
   let query = supabase
     .from('users')
-    .select('*')
+    .select('id, username, role, country, permissions, created_at')
     .eq('username', username)
     .eq('password', password);
 
