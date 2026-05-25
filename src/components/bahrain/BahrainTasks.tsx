@@ -54,6 +54,7 @@ export default function BahrainTasks() {
   const [activeTooltipTaskId, setActiveTooltipTaskId] = useState<string | null>(null);
   const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number; align: 'top' | 'bottom' }>({ x: 0, y: 0, align: 'bottom' });
   const tooltipTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   // Clean up tooltip timeout on unmount
   useEffect(() => {
@@ -63,6 +64,11 @@ export default function BahrainTasks() {
       }
     };
   }, []);
+
+  // Reset tooltip if filters or search changes to prevent orphaned tooltips
+  useEffect(() => {
+    setActiveTooltipTaskId(null);
+  }, [search, filterStatus, filterPriority, filterCompany, filterPartner, filterTaskType]);
 
   const handleTooltipMouseEnter = () => {
     if (tooltipTimeoutRef.current) {
@@ -914,7 +920,7 @@ export default function BahrainTasks() {
   if (loading) return <div style={{ textAlign: 'center', padding: '60px', color: '#7F8C8D' }}>Loading tasks...</div>;
 
   return (
-    <div>
+    <div ref={containerRef} style={{ position: 'relative' }}>
       {/* Header */}
       <div className="task-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '28px', padding: '28px 32px', background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%)', borderRadius: '20px', boxShadow: '0 4px 20px rgba(15,23,42,0.15)' }}>
         <div>
@@ -1433,17 +1439,25 @@ export default function BahrainTasks() {
                       setHoveredDescTaskId(task.id);
                       if (task.description && inlineEditDescId !== task.id) {
                         if (tooltipTimeoutRef.current) clearTimeout(tooltipTimeoutRef.current);
-                        const rect = e.currentTarget.getBoundingClientRect();
-                        const tooltipWidth = 330;
-                        const tooltipHeight = 180;
                         
-                        let left = rect.left + window.scrollX + (rect.width / 2) - (tooltipWidth / 2);
-                        if (left < 16) left = 16;
-                        if (left + tooltipWidth > window.innerWidth - 16) {
-                          left = window.innerWidth - tooltipWidth - 16;
+                        // Prevent repeated state updates while hovering the same task
+                        if (activeTooltipTaskId === task.id) {
+                          return;
                         }
                         
-                        const top = rect.top + window.scrollY - 6;
+                        if (!containerRef.current) return;
+                        const containerRect = containerRef.current.getBoundingClientRect();
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        const tooltipWidth = 330;
+                        
+                        // Calculate position relative to containerRef to keep position fixed and prevent layout shifting loops
+                        let left = rect.left - containerRect.left + (rect.width / 2) - (tooltipWidth / 2);
+                        if (left < 16) left = 16;
+                        if (left + tooltipWidth > containerRect.width - 16) {
+                          left = containerRect.width - tooltipWidth - 16;
+                        }
+                        
+                        const top = rect.top - containerRect.top - 6;
                         const align: 'top' | 'bottom' = 'top';
                         
                         setTooltipPos({ x: left, y: top, align });
@@ -1453,9 +1467,10 @@ export default function BahrainTasks() {
                     onMouseLeave={() => {
                       setHoveredDescTaskId(null);
                       if (tooltipTimeoutRef.current) clearTimeout(tooltipTimeoutRef.current);
+                      // Use a slightly larger grace period (150ms) to ensure smooth transition
                       tooltipTimeoutRef.current = setTimeout(() => {
                         setActiveTooltipTaskId(null);
-                      }, 120);
+                      }, 150);
                     }}
                   >
                     {inlineEditDescId === task.id ? (
