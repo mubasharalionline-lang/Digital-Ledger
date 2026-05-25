@@ -135,17 +135,26 @@ body {
   0% {
     box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.6);
   }
+
   70% {
     box-shadow: 0 0 0 6px rgba(239, 68, 68, 0);
   }
+
   100% {
     box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
   }
 }
 
 @keyframes notif-bounce {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.15); }
+
+  0%,
+  100% {
+    transform: scale(1);
+  }
+
+  50% {
+    transform: scale(1.15);
+  }
 }
 
 .animate-fadeIn {
@@ -490,10 +499,12 @@ tr:hover td {
     align-items: flex-start;
     gap: 12px;
   }
-  .page-header-row > div {
+
+  .page-header-row>div {
     width: 100%;
     justify-content: space-between;
   }
+
   .company-meta-row {
     gap: 10px;
   }
@@ -527,15 +538,18 @@ tr:hover td {
   .responsive-table-wrap {
     border-radius: 12px !important;
   }
+
   .responsive-table-wrap table thead {
     display: none;
   }
+
   .responsive-table-wrap table,
   .responsive-table-wrap table tbody,
   .responsive-table-wrap table tr {
     display: block;
     width: 100%;
   }
+
   .responsive-table-wrap table tr {
     padding: 14px;
     margin-bottom: 8px;
@@ -547,9 +561,11 @@ tr:hover td {
     gap: 8px 16px;
     align-items: center;
   }
+
   .responsive-table-wrap table tr:hover td {
     background: transparent !important;
   }
+
   .responsive-table-wrap table td {
     display: inline-flex;
     align-items: center;
@@ -557,6 +573,7 @@ tr:hover td {
     border: none !important;
     font-size: 13px;
   }
+
   .responsive-table-wrap table td::before {
     content: attr(data-label);
     font-weight: 600;
@@ -571,18 +588,26 @@ tr:hover td {
 
 /* Touch-friendly controls */
 @media (max-width: 768px) {
-  select, input[type="text"], input[type="date"], textarea {
+
+  select,
+  input[type="text"],
+  input[type="date"],
+  textarea {
     min-height: 44px;
-    font-size: 16px !important; /* prevents iOS zoom */
+    font-size: 16px !important;
+    /* prevents iOS zoom */
   }
+
   button {
     min-height: 40px;
   }
+
   .filter-bar-mobile {
     flex-direction: column !important;
     gap: 8px !important;
   }
-  .filter-bar-mobile > * {
+
+  .filter-bar-mobile>* {
     flex: 1 1 100% !important;
   }
 }
@@ -606,10 +631,12 @@ tr:hover td {
     padding: 20px !important;
     border-radius: 16px !important;
   }
+
   .daily-header button {
     width: 100%;
     justify-content: center;
   }
+
   .daily-stats-grid {
     grid-template-columns: repeat(2, 1fr) !important;
     gap: 10px !important;
@@ -633,6 +660,7 @@ tr:hover td {
     border-radius: 14px !important;
     gap: 16px !important;
   }
+
   .task-header button {
     width: 100% !important;
     justify-content: center !important;
@@ -648,13 +676,15 @@ tr:hover td {
     border-radius: 14px !important;
     margin-bottom: 16px !important;
   }
+
   .task-filters select,
   .task-filters input {
     width: 100% !important;
     min-width: unset !important;
     flex: unset !important;
     min-height: 44px;
-    font-size: 16px !important; /* prevents iOS zoom */
+    font-size: 16px !important;
+    /* prevents iOS zoom */
   }
 }
 
@@ -665,6 +695,7 @@ tr:hover td {
     gap: 10px !important;
   }
 }
+
 @media (max-width: 480px) {
   .task-stat-cards {
     grid-template-columns: 1fr !important;
@@ -681,18 +712,22 @@ tr:hover td {
     background: transparent !important;
     overflow: visible !important;
   }
+
   .task-table-wrap table {
     display: block !important;
     width: 100% !important;
   }
+
   .task-table-wrap thead {
     display: none !important;
   }
+
   .task-table-wrap tbody {
     display: flex !important;
     flex-direction: column !important;
     gap: 10px !important;
   }
+
   .task-table-wrap tr {
     display: flex !important;
     flex-wrap: wrap !important;
@@ -701,13 +736,15 @@ tr:hover td {
     border-radius: 14px !important;
     background: #ffffff !important;
     border: 1px solid #e2e8f0 !important;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.04) !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04) !important;
     align-items: center !important;
     position: relative !important;
   }
+
   .task-table-wrap tr:hover td {
     background: transparent !important;
   }
+
   .task-table-wrap td {
     display: inline-flex !important;
     align-items: center !important;
@@ -716,6 +753,7 @@ tr:hover td {
     font-size: 13px !important;
     vertical-align: middle !important;
   }
+
   /* Make action menu column full width on its own row */
   .task-table-wrap td:last-child {
     position: absolute !important;
@@ -723,6 +761,7 @@ tr:hover td {
     right: 10px !important;
     width: auto !important;
   }
+
   /* Status dropdown full width */
   .task-table-wrap td select {
     min-height: 38px !important;
@@ -733,7 +772,7 @@ tr:hover td {
 
 /* Stat card modal overlays — mobile full-width */
 @media (max-width: 768px) {
-  .stat-modal-overlay > div:first-child {
+  .stat-modal-overlay>div:first-child {
     width: calc(100% - 16px) !important;
     max-width: 100% !important;
     margin: 8px !important;
@@ -748,7 +787,8 @@ tr:hover td {
     left: 12px !important;
     bottom: 16px !important;
   }
-  .task-notifications > div {
+
+  .task-notifications>div {
     max-width: 100% !important;
   }
 }
@@ -759,6 +799,7 @@ tr:hover td {
     grid-template-columns: 1fr !important;
   }
 }
+
 @media (max-width: 640px) {
   .reports-header {
     flex-direction: column !important;
@@ -767,4 +808,44 @@ tr:hover td {
     padding: 20px !important;
     border-radius: 14px !important;
   }
+}
+
+/* Custom premium description tooltip styles */
+@keyframes tooltipScaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes tooltipScaleInUp {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.animate-tooltip-down {
+  animation: tooltipScaleIn 0.15s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-tooltip-up {
+  animation: tooltipScaleInUp 0.15s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Solid, elevated premium preview card style */
+.tooltip-glass-card {
+  background: rgba(255, 255, 255, 0.96) !important;
+  backdrop-filter: blur(6px) !important;
+  -webkit-backdrop-filter: blur(6px) !important;
+  border: 1px solid rgba(203, 213, 225, 0.9) !important;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.12), 0 4px 10px rgba(0, 0, 0, 0.06), inset 0 1px 1px rgba(255, 255, 255, 0.8) !important;
 }

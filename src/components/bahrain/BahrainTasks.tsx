@@ -49,6 +49,31 @@ export default function BahrainTasks() {
   const [inlineEditDescId, setInlineEditDescId] = useState<string | null>(null);
   const [inlineEditDescValue, setInlineEditDescValue] = useState('');
   const [hoveredDescTaskId, setHoveredDescTaskId] = useState<string | null>(null);
+
+  // Custom description tooltip states
+  const [activeTooltipTaskId, setActiveTooltipTaskId] = useState<string | null>(null);
+  const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number; align: 'top' | 'bottom' }>({ x: 0, y: 0, align: 'bottom' });
+  const tooltipTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Clean up tooltip timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (tooltipTimeoutRef.current) {
+        clearTimeout(tooltipTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const handleTooltipMouseEnter = () => {
+    if (tooltipTimeoutRef.current) {
+      clearTimeout(tooltipTimeoutRef.current);
+      tooltipTimeoutRef.current = null;
+    }
+  };
+
+  const handleTooltipMouseLeave = () => {
+    setActiveTooltipTaskId(null);
+  };
   // Stat card modal states
   const [showRecentModal, setShowRecentModal] = useState(false);
   const [showCompletedModal, setShowCompletedModal] = useState(false);
@@ -262,7 +287,7 @@ export default function BahrainTasks() {
   useEffect(() => {
     const openChatId = searchParams.get('openChat');
     const openDescId = searchParams.get('openDesc');
-    
+
     if (openChatId && tasks.length > 0 && !chatTask) {
       const task = tasks.find(t => t.id === openChatId);
       if (task) {
@@ -963,179 +988,179 @@ export default function BahrainTasks() {
 
       {/* ─── 4 Compact Stat Cards ─── */}
       {isAdminUser && (
-      <div className="task-stat-cards" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '14px', marginBottom: '20px' }}>
-        {/* Card 1: Recently Modified Tasks */}
-        <div
-          onClick={async () => {
-            setShowRecentModal(true);
-            setRecentLoading(true);
-            try {
-              const { data: logs } = await supabase
-                .from('status_log')
-                .select('id, task_id, status, updated_by, remarks, created_at')
-                .order('created_at', { ascending: false })
-                .limit(200);
-              if (logs) {
-                // Group by task_id, get latest per task, take top 20
-                const taskMap = new Map<string, any>();
-                logs.forEach((log: any) => {
-                  if (tasks.some(t => t.id === log.task_id)) {
-                    if (!taskMap.has(log.task_id)) taskMap.set(log.task_id, log);
+        <div className="task-stat-cards" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '14px', marginBottom: '20px' }}>
+          {/* Card 1: Recently Modified Tasks */}
+          <div
+            onClick={async () => {
+              setShowRecentModal(true);
+              setRecentLoading(true);
+              try {
+                const { data: logs } = await supabase
+                  .from('status_log')
+                  .select('id, task_id, status, updated_by, remarks, created_at')
+                  .order('created_at', { ascending: false })
+                  .limit(200);
+                if (logs) {
+                  // Group by task_id, get latest per task, take top 20
+                  const taskMap = new Map<string, any>();
+                  logs.forEach((log: any) => {
+                    if (tasks.some(t => t.id === log.task_id)) {
+                      if (!taskMap.has(log.task_id)) taskMap.set(log.task_id, log);
+                    }
+                  });
+                  const top20 = Array.from(taskMap.values()).slice(0, 20);
+                  // Fetch missing user information
+                  const unresolvedIds = new Set<string>();
+                  const { user: sessionUser } = getSession();
+                  top20.forEach(log => {
+                    if (log.updated_by && !partners.find(p => p.id === log.updated_by) && log.updated_by !== sessionUser?.id) {
+                      unresolvedIds.add(log.updated_by);
+                    }
+                  });
+
+                  let extraUsers: { id: string; username: string }[] = [];
+                  if (unresolvedIds.size > 0) {
+                    const { data: fetchedUsers } = await supabase
+                      .from('users')
+                      .select('id, username')
+                      .in('id', Array.from(unresolvedIds));
+                    extraUsers = fetchedUsers || [];
                   }
-                });
-                const top20 = Array.from(taskMap.values()).slice(0, 20);
-                // Fetch missing user information
-                const unresolvedIds = new Set<string>();
-                const { user: sessionUser } = getSession();
-                top20.forEach(log => {
-                  if (log.updated_by && !partners.find(p => p.id === log.updated_by) && log.updated_by !== sessionUser?.id) {
-                    unresolvedIds.add(log.updated_by);
-                  }
-                });
-                
-                let extraUsers: { id: string; username: string }[] = [];
-                if (unresolvedIds.size > 0) {
-                  const { data: fetchedUsers } = await supabase
-                    .from('users')
-                    .select('id, username')
-                    .in('id', Array.from(unresolvedIds));
-                  extraUsers = fetchedUsers || [];
+
+                  // Enrich with task + user info
+                  const enriched = top20.map((log: any) => {
+                    const task = tasks.find(t => t.id === log.task_id);
+                    const company = task ? companies.find(c => c.id === task.company_id) : null;
+                    let updaterName = 'Unknown';
+
+                    const localPartner = partners.find(p => p.id === log.updated_by);
+                    if (localPartner) {
+                      updaterName = localPartner.username;
+                    } else if (sessionUser && log.updated_by === sessionUser.id) {
+                      updaterName = sessionUser.username;
+                    } else {
+                      const extra = extraUsers.find(u => u.id === log.updated_by);
+                      if (extra) updaterName = extra.username;
+                    }
+
+                    return { ...log, task, company, updaterName };
+                  });
+                  setRecentActivityLogs(enriched);
                 }
-
-                // Enrich with task + user info
-                const enriched = top20.map((log: any) => {
-                  const task = tasks.find(t => t.id === log.task_id);
-                  const company = task ? companies.find(c => c.id === task.company_id) : null;
-                  let updaterName = 'Unknown';
-                  
-                  const localPartner = partners.find(p => p.id === log.updated_by);
-                  if (localPartner) {
-                    updaterName = localPartner.username;
-                  } else if (sessionUser && log.updated_by === sessionUser.id) {
-                    updaterName = sessionUser.username;
-                  } else {
-                    const extra = extraUsers.find(u => u.id === log.updated_by);
-                    if (extra) updaterName = extra.username;
-                  }
-                  
-                  return { ...log, task, company, updaterName };
-                });
-                setRecentActivityLogs(enriched);
-              }
-            } catch (e) { console.error(e); }
-            setRecentLoading(false);
-          }}
-          style={{
-            background: '#ffffff', borderRadius: '14px', padding: '16px 18px',
-            border: '1px solid #e2e8f0', cursor: 'pointer',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.04)', transition: 'all 0.2s ease',
-            display: 'flex', alignItems: 'center', gap: '14px',
-          }}
-          onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 4px 16px rgba(59,130,246,0.12)'; e.currentTarget.style.borderColor = '#93c5fd'; }}
-          onMouseLeave={e => { e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.04)'; e.currentTarget.style.borderColor = '#e2e8f0'; }}
-        >
-          <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: 'linear-gradient(135deg, #dbeafe, #bfdbfe)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <Clock size={20} color="#2563eb" />
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.3px' }}>Recently Modified</div>
-            <div style={{ fontSize: '22px', fontWeight: 800, color: '#0f172a', lineHeight: 1.2 }}>
-              {(() => {
-                const now = new Date();
-                const recent = tasks.filter(t => {
-                  const created = new Date(t.created_at);
-                  return (now.getTime() - created.getTime()) < 7 * 24 * 60 * 60 * 1000;
-                });
-                return recent.length;
-              })()}
+              } catch (e) { console.error(e); }
+              setRecentLoading(false);
+            }}
+            style={{
+              background: '#ffffff', borderRadius: '14px', padding: '16px 18px',
+              border: '1px solid #e2e8f0', cursor: 'pointer',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.04)', transition: 'all 0.2s ease',
+              display: 'flex', alignItems: 'center', gap: '14px',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 4px 16px rgba(59,130,246,0.12)'; e.currentTarget.style.borderColor = '#93c5fd'; }}
+            onMouseLeave={e => { e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.04)'; e.currentTarget.style.borderColor = '#e2e8f0'; }}
+          >
+            <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: 'linear-gradient(135deg, #dbeafe, #bfdbfe)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <Clock size={20} color="#2563eb" />
             </div>
-            <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '1px' }}>Last 7 days · Click to view</div>
-          </div>
-          <ArrowRight size={16} color="#94a3b8" />
-        </div>
-
-        {/* Card 2: Completed Tasks */}
-        <div
-          onClick={() => setShowCompletedModal(true)}
-          style={{
-            background: '#ffffff', borderRadius: '14px', padding: '16px 18px',
-            border: '1px solid #e2e8f0', cursor: 'pointer',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.04)', transition: 'all 0.2s ease',
-            display: 'flex', alignItems: 'center', gap: '14px',
-          }}
-          onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 4px 16px rgba(16,185,129,0.12)'; e.currentTarget.style.borderColor = '#6ee7b7'; }}
-          onMouseLeave={e => { e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.04)'; e.currentTarget.style.borderColor = '#e2e8f0'; }}
-        >
-          <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: 'linear-gradient(135deg, #d1fae5, #a7f3d0)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <CheckCircle2 size={20} color="#059669" />
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.3px' }}>Completed</div>
-            <div style={{ fontSize: '22px', fontWeight: 800, color: '#0f172a', lineHeight: 1.2 }}>
-              {tasks.filter(t => {
-                const sl = (t.status || '').toLowerCase();
-                return sl.includes('complete') || sl.includes('closed') || sl.includes('filed') || sl.includes('done');
-              }).length}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.3px' }}>Recently Modified</div>
+              <div style={{ fontSize: '22px', fontWeight: 800, color: '#0f172a', lineHeight: 1.2 }}>
+                {(() => {
+                  const now = new Date();
+                  const recent = tasks.filter(t => {
+                    const created = new Date(t.created_at);
+                    return (now.getTime() - created.getTime()) < 7 * 24 * 60 * 60 * 1000;
+                  });
+                  return recent.length;
+                })()}
+              </div>
+              <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '1px' }}>Last 7 days · Click to view</div>
             </div>
-            <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '1px' }}>Total completed · Click to view</div>
+            <ArrowRight size={16} color="#94a3b8" />
           </div>
-          <ArrowRight size={16} color="#94a3b8" />
-        </div>
 
-        {/* Card 3: All Task Types */}
-        <div
-          onClick={() => setShowTaskTypeModal(true)}
-          style={{
-            background: '#ffffff', borderRadius: '14px', padding: '16px 18px',
-            border: '1px solid #e2e8f0', cursor: 'pointer',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.04)', transition: 'all 0.2s ease',
-            display: 'flex', alignItems: 'center', gap: '14px',
-          }}
-          onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 4px 16px rgba(139,92,246,0.12)'; e.currentTarget.style.borderColor = '#c4b5fd'; }}
-          onMouseLeave={e => { e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.04)'; e.currentTarget.style.borderColor = '#e2e8f0'; }}
-        >
-          <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: 'linear-gradient(135deg, #ede9fe, #ddd6fe)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <BarChart3 size={20} color="#7c3aed" />
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.3px' }}>Task Types</div>
-            <div style={{ fontSize: '22px', fontWeight: 800, color: '#0f172a', lineHeight: 1.2 }}>
-              {taskTypes.filter(t => t.active).length}
+          {/* Card 2: Completed Tasks */}
+          <div
+            onClick={() => setShowCompletedModal(true)}
+            style={{
+              background: '#ffffff', borderRadius: '14px', padding: '16px 18px',
+              border: '1px solid #e2e8f0', cursor: 'pointer',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.04)', transition: 'all 0.2s ease',
+              display: 'flex', alignItems: 'center', gap: '14px',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 4px 16px rgba(16,185,129,0.12)'; e.currentTarget.style.borderColor = '#6ee7b7'; }}
+            onMouseLeave={e => { e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.04)'; e.currentTarget.style.borderColor = '#e2e8f0'; }}
+          >
+            <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: 'linear-gradient(135deg, #d1fae5, #a7f3d0)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <CheckCircle2 size={20} color="#059669" />
             </div>
-            <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '1px' }}>Distribution · Click to view</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.3px' }}>Completed</div>
+              <div style={{ fontSize: '22px', fontWeight: 800, color: '#0f172a', lineHeight: 1.2 }}>
+                {tasks.filter(t => {
+                  const sl = (t.status || '').toLowerCase();
+                  return sl.includes('complete') || sl.includes('closed') || sl.includes('filed') || sl.includes('done');
+                }).length}
+              </div>
+              <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '1px' }}>Total completed · Click to view</div>
+            </div>
+            <ArrowRight size={16} color="#94a3b8" />
           </div>
-          <ArrowRight size={16} color="#94a3b8" />
-        </div>
 
-        {/* Card 4: Status Distribution */}
-        <div
-          onClick={() => setShowStatusModal(true)}
-          style={{
-            background: '#ffffff', borderRadius: '14px', padding: '16px 18px',
-            border: '1px solid #e2e8f0', cursor: 'pointer',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.04)', transition: 'all 0.2s ease',
-            display: 'flex', alignItems: 'center', gap: '14px',
-          }}
-          onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 4px 16px rgba(249,115,22,0.12)'; e.currentTarget.style.borderColor = '#fdba74'; }}
-          onMouseLeave={e => { e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.04)'; e.currentTarget.style.borderColor = '#e2e8f0'; }}
-        >
-          <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: 'linear-gradient(135deg, #ffedd5, #fed7aa)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <PieChart size={20} color="#ea580c" />
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.3px' }}>Status Overview</div>
-            <div style={{ fontSize: '22px', fontWeight: 800, color: '#0f172a', lineHeight: 1.2 }}>
-              {(() => {
-                const statusSet = new Set<string>();
-                tasks.forEach(t => { if (t.status) statusSet.add(t.status); });
-                return statusSet.size;
-              })()}
+          {/* Card 3: All Task Types */}
+          <div
+            onClick={() => setShowTaskTypeModal(true)}
+            style={{
+              background: '#ffffff', borderRadius: '14px', padding: '16px 18px',
+              border: '1px solid #e2e8f0', cursor: 'pointer',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.04)', transition: 'all 0.2s ease',
+              display: 'flex', alignItems: 'center', gap: '14px',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 4px 16px rgba(139,92,246,0.12)'; e.currentTarget.style.borderColor = '#c4b5fd'; }}
+            onMouseLeave={e => { e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.04)'; e.currentTarget.style.borderColor = '#e2e8f0'; }}
+          >
+            <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: 'linear-gradient(135deg, #ede9fe, #ddd6fe)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <BarChart3 size={20} color="#7c3aed" />
             </div>
-            <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '1px' }}>Statuses · Click to view</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.3px' }}>Task Types</div>
+              <div style={{ fontSize: '22px', fontWeight: 800, color: '#0f172a', lineHeight: 1.2 }}>
+                {taskTypes.filter(t => t.active).length}
+              </div>
+              <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '1px' }}>Distribution · Click to view</div>
+            </div>
+            <ArrowRight size={16} color="#94a3b8" />
           </div>
-          <ArrowRight size={16} color="#94a3b8" />
+
+          {/* Card 4: Status Distribution */}
+          <div
+            onClick={() => setShowStatusModal(true)}
+            style={{
+              background: '#ffffff', borderRadius: '14px', padding: '16px 18px',
+              border: '1px solid #e2e8f0', cursor: 'pointer',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.04)', transition: 'all 0.2s ease',
+              display: 'flex', alignItems: 'center', gap: '14px',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 4px 16px rgba(249,115,22,0.12)'; e.currentTarget.style.borderColor = '#fdba74'; }}
+            onMouseLeave={e => { e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.04)'; e.currentTarget.style.borderColor = '#e2e8f0'; }}
+          >
+            <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: 'linear-gradient(135deg, #ffedd5, #fed7aa)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <PieChart size={20} color="#ea580c" />
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.3px' }}>Status Overview</div>
+              <div style={{ fontSize: '22px', fontWeight: 800, color: '#0f172a', lineHeight: 1.2 }}>
+                {(() => {
+                  const statusSet = new Set<string>();
+                  tasks.forEach(t => { if (t.status) statusSet.add(t.status); });
+                  return statusSet.size;
+                })()}
+              </div>
+              <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '1px' }}>Statuses · Click to view</div>
+            </div>
+            <ArrowRight size={16} color="#94a3b8" />
+          </div>
         </div>
-      </div>
       )}
 
       {/* ─── Recently Modified Modal ─── */}
@@ -1403,9 +1428,35 @@ export default function BahrainTasks() {
                     ) : <span style={{ fontSize: '11px', color: '#94a3b8' }}>—</span>}
                   </td>
                   <td
-                    style={{ ...compactCell, position: 'relative' }}
-                    onMouseEnter={() => setHoveredDescTaskId(task.id)}
-                    onMouseLeave={() => setHoveredDescTaskId(null)}
+                    style={{ ...compactCell, position: 'relative', cursor: (task.description && inlineEditDescId !== task.id) ? 'pointer' : 'default' }}
+                    onMouseEnter={(e) => {
+                      setHoveredDescTaskId(task.id);
+                      if (task.description && inlineEditDescId !== task.id) {
+                        if (tooltipTimeoutRef.current) clearTimeout(tooltipTimeoutRef.current);
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        const tooltipWidth = 330;
+                        const tooltipHeight = 180;
+                        
+                        let left = rect.left + window.scrollX + (rect.width / 2) - (tooltipWidth / 2);
+                        if (left < 16) left = 16;
+                        if (left + tooltipWidth > window.innerWidth - 16) {
+                          left = window.innerWidth - tooltipWidth - 16;
+                        }
+                        
+                        const top = rect.top + window.scrollY - 6;
+                        const align: 'top' | 'bottom' = 'top';
+                        
+                        setTooltipPos({ x: left, y: top, align });
+                        setActiveTooltipTaskId(task.id);
+                      }
+                    }}
+                    onMouseLeave={() => {
+                      setHoveredDescTaskId(null);
+                      if (tooltipTimeoutRef.current) clearTimeout(tooltipTimeoutRef.current);
+                      tooltipTimeoutRef.current = setTimeout(() => {
+                        setActiveTooltipTaskId(null);
+                      }, 120);
+                    }}
                   >
                     {inlineEditDescId === task.id ? (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: '180px', position: 'absolute', zIndex: 10, background: '#fff', padding: '8px', borderRadius: '8px', boxShadow: '0 4px 20px rgba(0,0,0,0.15)', border: '1px solid #e2e8f0', top: '50%', transform: 'translateY(-50%)', left: '10px' }}>
@@ -1452,7 +1503,7 @@ export default function BahrainTasks() {
                       </div>
                     ) : (
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px', minHeight: '24px' }}>
-                        <span style={{ fontSize: '11px', color: '#475569', maxWidth: '150px', display: 'inline-block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={task.description || ''}>
+                        <span style={{ fontSize: '11px', color: '#475569', maxWidth: '150px', display: 'inline-block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {task.description || '—'}
                         </span>
                         {hoveredDescTaskId === task.id && canManageTask(task) && (
@@ -1460,6 +1511,7 @@ export default function BahrainTasks() {
                             onClick={() => {
                               setInlineEditDescId(task.id);
                               setInlineEditDescValue(task.description || '');
+                              setActiveTooltipTaskId(null); // Clear tooltip when starting edit
                             }}
                             style={{
                               background: '#eff6ff',
@@ -1923,6 +1975,55 @@ export default function BahrainTasks() {
             </div>
           </div>
         </Modal>
+      )}
+      {activeTooltipTaskId && (
+        <div
+          onMouseEnter={handleTooltipMouseEnter}
+          onMouseLeave={handleTooltipMouseLeave}
+          style={{
+            position: 'absolute',
+            top: tooltipPos.y,
+            left: tooltipPos.x,
+            width: '330px',
+            zIndex: 9999,
+            paddingTop: tooltipPos.align === 'bottom' ? '6px' : '0px',
+            paddingBottom: tooltipPos.align === 'top' ? '6px' : '0px',
+            marginTop: tooltipPos.align === 'bottom' ? '-6px' : '0px',
+            marginBottom: tooltipPos.align === 'top' ? '-6px' : '0px',
+            transform: tooltipPos.align === 'top' ? 'translateY(-100%)' : 'none',
+            pointerEvents: 'auto',
+          }}
+        >
+          <div
+            className={`tooltip-glass-card ${
+              tooltipPos.align === 'bottom' ? 'animate-tooltip-down' : 'animate-tooltip-up'
+            }`}
+            style={{
+              borderRadius: '14px',
+              padding: '16px',
+              textAlign: 'left',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+              <span style={{ fontSize: '12px' }}>📝</span>
+              <span style={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', color: '#64748b' }}>
+                Task Description
+              </span>
+            </div>
+            <div style={{
+              fontSize: '13px',
+              lineHeight: 1.6,
+              color: '#1e293b',
+              maxHeight: '220px',
+              overflowY: 'auto',
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
+              paddingRight: '4px'
+            }}>
+              {tasks.find(t => t.id === activeTooltipTaskId)?.description || ''}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
