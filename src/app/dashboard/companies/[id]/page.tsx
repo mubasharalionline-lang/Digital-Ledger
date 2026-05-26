@@ -291,7 +291,7 @@ export default function CompanyDetailPage() {
 
   const generators = [
     { name: 'WhatsApp Generator', icon: <MessageSquare size={22} />, color: '#25d366', bg: '#e8faf0', link: null },
-    { name: 'Confirmation Generator', icon: <FileCheck size={22} />, color: '#5856d6', bg: '#ededfa', link: null },
+    { name: 'Confirmations Generator', icon: <FileCheck size={22} />, color: '#5856d6', bg: '#ededfa', link: `/dashboard/companies/${id}/confirmations` },
     { name: 'Letter Generator', icon: <Mail size={22} />, color: '#0071e3', bg: '#e8f4fd', link: null },
     { name: 'Net Worth Certificate', icon: <Award size={22} />, color: '#ff9f0a', bg: '#fff5e5', link: `/dashboard/companies/${id}/net-worth` },
   ];
