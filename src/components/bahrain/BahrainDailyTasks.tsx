@@ -301,7 +301,7 @@ export default function BahrainDailyTasks() {
 
       const dbStatuses = statusRes.data?.filter(s => s.active !== false).map(s => s.name) || [];
       const resolvedStatuses = dbStatuses.length > 0
-        ? dbStatuses.sort((a: string, b: string) => a.localeCompare(b))
+        ? [...new Set(dbStatuses)].sort((a: string, b: string) => a.localeCompare(b))
         : (!dataCountry || dataCountry === 'Bahrain' ? [...BAHRAIN_STATUSES].sort((a, b) => a.localeCompare(b)) : []);
       if (dbStatuses.length > 0) {
         setDynamicStatuses(resolvedStatuses);

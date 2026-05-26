@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS users (
   username TEXT UNIQUE NOT NULL,
   password TEXT NOT NULL,
   role TEXT NOT NULL DEFAULT 'staff' CHECK (role IN ('admin', 'staff')),
-  country TEXT CHECK (country IN ('New Zealand', 'Bahrain') OR country IS NULL),
+  country TEXT CHECK (country IN ('New Zealand', 'Bahrain', 'UAE') OR country IS NULL),
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

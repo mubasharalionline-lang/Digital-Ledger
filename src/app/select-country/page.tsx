@@ -35,6 +35,7 @@ export default function SelectCountryPage() {
     setCountries([
       { id: '1', code: 'BH', name: 'Bahrain', flag: '🇧🇭' },
       { id: '2', code: 'NZ', name: 'New Zealand', flag: '🇳🇿' },
+      { id: '3', code: 'UAE', name: 'UAE', flag: '🇦🇪' },
     ]);
     setLoading(false);
   }

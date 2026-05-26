@@ -201,7 +201,7 @@ export default function LoginPage() {
                     onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.background = '#F0F7FF'; }}
                     onMouseLeave={e => { e.currentTarget.style.borderColor = '#E5E7EB'; e.currentTarget.style.background = '#FAFAFA'; }}
                   >
-                    <span style={{ fontSize: '22px' }}>{country === 'Bahrain' ? '🇧🇭' : country === 'New Zealand' ? '🇳🇿' : '🌍'}</span>
+                    <span style={{ fontSize: '22px' }}>{country === 'Bahrain' ? '🇧🇭' : country === 'New Zealand' ? '🇳🇿' : country === 'UAE' ? '🇦🇪' : '🌍'}</span>
                     {country}
                     <ArrowRight size={16} style={{ marginLeft: 'auto', color: 'var(--text-tertiary)' }} />
                   </button>
