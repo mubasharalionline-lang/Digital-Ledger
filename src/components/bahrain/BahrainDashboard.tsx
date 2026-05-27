@@ -7,73 +7,21 @@ import { getDataCountry, getSession, isAdmin } from '@/lib/auth';
 import { useRouter } from 'next/navigation';
 import {
   AlertTriangle,
-  Clock,
   Users as UsersIcon,
   Building2,
   ListTodo,
   ChevronRight,
   ArrowUpRight,
-  BarChart3,
   CalendarDays,
   Repeat,
   CheckCircle2,
-  Loader2,
-  MessageCircle,
-  Trash2,
-  Edit2,
-  Lock,
-  ShieldAlert,
 } from 'lucide-react';
-import { EGRESS_OPTIMIZATION_MODE } from '@/lib/optimizationConfig';
 
-interface UrgentClient {
-  company: Company;
-  tasks: Task[];
-  overdueCount: number;
-}
 
 interface TaskTypeStats {
   taskType: TaskType;
   count: number;
   companies: Set<string>;
-}
-
-interface PartnerWorkload {
-  partner: User;
-  totalTasks: number;
-  completedTasks: number;
-  overdueTasks: number;
-  inProgressTasks: number;
-}
-
-interface RecentMessage {
-  id: string;
-  task_id: string;
-  message: string;
-  created_at: string;
-  sender_name: string;
-  sender_role: string;
-  sender_id: string;
-  task_title: string;
-  company_name: string;
-  task_status: string;
-  task_type_name: string;
-  is_daily: boolean;
-}
-
-
-interface RecentDescUpdate {
-  id: string;
-  task_id: string;
-  description_preview: string;
-  created_at: string;
-  updated_by_name: string;
-  task_title: string;
-  company_name: string;
-  task_status: string;
-  task_type_name: string;
-  assigned_to_name: string;
-  is_daily: boolean;
 }
 
 export default function BahrainDashboard() {
@@ -82,19 +30,13 @@ export default function BahrainDashboard() {
   const [overdueTasks, setOverdueTasks] = useState(0);
   const [activePartners, setActivePartners] = useState(0);
   const [totalCompanies, setTotalCompanies] = useState(0);
-  const [urgentClients, setUrgentClients] = useState<UrgentClient[]>([]);
   const [taskTypeStats, setTaskTypeStats] = useState<TaskTypeStats[]>([]);
   const [statusCounts, setStatusCounts] = useState<Record<string, number>>({});
-  const [urgentTasks, setUrgentTasks] = useState<(Task & { companyName: string; assignedName: string; daysLeft: number })[]>([]);
-  const [partnerWorkloads, setPartnerWorkloads] = useState<PartnerWorkload[]>([]);
   const [dailyTaskStats, setDailyTaskStats] = useState<{ total: number; pending: number; completed: number; repeatCount: number; statusBreakdown: Record<string, number> }>({ total: 0, pending: 0, completed: 0, repeatCount: 0, statusBreakdown: {} });
-  const [recentMessages, setRecentMessages] = useState<RecentMessage[]>([]);
-  const [recentDescUpdates, setRecentDescUpdates] = useState<RecentDescUpdate[]>([]);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [lastReadMap, setLastReadMap] = useState<Record<string, string>>({});
 
 
   const [formattedDate, setFormattedDate] = useState('');
@@ -110,142 +52,6 @@ export default function BahrainDashboard() {
   useEffect(() => {
     const { user } = getSession();
     setCurrentUser(user);
-    try {
-      const raw = localStorage.getItem('task_last_read');
-      if (raw) setLastReadMap(JSON.parse(raw));
-    } catch {}
-  }, []);
-
-
-  const handleDeleteMessage = async (e: React.MouseEvent, id: string) => {
-    e.stopPropagation();
-    if (!confirm('Are you sure you want to delete this message?')) return;
-    try {
-      await supabase.from('task_messages').delete().eq('id', id);
-      setRecentMessages(prev => prev.filter(m => m.id !== id));
-    } catch (err) {
-      console.error('Failed to delete message:', err);
-    }
-  };
-
-  const loadRecentMessages = useCallback(async () => {
-    if (EGRESS_OPTIMIZATION_MODE) return;
-    try {
-      const dataCountry = getDataCountry();
-      const { data: msgs, error: msgsError } = await supabase
-        .from('task_messages')
-        .select('id, task_id, message, created_at, sender_id, tasks!inner(country)')
-        .eq('tasks.country', dataCountry || 'Bahrain')
-        .order('created_at', { ascending: false })
-        .limit(20);
-
-      if (msgsError) {
-        console.error('task_messages fetch error:', msgsError);
-      }
-
-      if (!msgs || msgs.length === 0) return;
-
-      const msgTaskIds = [...new Set(msgs.map(m => m.task_id))];
-      const msgSenderIds = [...new Set(msgs.map(m => m.sender_id))];
-
-      const [tasksForMsgs, sendersForMsgs, companiesForMsgs, taskTypesForMsgs] = await Promise.all([
-        supabase.from('tasks').select('id, title, status, company_id, is_daily, task_type_id').in('id', msgTaskIds),
-        supabase.from('users').select('id, username, role').in('id', msgSenderIds),
-        supabase.from('companies').select('id, company_name').eq('country', dataCountry || 'Bahrain'),
-        supabase.from('task_types').select('id, name').eq('country', dataCountry || 'Bahrain'),
-      ]);
-
-      const taskMap = new Map((tasksForMsgs.data || []).map(t => [t.id, t]));
-      const senderMap = new Map((sendersForMsgs.data || []).map(u => [u.id, u]));
-      const companyMap = new Map((companiesForMsgs.data || []).map(c => [c.id, c.company_name]));
-      const taskTypeMap = new Map((taskTypesForMsgs.data || []).map(tt => [tt.id, tt.name]));
-
-      const enriched: RecentMessage[] = msgs.map(m => {
-        const task = taskMap.get(m.task_id);
-        const sender = senderMap.get(m.sender_id);
-        return {
-          id: m.id,
-          task_id: m.task_id,
-          message: m.message,
-          created_at: m.created_at,
-          sender_name: sender?.username || 'Unknown',
-          sender_role: sender?.role || '',
-          sender_id: m.sender_id,
-          task_title: task?.title || 'Unknown Task',
-          company_name: task?.company_id ? (companyMap.get(task.company_id) || '—') : 'Daily Task',
-          task_status: task?.status || '',
-          task_type_name: task?.task_type_id ? (taskTypeMap.get(task.task_type_id) || '') : '',
-          is_daily: task?.is_daily || false,
-        };
-      }).filter(m => m.task_title !== 'Unknown Task');
-
-      setRecentMessages(enriched);
-    } catch (err) {
-      console.error('Messages load error:', err);
-    }
-  }, []);
-
-  const loadRecentDescUpdates = useCallback(async () => {
-    if (EGRESS_OPTIMIZATION_MODE) return;
-    try {
-      const dataCountry = getDataCountry();
-      const { data: logs, error: logsError } = await supabase
-        .from('status_log')
-        .select('id, task_id, remarks, created_at, updated_by, tasks!inner(country)')
-        .ilike('remarks', 'Description updated to:%')
-        .eq('tasks.country', dataCountry || 'Bahrain')
-        .order('created_at', { ascending: false })
-        .limit(20);
-
-      if (logsError) {
-        console.error('status_log fetch error:', logsError);
-      }
-
-      if (!logs || logs.length === 0) return;
-
-      const taskIds = [...new Set(logs.map(l => l.task_id))];
-      const { data: tasksForLogs } = await supabase
-        .from('tasks')
-        .select('id, title, status, company_id, is_daily, task_type_id, assigned_to')
-        .in('id', taskIds);
-
-      const userIds = [...new Set([
-        ...logs.map(l => l.updated_by), 
-        ...(tasksForLogs || []).map(t => t.assigned_to)
-      ].filter(Boolean))];
-
-      const [usersRes, companiesRes, taskTypesRes] = await Promise.all([
-        supabase.from('users').select('id, username').in('id', userIds),
-        supabase.from('companies').select('id, company_name').eq('country', dataCountry || 'Bahrain'),
-        supabase.from('task_types').select('id, name').eq('country', dataCountry || 'Bahrain'),
-      ]);
-
-      const taskMap = new Map((tasksForLogs || []).map(t => [t.id, t]));
-      const userMap = new Map((usersRes.data || []).map(u => [u.id, u.username]));
-      const companyMap = new Map((companiesRes.data || []).map(c => [c.id, c.company_name]));
-      const taskTypeMap = new Map((taskTypesRes.data || []).map(tt => [tt.id, tt.name]));
-
-      const enriched: RecentDescUpdate[] = logs.map(l => {
-        const task = taskMap.get(l.task_id);
-        return {
-          id: l.id,
-          task_id: l.task_id,
-          description_preview: l.remarks?.replace('Description updated to: ', '') || '',
-          created_at: l.created_at,
-          updated_by_name: l.updated_by ? (userMap.get(l.updated_by) || 'Unknown') : 'Unknown',
-          task_title: task?.title || 'Unknown Task',
-          company_name: task?.company_id ? (companyMap.get(task.company_id) || '—') : 'Daily Task',
-          task_status: task?.status || '',
-          task_type_name: task?.task_type_id ? (taskTypeMap.get(task.task_type_id) || '') : '',
-          assigned_to_name: task?.assigned_to ? (userMap.get(task.assigned_to) || 'Unassigned') : 'Unassigned',
-          is_daily: task?.is_daily || false,
-        };
-      }).filter(u => u.task_title !== 'Unknown Task');
-
-      setRecentDescUpdates(enriched);
-    } catch (err) {
-      console.error('Desc updates load error:', err);
-    }
   }, []);
 
   const loadDashboard = useCallback(async () => {
@@ -267,11 +73,8 @@ export default function BahrainDashboard() {
           setTotalCompanies(parsed.totalCompanies);
           setActivePartners(parsed.activePartners);
           setOverdueTasks(parsed.overdueTasks);
-          setUrgentClients(parsed.urgentClients);
           setTaskTypeStats(parsed.taskTypeStats);
           setStatusCounts(parsed.statusCounts);
-          setUrgentTasks(parsed.urgentTasks || []);
-          if (parsed.partnerWorkloads) setPartnerWorkloads(parsed.partnerWorkloads);
           setLoading(false);
           useCache = true;
         } catch (e) {}
@@ -279,9 +82,6 @@ export default function BahrainDashboard() {
     }
 
     if (useCache) {
-      // Still load fresh messages even when dashboard stats are cached
-      await loadRecentMessages();
-      await loadRecentDescUpdates();
       return;
     }
 
@@ -412,35 +212,6 @@ export default function BahrainDashboard() {
       }).length;
       setOverdueTasks(newOverdueTasks);
 
-      // Urgent clients
-      const sevenDaysFromNow = new Date();
-      sevenDaysFromNow.setDate(today.getDate() + 7);
-
-      const urgentMap = new Map<string, UrgentClient>();
-      taskList.forEach(task => {
-        if (task.status === 'Closed' || task.status === 'Completed') return;
-        const dueDate = new Date(task.deadline);
-        const isUrgentPriority = task.priority === 'Urgent' || task.priority === 'Critical';
-        if (dueDate <= sevenDaysFromNow || isUrgentPriority) {
-          const company = companyList.find(c => c.id === task.company_id);
-          if (company) {
-            if (!urgentMap.has(company.id)) {
-              urgentMap.set(company.id, { company, tasks: [], overdueCount: 0 });
-            }
-            const entry = urgentMap.get(company.id)!;
-            entry.tasks.push(task);
-            if (dueDate < today) {
-              entry.overdueCount++;
-            } else if (isUrgentPriority && dueDate > sevenDaysFromNow) {
-              // Priority-based urgency, not strictly overdue or within 7 days yet
-              // We don't increment overdueCount, but it stays in the list
-            }
-          }
-        }
-      });
-      const newUrgentClients = Array.from(urgentMap.values()).sort((a, b) => b.overdueCount - a.overdueCount);
-      setUrgentClients(newUrgentClients);
-
       // Task types stats
       const ttMap = new Map<string, TaskTypeStats>();
       taskList.forEach(task => {
@@ -468,50 +239,6 @@ export default function BahrainDashboard() {
       taskList.forEach(t => { newStatusCounts[t.status] = (newStatusCounts[t.status] || 0) + 1; });
       setStatusCounts(newStatusCounts);
 
-      const usersList = usersRes.data || [];
-
-      // Urgent tasks
-      const newUrgentTasks = taskList
-        .filter(t => t.status !== 'Closed' && t.status !== 'Completed' && t.priority === 'Urgent')
-        .map(t => {
-          const company = companyList.find(c => c.id === t.company_id);
-          const daysLeft = Math.ceil((new Date(t.deadline).getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-          const assignedUser = usersList.find(u => u.id === t.assigned_to);
-          return {
-            ...t,
-            companyName: company?.company_name || 'Unknown',
-            assignedName: assignedUser?.username || 'Unassigned',
-            daysLeft
-          };
-        })
-        .sort((a, b) => {
-          const aOverdue = a.daysLeft < 0;
-          const bOverdue = b.daysLeft < 0;
-          if (aOverdue && !bOverdue) return -1;
-          if (!aOverdue && bOverdue) return 1;
-          return new Date(a.deadline).getTime() - new Date(b.deadline).getTime();
-        });
-      setUrgentTasks(newUrgentTasks);
-
-      // Partner workload
-      const newPartnerWorkloads: PartnerWorkload[] = usersList.map(partner => {
-        const partnerTasks = taskList.filter(t => 
-          t.assigned_to === partner.id || (t.assigned_partners && t.assigned_partners.includes(partner.id))
-        );
-        const completedTasks = partnerTasks.filter(t => 
-          t.status === 'Closed' || t.status === 'Completed' || t.status === 'Filed'
-        ).length;
-        const overdueTasks = partnerTasks.filter(t => {
-          const due = new Date(t.deadline);
-          return due < today && t.status !== 'Closed' && t.status !== 'Completed' && t.status !== 'Filed';
-        }).length;
-        const inProgressTasks = partnerTasks.filter(t => 
-          t.status !== 'Closed' && t.status !== 'Completed' && t.status !== 'Filed' && t.status !== 'Not Started'
-        ).length;
-        return { partner, totalTasks: partnerTasks.length, completedTasks, overdueTasks, inProgressTasks };
-      }).filter(pw => pw.totalTasks > 0).sort((a, b) => b.totalTasks - a.totalTasks);
-      setPartnerWorkloads(newPartnerWorkloads);
-
       // Save cache (exclude Sets which don't JSON serialize well)
       const serializableTaskTypeStats = newTaskTypeStats.map(s => ({ ...s, companies: Array.from(s.companies) }));
       sessionStorage.setItem(cacheKey, JSON.stringify({
@@ -521,23 +248,16 @@ export default function BahrainDashboard() {
         totalCompanies: newTotalCompanies,
         activePartners: (usersRes.data || []).length,
         overdueTasks: newOverdueTasks,
-        urgentClients: newUrgentClients,
         taskTypeStats: serializableTaskTypeStats,
         statusCounts: newStatusCounts,
-        urgentTasks: newUrgentTasks,
-        partnerWorkloads: newPartnerWorkloads
       }));
       sessionStorage.setItem('dashboard_data_time_v2', Date.now().toString());
 
-      // Load recent messages (always fresh, not cached)
-      loadRecentMessages();
-      loadRecentDescUpdates();
-      
     } catch (err) {
       console.error('Dashboard load error:', err);
     }
     setLoading(false);
-  }, [loadRecentMessages, loadRecentDescUpdates]);
+  }, []);
 
   useEffect(() => {
     loadDashboard();
@@ -627,14 +347,7 @@ export default function BahrainDashboard() {
           </div>
           <div style={{ borderTop: '1px solid rgba(255, 255, 255, 0.08)', paddingTop: '16px', marginTop: '8px' }}>
             <p style={{ fontSize: '15px', color: '#cbd5e1', margin: 0, fontWeight: 500, lineHeight: 1.5 }}>
-              You have <span style={{ color: overdueTasks > 0 ? '#f87171' : '#34d399', fontWeight: 700 }}>{overdueTasks}</span> overdue task{overdueTasks !== 1 ? 's' : ''} out of <span style={{ color: '#fff', fontWeight: 700 }}>{totalTasks}</span> total task{totalTasks !== 1 ? 's' : ''}.{' '}
-              {urgentClients.length > 0 ? (
-                <span>
-                  There are <span style={{ color: '#fbbf24', fontWeight: 700 }}>{urgentClients.length}</span> urgent client{urgentClients.length !== 1 ? 's' : ''} requiring immediate follow-up.
-                </span>
-              ) : (
-                <span style={{ color: '#94a3b8' }}>All operations are running smoothly with no urgent issues.</span>
-              )}
+              You have <span style={{ color: overdueTasks > 0 ? '#f87171' : '#34d399', fontWeight: 700 }}>{overdueTasks}</span> overdue task{overdueTasks !== 1 ? 's' : ''} out of <span style={{ color: '#fff', fontWeight: 700 }}>{totalTasks}</span> total task{totalTasks !== 1 ? 's' : ''}.
             </p>
           </div>
         </div>
@@ -654,133 +367,6 @@ export default function BahrainDashboard() {
       </div>
 
       <div className="dashboard-panels-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '20px' }}>
-
-        {/* Urgent Clients */}
-        <div style={panelStyle}>
-          <div style={panelHeaderStyle}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <div style={{ background: '#fef2f2', color: '#ef4444', width: '36px', height: '36px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><AlertTriangle size={18} /></div>
-              <h3 style={{ ...panelTitleStyle, margin: 0 }}>Urgent Clients</h3>
-            </div>
-            <span style={badgeStyle}>Due ≤ 7 days</span>
-          </div>
-          <div className="custom-scrollbar" style={listContainerStyle}>
-            {urgentClients.length === 0 ? (
-              <EmptyState message="No urgent clients right now" icon="🎉" />
-            ) : (
-              urgentClients.map(({ company, tasks, overdueCount }) => (
-                <div key={company.id}
-                  style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    padding: '16px',
-                    border: '1px solid #f1f5f9',
-                    borderRadius: '16px',
-                    background: '#ffffff',
-                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                    position: 'relative',
-                    overflow: 'hidden',
-                    flexShrink: 0
-                  }}
-                  onMouseEnter={e => {
-                    e.currentTarget.style.transform = 'translateY(-2px)';
-                    e.currentTarget.style.boxShadow = '0 12px 24px -8px rgba(239, 68, 68, 0.15)';
-                    e.currentTarget.style.borderColor = '#fca5a5';
-                  }}
-                  onMouseLeave={e => {
-                    e.currentTarget.style.transform = 'none';
-                    e.currentTarget.style.boxShadow = 'none';
-                    e.currentTarget.style.borderColor = '#f1f5f9';
-                  }}
-                >
-                  <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '4px', background: 'linear-gradient(to bottom, #ef4444, #f87171)' }} />
-                  
-                  {/* Company Header Row */}
-                  <div 
-                    onClick={() => router.push(`/dashboard/tasks?company=${company.id}`)}
-                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', width: '100%' }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px', minWidth: 0, flex: 1 }}>
-                      <div style={{ width: '42px', height: '42px', borderRadius: '12px', background: '#fef2f2', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                        <AlertTriangle size={20} strokeWidth={2.5} />
-                      </div>
-                      <div style={{ minWidth: 0, flex: 1 }}>
-                        <div style={{ fontSize: '15px', fontWeight: 700, color: '#0f172a', marginBottom: '4px', letterSpacing: '-0.01em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {company.company_name}
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: 500, flexWrap: 'wrap' }}>
-                          <span style={{ color: '#ef4444', background: '#fef2f2', padding: '2px 8px', borderRadius: '6px' }}>
-                            {tasks.length} task{tasks.length > 1 ? 's' : ''}
-                          </span>
-                          {overdueCount > 0 && (
-                            <span style={{ color: '#b91c1c', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                              <div style={{ width: '4px', height: '4px', borderRadius: '50%', background: '#b91c1c' }}/>
-                              {overdueCount} overdue
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', transition: 'all 0.2s ease', marginLeft: '8px' }}
-                      onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'}
-                      onMouseLeave={e => e.currentTarget.style.background = '#f8fafc'}
-                    >
-                      <ChevronRight size={18} />
-                    </div>
-                  </div>
-
-                  {/* Tasks List with Priority Badges */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '14px', borderTop: '1px solid #f1f5f9', paddingTop: '12px' }}>
-                    {tasks.map(task => {
-                      const prio = getPriorityInfo(task.priority);
-                      return (
-                        <div 
-                          key={task.id}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            router.push(`/dashboard/tasks?openDesc=${task.id}`);
-                          }}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            gap: '12px',
-                            padding: '6px 8px',
-                            borderRadius: '8px',
-                            transition: 'background 0.2s ease',
-                            cursor: 'pointer'
-                          }}
-                          onMouseEnter={e => { e.currentTarget.style.background = '#f8fafc'; }}
-                          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
-                        >
-                          <span style={{ fontSize: '13px', color: '#475569', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
-                            {task.title}
-                          </span>
-                          <span style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                            fontSize: '11px',
-                            fontWeight: 700,
-                            color: prio.color,
-                            background: prio.bg,
-                            border: `1px solid ${prio.border}`,
-                            padding: '2px 8px',
-                            borderRadius: '6px',
-                            whiteSpace: 'nowrap',
-                            flexShrink: 0
-                          }}>
-                            <span style={{ fontSize: '10px' }}>{prio.emoji}</span> {prio.label}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
 
         {/* Tasks by Category */}
         {taskTypeStats.length > 0 && (
@@ -825,54 +411,6 @@ export default function BahrainDashboard() {
                   </div>
                 </div>
               )})}
-            </div>
-          </div>
-        )}
-
-        {/* Partner Workload */}
-        {isAdmin(getSession().user) && partnerWorkloads.length > 0 && (
-          <div style={panelStyle}>
-            <div style={panelHeaderStyle}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <div style={{ background: '#f5f3ff', color: '#8b5cf6', width: '36px', height: '36px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><UsersIcon size={18} /></div>
-                <h3 style={{ ...panelTitleStyle, margin: 0 }}>Partner Workload</h3>
-              </div>
-              <span style={badgeStyle}>{partnerWorkloads.length} active</span>
-            </div>
-            <div className="custom-scrollbar" style={listContainerStyle}>
-              {partnerWorkloads.map((pw, idx) => {
-                const { partner, totalTasks: total, completedTasks, overdueTasks: overdue, inProgressTasks } = pw;
-                const pct = total > 0 ? Math.round((completedTasks / total) * 100) : 0;
-                const colors = ['#8b5cf6', '#3b82f6', '#10b981', '#f59e0b', '#ec4899', '#14b8a6'];
-                const c = colors[idx % colors.length];
-                return (
-                  <div key={partner.id} style={{ padding: '16px', borderRadius: '14px', background: '#ffffff', border: overdue > 0 ? '1px solid #fecaca' : '1px solid #f1f5f9', transition: 'all 0.2s ease' }}
-                    onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.06)'}
-                    onMouseLeave={e => e.currentTarget.style.boxShadow = 'none'}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: `linear-gradient(135deg, ${c}, ${c}cc)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '15px', fontWeight: 700, color: '#fff' }}>
-                          {partner.username.charAt(0).toUpperCase()}
-                        </div>
-                        <div>
-                          <div style={{ fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>{partner.username}</div>
-                          <div style={{ fontSize: '12px', color: '#94a3b8' }}>{total} task{total !== 1 ? 's' : ''} assigned</div>
-                        </div>
-                      </div>
-                      <div style={{ fontSize: '20px', fontWeight: 800, color: c, background: `${c}10`, padding: '4px 12px', borderRadius: '10px' }}>{pct}%</div>
-                    </div>
-                    <div style={{ background: '#f1f5f9', height: '8px', borderRadius: '4px', overflow: 'hidden', marginBottom: '10px' }}>
-                      <div style={{ width: `${pct}%`, height: '100%', background: `linear-gradient(90deg, ${c}, ${c}aa)`, borderRadius: '4px', transition: 'width 1s ease-out' }} />
-                    </div>
-                    <div style={{ display: 'flex', gap: '16px', fontSize: '12px' }}>
-                      <span style={{ color: '#10b981', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}><span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10b981', display: 'inline-block' }} />{completedTasks} done</span>
-                      <span style={{ color: '#3b82f6', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}><span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#3b82f6', display: 'inline-block' }} />{inProgressTasks} active</span>
-                      {overdue > 0 && <span style={{ color: '#ef4444', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}><span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#ef4444', display: 'inline-block' }} />{overdue} overdue</span>}
-                    </div>
-                  </div>
-                );
-              })}
             </div>
           </div>
         )}
@@ -983,291 +521,6 @@ export default function BahrainDashboard() {
             )}
           </div>
         </div>
-
-        {/* Urgent Tasks */}
-        <div style={panelStyle}>
-          <div style={panelHeaderStyle}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <div style={{ background: '#fef2f2', color: '#ef4444', width: '38px', height: '38px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid rgba(239, 68, 68, 0.15)' }}>
-                <AlertTriangle size={18} />
-              </div>
-              <h3 style={panelTitleStyle}>Urgent Tasks</h3>
-            </div>
-            <span style={badgeStyle}>{urgentTasks.length} urgent</span>
-          </div>
-          
-          <div className="custom-scrollbar" style={listContainerStyle}>
-            {urgentTasks.length === 0 ? (
-              <EmptyState message="No urgent tasks found" icon="📅" />
-            ) : (
-              urgentTasks.map(task => {
-                const isOverdue = task.daysLeft < 0;
-                
-                return (
-                  <div key={task.id} onClick={() => router.push('/dashboard/tasks')}
-                    style={{ 
-                      padding: '16px 20px', 
-                      borderRadius: '18px', 
-                      cursor: 'pointer', 
-                      transition: 'all 0.2s ease-in-out', 
-                      background: isOverdue ? 'linear-gradient(135deg, #fffefe, #fff5f5)' : '#ffffff', 
-                      border: `1px solid ${isOverdue ? 'rgba(239, 68, 68, 0.25)' : 'rgba(226, 232, 240, 0.8)'}`, 
-                      borderLeft: `4px solid #ef4444`,
-                      boxShadow: isOverdue ? '0 4px 12px rgba(239, 68, 68, 0.04)' : '0 2px 8px rgba(0,0,0,0.01)',
-                      flexShrink: 0
-                    }}
-                    onMouseEnter={e => { 
-                      e.currentTarget.style.background = isOverdue ? 'linear-gradient(135deg, #fff5f5, #ffebee)' : '#f8fafc';
-                      e.currentTarget.style.boxShadow = isOverdue ? '0 6px 16px rgba(239, 68, 68, 0.08)' : '0 4px 12px rgba(0,0,0,0.03)';
-                      e.currentTarget.style.borderColor = isOverdue ? '#ef4444' : '#cbd5e1';
-                    }}
-                    onMouseLeave={e => { 
-                      e.currentTarget.style.background = isOverdue ? 'linear-gradient(135deg, #fffefe, #fff5f5)' : '#ffffff';
-                      e.currentTarget.style.boxShadow = isOverdue ? '0 4px 12px rgba(239, 68, 68, 0.04)' : '0 2px 8px rgba(0,0,0,0.01)';
-                      e.currentTarget.style.borderColor = isOverdue ? 'rgba(239, 68, 68, 0.25)' : 'rgba(226, 232, 240, 0.8)';
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
-                      <div style={{ minWidth: 0, flex: 1 }}>
-                        <div style={{ fontSize: '14px', fontWeight: 700, color: isOverdue ? '#991b1b' : '#1e293b', marginBottom: '4px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {task.title}
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                          <span style={{ fontSize: '11px', color: '#475569', fontWeight: 600 }}>{task.companyName}</span>
-                          <span style={{ color: '#cbd5e1', fontSize: '10px' }}>•</span>
-                          <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 500 }}>Assigned: <strong style={{ color: '#475569' }}>{task.assignedName}</strong></span>
-                        </div>
-                      </div>
-                      
-                      <div style={{ textAlign: 'right', flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <span style={{ fontSize: '10px', fontWeight: 700, color: '#ef4444', background: '#fef2f2', border: '1px solid rgba(239, 68, 68, 0.2)', padding: '2px 6px', borderRadius: '6px', display: 'flex', alignItems: 'center', gap: '3px' }}>
-                            🔴 Urgent
-                          </span>
-                          <span style={{ fontSize: '10px', fontWeight: 600, color: '#475569', background: '#f1f5f9', padding: '2px 6px', borderRadius: '6px' }}>
-                            {task.status}
-                          </span>
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          {isOverdue ? (
-                            <span style={{ fontSize: '11px', fontWeight: 800, color: '#b91c1c', background: '#fef2f2', padding: '1px 6px', borderRadius: '4px' }}>Overdue</span>
-                          ) : (
-                            <span style={{ fontSize: '11px', fontWeight: 800, color: '#b45309', background: '#fffbeb', padding: '1px 6px', borderRadius: '4px' }}>{task.daysLeft}d left</span>
-                          )}
-                          <span style={{ fontSize: '10px', color: '#94a3b8', fontWeight: 500 }}>
-                            {new Date(task.deadline).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </div>
-
-        {/* Recent Messages (Activity Feed) */}
-        <div style={{ ...panelStyle, gridColumn: '1 / -1' }}>
-          <div style={panelHeaderStyle}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <div style={{ background: '#e0f2fe', color: '#0284c7', width: '38px', height: '38px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid rgba(2, 132, 199, 0.15)' }}>
-                <MessageCircle size={18} />
-              </div>
-              <h3 style={panelTitleStyle}>Recent Message Center</h3>
-            </div>
-            <span style={badgeStyle}>Global Feed</span>
-          </div>
-          
-          {EGRESS_OPTIMIZATION_MODE ? (
-            <OptimizationPlaceholder
-              title="Recent Message Feed Paused"
-              description="The global message center is temporarily paused in Optimization Mode to reduce database network traffic. Individual task chat rooms remain fully functional."
-            />
-          ) : recentMessages.length === 0 ? (
-            <EmptyState message="No messages posted yet" icon="💬" />
-          ) : (
-            <div className="custom-scrollbar timeline-container" style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '450px', overflowY: 'auto', paddingRight: '4px' }}>
-               {recentMessages.map((msg, idx) => {
-                 const timeAgo = formatDateTime(msg.created_at);
-                 const avatarColors = ['#4f46e5','#06b6d4','#10b981','#3b82f6','#ec4899','#f59e0b','#ef4444','#8b5cf6'];
-                 const avatarColor = avatarColors[msg.sender_name.charCodeAt(0) % avatarColors.length];
-                 
-                 const lastRead = lastReadMap[msg.task_id];
-                 const isUnread = msg.sender_id !== currentUser?.id && (!lastRead || new Date(msg.created_at) > new Date(lastRead));
-                 
-                 return (
-                   <div key={msg.id} className="timeline-item"
-                     style={{
-                       display: 'flex', gap: '16px', alignItems: 'flex-start',
-                       position: 'relative'
-                     }}
-                   >
-                     {/* Vertical timeline line segment */}
-                     {idx < recentMessages.length - 1 && (
-                       <div style={{
-                         position: 'absolute',
-                         left: '21px', // center of the 42px avatar
-                         top: '42px',  // starts from bottom of avatar
-                         bottom: '-16px', // extends through the 16px gap to the next item's top
-                         width: '2px',
-                         background: '#e2e8f0',
-                         zIndex: 1
-                       }} />
-                     )}
- 
-                     {/* Avatar */}
-                     <div style={{ width: '42px', height: '42px', borderRadius: '14px', background: `linear-gradient(135deg, ${avatarColor}, ${avatarColor}cc)`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: '15px', fontWeight: 800, color: '#fff', position: 'relative', boxShadow: '0 4px 10px rgba(0,0,0,0.08)', zIndex: 2 }}>
-                       {msg.sender_name.charAt(0).toUpperCase()}
-                       {isUnread && <span style={{ position: 'absolute', top: '-2px', right: '-2px', width: '8px', height: '8px', borderRadius: '50%', background: '#f43f5e', border: '2px solid #fff', zIndex: 3 }} />}
-                     </div>
-                     
-                     {/* Clickable Card on the right */}
-                     <div
-                       onClick={() => router.push(msg.is_daily ? `/dashboard/daily-tasks?openChat=${msg.task_id}` : `/dashboard/tasks?openChat=${msg.task_id}`)}
-                       style={{
-                         flex: 1, minWidth: 0, padding: '16px 20px', borderRadius: '18px',
-                         cursor: 'pointer', transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
-                         background: isUnread ? '#fafbfe' : '#ffffff',
-                         border: isUnread ? '1px solid rgba(59, 130, 246, 0.15)' : '1px solid rgba(226, 232, 240, 0.8)',
-                         zIndex: 2,
-                       }}
-                       onMouseEnter={e => { e.currentTarget.style.background = '#f8fafc'; e.currentTarget.style.transform = 'translateX(4px)'; e.currentTarget.style.boxShadow = '0 8px 24px -10px rgba(0,0,0,0.06)'; }}
-                       onMouseLeave={e => { e.currentTarget.style.background = isUnread ? '#fafbfe' : '#ffffff'; e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = 'none'; }}
-                     >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', flexWrap: 'wrap' }}>
-                        <span style={{ fontSize: '14px', fontWeight: 700, color: '#0f172a' }}>{msg.sender_name}</span>
-                        <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 600 }}>posted update</span>
-                        <span style={{ fontSize: '11px', color: '#94a3b8', marginLeft: 'auto', fontWeight: 500, whiteSpace: 'nowrap' }}>{timeAgo}</span>
-                      </div>
-                      
-                      <div style={{ fontSize: '14px', color: '#334155', lineHeight: 1.45, marginBottom: '10px', wordBreak: 'break-word', fontWeight: 500 }}>
-                        {msg.message}
-                      </div>
-                      
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                        <span style={{ fontSize: '11px', fontWeight: 700, color: '#475569', background: '#f1f5f9', padding: '3px 10px', borderRadius: '8px', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {msg.task_title}
-                        </span>
-                        {msg.company_name && <span style={{ fontSize: '10px', fontWeight: 600, color: '#2563eb', background: '#eff6ff', border: '1px solid #dbeafe', padding: '2px 8px', borderRadius: '6px', whiteSpace: 'nowrap' }}>{msg.company_name}</span>}
-                        {msg.task_type_name && <span style={{ fontSize: '10px', fontWeight: 600, color: '#ea580c', background: '#fff7ed', border: '1px solid #ffedd5', padding: '2px 8px', borderRadius: '6px', whiteSpace: 'nowrap' }}>{msg.task_type_name}</span>}
-                        {msg.is_daily && <span style={{ fontSize: '10px', fontWeight: 700, color: '#7c3aed', background: '#f5f3ff', border: '1px solid #ede9fe', padding: '2px 8px', borderRadius: '6px' }}>Daily</span>}
-                        
-                        {/* Delete Button for Admin */}
-                        {isAdmin(getSession().user) && (
-                          <button onClick={e => handleDeleteMessage(e, msg.id)}
-                            style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', marginLeft: 'auto', padding: '4px', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s ease' }}
-                            onMouseEnter={e => { e.currentTarget.style.color = '#ef4444'; e.currentTarget.style.background = '#fef2f2'; }}
-                            onMouseLeave={e => { e.currentTarget.style.color = '#94a3b8'; e.currentTarget.style.background = 'none'; }}
-                            title="Delete message"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* Recent Description Updates (Activity Feed) */}
-        <div style={{ ...panelStyle, gridColumn: '1 / -1' }}>
-          <div style={panelHeaderStyle}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <div style={{ background: '#f0fdf4', color: '#16a34a', width: '38px', height: '38px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid rgba(22, 163, 74, 0.15)' }}>
-                <Edit2 size={16} />
-              </div>
-              <h3 style={panelTitleStyle}>Recent Log Activity</h3>
-            </div>
-            <span style={badgeStyle}>System Logs</span>
-          </div>
-          
-          {EGRESS_OPTIMIZATION_MODE ? (
-            <OptimizationPlaceholder
-              title="Activity Logs Paused"
-              description="The global system logs feed is temporarily paused in Optimization Mode to reduce database network egress. Specific task history logs remain available."
-            />
-          ) : recentDescUpdates.length === 0 ? (
-            <EmptyState message="No description updates found" icon="📝" />
-          ) : (
-            <div className="custom-scrollbar timeline-container" style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '450px', overflowY: 'auto', paddingRight: '4px' }}>
-              {recentDescUpdates.map((update, idx) => {
-                const timeAgo = formatDateTime(update.created_at);
-                const avatarColors = ['#8b5cf6','#3b82f6','#10b981','#f59e0b','#ec4899','#06b6d4','#6366f1','#ef4444'];
-                const avatarColor = avatarColors[update.updated_by_name.charCodeAt(0) % avatarColors.length];
-                const statusColor = getStatusColor(update.task_status);
-                
-                return (
-                  <div key={update.id} className="timeline-item"
-                    style={{
-                      display: 'flex', gap: '16px', alignItems: 'flex-start',
-                      position: 'relative'
-                    }}
-                  >
-                    {/* Vertical timeline line segment */}
-                    {idx < recentDescUpdates.length - 1 && (
-                      <div style={{
-                        position: 'absolute',
-                        left: '21px', // center of the 42px avatar
-                        top: '42px',  // starts from bottom of avatar
-                        bottom: '-16px', // extends through the 16px gap to the next item's top
-                        width: '2px',
-                        background: '#e2e8f0',
-                        zIndex: 1
-                      }} />
-                    )}
-
-                    {/* Avatar */}
-                    <div style={{ width: '42px', height: '42px', borderRadius: '14px', background: `linear-gradient(135deg, ${avatarColor}, ${avatarColor}cc)`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: '15px', fontWeight: 800, color: '#fff', position: 'relative', boxShadow: '0 4px 10px rgba(0,0,0,0.08)', zIndex: 2 }}>
-                      {update.updated_by_name.charAt(0).toUpperCase()}
-                      {idx < 3 && <span style={{ position: 'absolute', top: '-2px', right: '-2px', width: '10px', height: '10px', borderRadius: '50%', background: '#10b981', border: '2px solid #fff', zIndex: 3 }} />}
-                    </div>
-                    
-                    {/* Clickable Card on the right */}
-                    <div
-                      onClick={() => router.push(update.is_daily ? `/dashboard/daily-tasks?openDesc=${update.task_id}` : `/dashboard/tasks?openDesc=${update.task_id}`)}
-                      style={{
-                        flex: 1, minWidth: 0, padding: '16px 20px', borderRadius: '18px',
-                        cursor: 'pointer', transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
-                        background: idx < 3 ? '#fcfdfd' : '#ffffff',
-                        border: idx < 3 ? '1px solid rgba(16, 185, 129, 0.15)' : '1px solid rgba(226, 232, 240, 0.8)',
-                        zIndex: 2,
-                      }}
-                      onMouseEnter={e => { e.currentTarget.style.background = '#f8fafc'; e.currentTarget.style.transform = 'translateX(4px)'; e.currentTarget.style.boxShadow = '0 8px 24px -10px rgba(0,0,0,0.06)'; }}
-                      onMouseLeave={e => { e.currentTarget.style.background = idx < 3 ? '#fcfdfd' : '#ffffff'; e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = 'none'; }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', flexWrap: 'wrap' }}>
-                        <span style={{ fontSize: '14px', fontWeight: 700, color: '#0f172a' }}>{update.updated_by_name}</span>
-                        <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 600 }}>updated description</span>
-                        <span style={{ fontSize: '11px', color: '#94a3b8', marginLeft: 'auto', fontWeight: 500, whiteSpace: 'nowrap' }}>{timeAgo}</span>
-                      </div>
-                      
-                      {/* blockquote layout */}
-                      <div style={{ fontSize: '13px', color: '#475569', lineHeight: 1.5, background: '#f8fafc', padding: '10px 14px', borderRadius: '10px', borderLeft: '3px solid #10b981', margin: '8px 0', fontFamily: 'monospace', wordBreak: 'break-all' }}>
-                        &ldquo;{update.description_preview}&rdquo;
-                      </div>
-                      
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginTop: '6px' }}>
-                        <span style={{ fontSize: '11px', fontWeight: 700, color: '#475569', background: '#f1f5f9', padding: '3px 10px', borderRadius: '8px', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {update.task_title}
-                        </span>
-                        {update.company_name && <span style={{ fontSize: '10px', fontWeight: 600, color: '#2563eb', background: '#eff6ff', border: '1px solid #dbeafe', padding: '2px 8px', borderRadius: '6px', whiteSpace: 'nowrap' }}>{update.company_name}</span>}
-                        {update.task_type_name && <span style={{ fontSize: '10px', fontWeight: 600, color: '#ea580c', background: '#fff7ed', border: '1px solid #ffedd5', padding: '2px 8px', borderRadius: '6px', whiteSpace: 'nowrap' }}>{update.task_type_name}</span>}
-                        {update.assigned_to_name !== 'Unassigned' && <span style={{ fontSize: '10px', fontWeight: 600, color: '#9333ea', background: '#faf5ff', border: '1px solid #f3e8ff', padding: '2px 8px', borderRadius: '6px', whiteSpace: 'nowrap' }}>👤 {update.assigned_to_name}</span>}
-                        <span style={{ fontSize: '10px', fontWeight: 700, color: statusColor, background: `${statusColor}12`, padding: '2px 8px', borderRadius: '6px', marginLeft: 'auto', textTransform: 'capitalize' }}>
-                          {update.task_status}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
       </div>
     </div>
   );
@@ -1322,10 +575,7 @@ function getStatusColor(status: string) {
   return '#475569'; // Default Slate 700
 }
 
-function formatDateTime(dateStr: string): string {
-  const date = new Date(dateStr);
-  return date.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-}
+
 
 function getPriorityInfo(priority: string) {
   const p = priority ? priority.trim().toLowerCase() : '';
@@ -1488,100 +738,7 @@ function EmptyState({ message, icon }: { message: string; icon?: string }) {
   );
 }
 
-function OptimizationPlaceholder({ title, description }: { title: string; description: string }) {
-  return (
-    <div style={{
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-      padding: '44px 24px',
-      background: 'linear-gradient(135deg, rgba(248, 250, 252, 0.9) 0%, rgba(241, 245, 249, 0.9) 100%)',
-      borderRadius: '20px',
-      border: '1px solid rgba(226, 232, 240, 0.8)',
-      textAlign: 'center',
-      backdropFilter: 'blur(8px)',
-      boxShadow: 'inset 0 2px 4px rgba(255,255,255,0.9), 0 4px 20px rgba(15,23,42,0.03)',
-      margin: '8px 0',
-      position: 'relative',
-      overflow: 'hidden'
-    }}>
-      {/* Mesh gradients for modern HSL glow */}
-      <div style={{
-        position: 'absolute',
-        top: '-40px',
-        right: '-40px',
-        width: '120px',
-        height: '120px',
-        borderRadius: '50%',
-        background: 'radial-gradient(circle, rgba(59, 130, 246, 0.08) 0%, rgba(59, 130, 246, 0) 70%)',
-        filter: 'blur(8px)'
-      }} />
-      <div style={{
-        position: 'absolute',
-        bottom: '-40px',
-        left: '-40px',
-        width: '120px',
-        height: '120px',
-        borderRadius: '50%',
-        background: 'radial-gradient(circle, rgba(139, 92, 246, 0.08) 0%, rgba(139, 92, 246, 0) 70%)',
-        filter: 'blur(8px)'
-      }} />
 
-      {/* Premium Badge */}
-      <div style={{
-        background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)',
-        color: '#2563eb',
-        width: '52px',
-        height: '52px',
-        borderRadius: '16px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginBottom: '16px',
-        boxShadow: '0 8px 16px -4px rgba(59, 130, 246, 0.12)',
-        border: '1px solid rgba(59, 130, 246, 0.08)'
-      }}>
-        <ShieldAlert size={24} strokeWidth={2.25} />
-      </div>
-
-      <h4 style={{
-        fontSize: '15px',
-        fontWeight: 800,
-        color: '#0f172a',
-        margin: '0 0 8px 0',
-        letterSpacing: '-0.2px'
-      }}>{title}</h4>
-      
-      <p style={{
-        fontSize: '13px',
-        color: '#64748b',
-        margin: 0,
-        lineHeight: 1.5,
-        maxWidth: '440px',
-        fontWeight: 500
-      }}>{description}</p>
-
-      <div style={{
-        marginTop: '18px',
-        fontSize: '10px',
-        color: '#1e40af',
-        background: '#eff6ff',
-        padding: '5px 12px',
-        borderRadius: '20px',
-        fontWeight: 700,
-        textTransform: 'uppercase',
-        letterSpacing: '0.5px',
-        border: '1px solid rgba(59, 130, 246, 0.12)',
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: '5px'
-      }}>
-        <Lock size={10} /> database traffic optimized
-      </div>
-    </div>
-  );
-}
 
 const panelStyle: React.CSSProperties = {
   background: '#ffffff', 

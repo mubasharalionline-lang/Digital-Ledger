@@ -9,7 +9,7 @@ import type { User } from '@/lib/supabase';
 import {
   LayoutDashboard, Building2, ListTodo, Users, LogOut,
   ChevronLeft, ChevronRight, Menu, ChevronDown, Settings,
-  ClipboardList, BarChart3, Edit, Plus, X, Loader2, Globe, CalendarDays
+  ClipboardList, Edit, Plus, X, Loader2, Globe, CalendarDays
 } from 'lucide-react';
 
 interface NavItem { label: string; href: string; icon: ReactNode; adminOnly?: boolean; }
@@ -133,7 +133,6 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       { label: 'Daily Tasks', href: '/dashboard/daily-tasks', icon: <CalendarDays size={20} /> },
       { label: 'Task Types', href: '/dashboard/task-types', icon: <ClipboardList size={20} />, adminOnly: true },
       { label: terms.staffSingular + 's', href: '/dashboard/staff', icon: <Users size={20} />, adminOnly: true },
-      { label: 'Reports', href: '/dashboard/reports', icon: <BarChart3 size={20} />, adminOnly: true },
       { label: 'Edits', href: '/dashboard/edits', icon: <Edit size={20} />, adminOnly: true },
       { label: 'Settings', href: '/dashboard/settings', icon: <Settings size={20} />, adminOnly: true },
     ];

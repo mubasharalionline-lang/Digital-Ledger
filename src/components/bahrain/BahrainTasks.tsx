@@ -3,10 +3,10 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import type { Task, Company, User, TaskType, StatusLog, TaskMessage } from '@/lib/supabase';
+import type { Task, Company, User, TaskType, StatusLog } from '@/lib/supabase';
 import { getDataCountry, getSession, isAdmin } from '@/lib/auth';
 import { BAHRAIN_PRIORITIES, BAHRAIN_STATUSES } from '@/lib/bahrain';
-import { Plus, Eye, Trash2, X, Edit2, MessageCircle, Send, MoreHorizontal, Clock, CheckCircle2, Check, BarChart3, PieChart, Activity, ArrowRight, TrendingUp, Building2 } from 'lucide-react';
+import { Plus, Eye, Trash2, X, Edit2, MoreHorizontal, Clock, CheckCircle2, Check, BarChart3, PieChart, Activity, ArrowRight, TrendingUp, Building2 } from 'lucide-react';
 import { EGRESS_OPTIMIZATION_MODE } from '@/lib/optimizationConfig';
 
 export default function BahrainTasks() {
@@ -91,11 +91,7 @@ export default function BahrainTasks() {
   const [detailCompany, setDetailCompany] = useState<Company | null>(null);
   const [statusLogs, setStatusLogs] = useState<StatusLog[]>([]);
 
-  // --- Chat Feature States ---
-  const [chatTask, setChatTask] = useState<Task | null>(null);
-  const [taskMessages, setTaskMessages] = useState<TaskMessage[]>([]);
-  const [newMessage, setNewMessage] = useState('');
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+
   const [updateStatus, setUpdateStatus] = useState('');
   const [updateBy, setUpdateBy] = useState('');
   const [updateRemarks, setUpdateRemarks] = useState('');
@@ -257,54 +253,9 @@ export default function BahrainTasks() {
     return true;
   }).sort((a, b) => (a.status || '').localeCompare(b.status || ''));
 
-  // --- Unread message tracking ---
-  const [unreadTasks, setUnreadTasks] = useState<string[]>([]);
-  const chatTaskRef = useRef(chatTask);
+  // Check for openDesc URL param
   useEffect(() => {
-    chatTaskRef.current = chatTask;
-  }, [chatTask]);
-
-
-  // Get last-read timestamps from localStorage
-  function getLastReadMap(): Record<string, string> {
-    try {
-      const raw = localStorage.getItem('task_last_read');
-      return raw ? JSON.parse(raw) : {};
-    } catch { return {}; }
-  }
-
-  function markTaskRead(taskId: string) {
-    const map = getLastReadMap();
-    map[taskId] = new Date().toISOString();
-    localStorage.setItem('task_last_read', JSON.stringify(map));
-    setUnreadTasks(prev => {
-      const next = prev.filter(id => id !== taskId);
-      return next;
-    });
-  }
-
-  function addUnreadTask(taskId: string) {
-    setUnreadTasks(prev => {
-      if (prev.includes(taskId)) return prev;
-      return [...prev, taskId];
-    });
-  }
-
-  // Check for openChat or openDesc URL param
-  useEffect(() => {
-    const openChatId = searchParams.get('openChat');
     const openDescId = searchParams.get('openDesc');
-
-    if (openChatId && tasks.length > 0 && !chatTask) {
-      const task = tasks.find(t => t.id === openChatId);
-      if (task) {
-        openChat(task);
-      }
-      // Remove it from URL so refreshing doesn't reopen it unnecessarily
-      const url = new URL(window.location.href);
-      url.searchParams.delete('openChat');
-      window.history.replaceState({}, '', url);
-    }
 
     if (openDescId && tasks.length > 0 && !detailTask) {
       viewDetail(openDescId);
@@ -312,99 +263,7 @@ export default function BahrainTasks() {
       url.searchParams.delete('openDesc');
       window.history.replaceState({}, '', url);
     }
-  }, [searchParams, tasks, chatTask, detailTask]);
-
-  // On load: scan for unread messages across all visible tasks
-  useEffect(() => {
-    if (EGRESS_OPTIMIZATION_MODE) return;
-    if (!currentUser || tasks.length === 0) return;
-    const taskIds = tasks.map(t => t.id);
-    if (taskIds.length === 0) return;
-
-    (async () => {
-      const lastReadMap = getLastReadMap();
-      const { data: allMsgs } = await supabase
-        .from('task_messages')
-        .select('task_id, sender_id, created_at')
-        .in('task_id', taskIds)
-        .neq('sender_id', currentUser.id)
-        .order('created_at', { ascending: false });
-
-      if (!allMsgs || allMsgs.length === 0) {
-        setUnreadTasks([]);
-        return;
-      }
-
-      const unread: string[] = [];
-      for (const msg of allMsgs) {
-        if (unread.includes(msg.task_id)) continue;
-        const lastRead = lastReadMap[msg.task_id];
-        if (!lastRead || new Date(msg.created_at) > new Date(lastRead)) {
-          unread.push(msg.task_id);
-        }
-      }
-      setUnreadTasks(unread);
-    })();
-  }, [currentUser, tasks]);
-
-
-  // Keep a ref to tasks so the realtime callback always reads the latest
-  // without re-creating the subscription on every task state change.
-  const tasksRef = useRef(tasks);
-  useEffect(() => { tasksRef.current = tasks; }, [tasks]);
-
-  // Listen for realtime task_messages
-  useEffect(() => {
-    if (EGRESS_OPTIMIZATION_MODE) return;
-    if (!currentUser || tasksRef.current.length === 0) return;
-
-    const channel = supabase
-      .channel('task_messages_changes')
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'task_messages' },
-        (payload) => {
-          const newMessage = payload.new as TaskMessage;
-          if (newMessage.sender_id === currentUser.id) return;
-
-          const relatedTask = tasksRef.current.find(t => t.id === newMessage.task_id);
-          if (!relatedTask) return;
-
-          const isAssigned = isAdminUser ||
-            relatedTask.assigned_to === currentUser.id ||
-            (relatedTask.assigned_partners && relatedTask.assigned_partners.includes(currentUser.id)) ||
-            userAuditorAccess.includes(relatedTask.auditor_id || '');
-
-          if (isAssigned) {
-            if (chatTaskRef.current && chatTaskRef.current.id === newMessage.task_id) {
-              const map = getLastReadMap();
-              map[newMessage.task_id] = new Date().toISOString();
-              localStorage.setItem('task_last_read', JSON.stringify(map));
-              loadMessages(newMessage.task_id);
-            } else {
-              addUnreadTask(newMessage.task_id);
-
-              const notifId = Math.random().toString(36).substring(7);
-              const shortMsg = newMessage.message.length > 30 ? newMessage.message.substring(0, 30) + '...' : newMessage.message;
-              setNotifications(prev => [...prev, {
-                id: notifId,
-                message: `New message on Task #${relatedTask.id.slice(0, 6)}: "${shortMsg}"`,
-                taskId: relatedTask.id
-              }]);
-
-              setTimeout(() => {
-                setNotifications(prev => prev.filter(n => n.id !== notifId));
-              }, 6000);
-            }
-          }
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [currentUser, isAdminUser]);
+  }, [searchParams, tasks, detailTask]);
 
 
   // Inline status update
@@ -801,60 +660,7 @@ export default function BahrainTasks() {
     }
   }
 
-  // --- Chat Feature ---
 
-  async function openChat(task: Task) {
-    markTaskRead(task.id);
-    setChatTask(task);
-    setNewMessage('');
-    loadMessages(task.id);
-  }
-
-  async function loadMessages(taskId: string) {
-    const { data: messages, error } = await supabase
-      .from('task_messages')
-      .select('*, sender:users!sender_id(username, role)')
-      .eq('task_id', taskId)
-      .order('created_at', { ascending: true });
-
-    if (error) {
-      console.error('Error loading messages:', error);
-      return;
-    }
-
-    const enrichedMessages = messages.map(msg => ({
-      ...msg,
-      sender: msg.sender || { username: 'Unknown', role: 'staff' }
-    }));
-
-    setTaskMessages(enrichedMessages as any);
-  }
-
-  useEffect(() => {
-    if (chatTask && messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [taskMessages, chatTask]);
-
-  async function sendMessage() {
-    if (!newMessage.trim() || !chatTask) return;
-    const { user: sessionUser } = getSession();
-    if (!sessionUser) return;
-
-    const { error } = await supabase.from('task_messages').insert({
-      task_id: chatTask.id,
-      sender_id: sessionUser.id,
-      message: newMessage.trim()
-    });
-
-    if (error) {
-      alert('Failed to send message: ' + error.message);
-      return;
-    }
-
-    setNewMessage('');
-    loadMessages(chatTask.id);
-  }
 
   const priorityColor = (p: string) => {
     switch (p) {
@@ -1421,7 +1227,6 @@ export default function BahrainTasks() {
               }
               const pc = priorityColor(task.priority);
               const isMenuOpen = openMenuId === task.id;
-              const hasUnread = unreadTasks.includes(task.id);
 
               return (
                 <tr key={task.id} style={{ borderBottom: '1px solid #f1f5f9', transition: 'background 0.15s ease' }} onMouseEnter={e => e.currentTarget.style.background = '#fafbfc'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
@@ -1620,37 +1425,12 @@ export default function BahrainTasks() {
                       onMouseEnter={e => { e.currentTarget.style.background = '#f1f5f9'; }}
                       onMouseLeave={e => { if (!isMenuOpen) { e.currentTarget.style.background = 'transparent'; } }}>
                       <MoreHorizontal size={18} color="#64748b" />
-                      {hasUnread && (
-                        <span style={{
-                          position: 'absolute',
-                          top: '3px',
-                          right: '3px',
-                          width: '6px',
-                          height: '6px',
-                          background: '#f43f5e',
-                          borderRadius: '50%',
-                          boxShadow: '0 0 0 2px #ffffff',
-                        }} />
-                      )}
                     </button>
                     {isMenuOpen && (
                       <div style={{ position: 'absolute', top: '100%', right: 0, background: '#fff', borderRadius: '12px', boxShadow: '0 8px 30px rgba(0,0,0,0.12)', border: '1px solid #e2e8f0', zIndex: 50, minWidth: '165px', overflow: 'hidden' }}
                         onClick={e => e.stopPropagation()}>
                         <button onClick={() => { viewDetail(task.id); setOpenMenuId(null); }} style={menuItemStyle}>
                           <Eye size={14} color="#3b82f6" /> View Details
-                        </button>
-                        <button onClick={() => { openChat(task); setOpenMenuId(null); }} style={{ ...menuItemStyle, display: 'flex', alignItems: 'center' }}>
-                          <MessageCircle size={14} color="#8b5cf6" style={{ marginRight: '8px' }} />
-                          <span style={{ fontWeight: 500 }}>Messages</span>
-                          {hasUnread && (
-                            <span style={{
-                              marginLeft: 'auto',
-                              width: '6px',
-                              height: '6px',
-                              background: '#f43f5e',
-                              borderRadius: '50%',
-                            }} />
-                          )}
                         </button>
                         {canManageTask(task) && (<>
                           <button onClick={() => { openEditTask(task); setOpenMenuId(null); }} style={menuItemStyle}>
@@ -1671,28 +1451,7 @@ export default function BahrainTasks() {
         </table>
       </div>
 
-      {/* Notifications overlay */}
-      <div className="task-notifications" style={{ position: 'fixed', bottom: '24px', right: '24px', zIndex: 9999, display: 'flex', flexDirection: 'column', gap: '10px' }}>
-        {notifications.map(n => (
-          <div key={n.id} className="animate-fadeIn" style={{
-            background: 'linear-gradient(135deg, #1E293B, #334155)', color: '#fff',
-            padding: '16px 20px', borderRadius: '12px', boxShadow: '0 10px 25px rgba(0,0,0,0.2)',
-            display: 'flex', alignItems: 'center', gap: '12px', maxWidth: '350px', cursor: 'pointer',
-            border: '1px solid #475569'
-          }} onClick={() => {
-            const t = tasks.find(tk => tk.id === n.taskId);
-            if (t) openChat(t);
-            setNotifications(prev => prev.filter(notif => notif.id !== n.id));
-          }}>
-            <MessageCircle size={20} color="#60A5FA" />
-            <div style={{ fontSize: '14px', fontWeight: 500, lineHeight: 1.4, flex: 1 }}>{n.message}</div>
-            <button onClick={(e) => { e.stopPropagation(); setNotifications(prev => prev.filter(notif => notif.id !== n.id)); }}
-              style={{ background: 'transparent', border: 'none', color: '#94A3B8', cursor: 'pointer', padding: '4px' }}>
-              <X size={16} />
-            </button>
-          </div>
-        ))}
-      </div>
+
 
       {/* New/Edit Task Modal */}
       {showTaskModal && (
@@ -1919,81 +1678,7 @@ export default function BahrainTasks() {
           </div>
         </Modal>
       )}
-      {/* Chat Modal */}
-      {chatTask && (
-        <Modal title={`Task Discussion: #${chatTask.id.slice(0, 6)}`} onClose={() => setChatTask(null)}>
-          <div style={{
-            display: 'flex', flexDirection: 'column', height: '60vh', minHeight: '400px',
-            background: '#F8FAFC', borderRadius: '12px', border: '1px solid #E2E8F0', overflow: 'hidden'
-          }}>
-            {/* Messages Area */}
-            <div style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              {taskMessages.length === 0 ? (
-                <div style={{ textAlign: 'center', color: '#94A3B8', marginTop: 'auto', marginBottom: 'auto' }}>
-                  No messages yet. Start the conversation!
-                </div>
-              ) : (
-                taskMessages.map((msg, i) => {
-                  const isMine = msg.sender_id === currentUser?.id;
-                  const senderRole = msg.sender?.role || 'staff';
-                  const showHeader = i === 0 || taskMessages[i - 1].sender_id !== msg.sender_id;
 
-                  return (
-                    <div key={msg.id} style={{ alignSelf: isMine ? 'flex-end' : 'flex-start', maxWidth: '80%' }}>
-                      {showHeader && (
-                        <div style={{ fontSize: '12px', color: '#64748B', marginBottom: '4px', marginLeft: isMine ? 0 : '12px', marginRight: isMine ? '12px' : 0, textAlign: isMine ? 'right' : 'left' }}>
-                          <strong>{msg.sender?.username || 'Unknown'}</strong>
-                          {senderRole?.toLowerCase() === 'admin' && <span style={{ marginLeft: '6px', background: '#E2E8F0', padding: '2px 6px', borderRadius: '10px', fontSize: '10px' }}>Admin</span>}
-                        </div>
-                      )}
-                      <div style={{
-                        background: isMine ? '#3B82F6' : '#FFFFFF',
-                        color: isMine ? '#FFFFFF' : '#1E293B',
-                        padding: '10px 16px',
-                        borderRadius: isMine ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
-                        boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                        border: isMine ? 'none' : '1px solid #E2E8F0',
-                        fontSize: '14px',
-                        lineHeight: '1.5'
-                      }}>
-                        {msg.message}
-                      </div>
-                      <div style={{ fontSize: '10px', color: '#94A3B8', marginTop: '4px', textAlign: isMine ? 'right' : 'left', marginLeft: isMine ? 0 : '12px', marginRight: isMine ? '12px' : 0 }}>
-                        {new Date(msg.created_at).toLocaleString([], { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-              <div ref={messagesEndRef} />
-            </div>
-
-            {/* Input Area */}
-            <div style={{ padding: '16px', background: '#FFFFFF', borderTop: '1px solid #E2E8F0', display: 'flex', gap: '12px' }}>
-              <input
-                type="text"
-                value={newMessage}
-                onChange={e => setNewMessage(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && sendMessage()}
-                placeholder="Type a message..."
-                style={{ flex: 1, padding: '12px 16px', border: '1px solid #CBD5E1', borderRadius: '24px', fontSize: '14px', outline: 'none' }}
-              />
-              <button
-                onClick={sendMessage}
-                disabled={!newMessage.trim()}
-                style={{
-                  background: newMessage.trim() ? '#3B82F6' : '#94A3B8',
-                  color: '#FFFFFF', border: 'none', borderRadius: '50%', width: '44px', height: '44px',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: newMessage.trim() ? 'pointer' : 'not-allowed',
-                  transition: 'background 0.2s'
-                }}
-              >
-                <Send size={18} style={{ marginLeft: '2px' }} />
-              </button>
-            </div>
-          </div>
-        </Modal>
-      )}
       {activeTooltipTaskId && (
         <div
           onMouseEnter={handleTooltipMouseEnter}
