@@ -7,6 +7,7 @@ import type { Task, Company, User, TaskType, StatusLog, TaskMessage } from '@/li
 import { getDataCountry, getSession, isAdmin } from '@/lib/auth';
 import { BAHRAIN_PRIORITIES, BAHRAIN_STATUSES } from '@/lib/bahrain';
 import { Plus, Eye, Trash2, X, Edit2, MessageCircle, Send, MoreHorizontal, Clock, CheckCircle2, Check, BarChart3, PieChart, Activity, ArrowRight, TrendingUp, Building2 } from 'lucide-react';
+import { EGRESS_OPTIMIZATION_MODE } from '@/lib/optimizationConfig';
 
 export default function BahrainTasks() {
   const { user: currentUser } = getSession();
@@ -315,6 +316,7 @@ export default function BahrainTasks() {
 
   // On load: scan for unread messages across all visible tasks
   useEffect(() => {
+    if (EGRESS_OPTIMIZATION_MODE) return;
     if (!currentUser || tasks.length === 0) return;
     const taskIds = tasks.map(t => t.id);
     if (taskIds.length === 0) return;
@@ -353,6 +355,7 @@ export default function BahrainTasks() {
 
   // Listen for realtime task_messages
   useEffect(() => {
+    if (EGRESS_OPTIMIZATION_MODE) return;
     if (!currentUser || tasksRef.current.length === 0) return;
 
     const channel = supabase

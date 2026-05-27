@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase';
 import type { Task, User, StatusLog, TaskMessage } from '@/lib/supabase';
 import { getSession, isAdmin, getDataCountry } from '@/lib/auth';
 import { Plus, X, Eye, Edit2, MessageCircle, Send, CheckCircle2, Search, Filter, Repeat, Trash2, MoreHorizontal, Check } from 'lucide-react';
+import { EGRESS_OPTIMIZATION_MODE } from '@/lib/optimizationConfig';
 
 // Fixed array of statuses so it alphabetically sorts correctly
 const BAHRAIN_STATUSES = [
@@ -394,6 +395,7 @@ export default function BahrainDailyTasks() {
 
   // On load: scan for unread messages across daily tasks
   useEffect(() => {
+    if (EGRESS_OPTIMIZATION_MODE) return;
     if (!currentUser || tasks.length === 0) return;
     const taskIds = tasks.map(t => t.id);
     if (taskIds.length === 0) return;
@@ -427,6 +429,7 @@ export default function BahrainDailyTasks() {
 
   // Realtime messages for notifications
   useEffect(() => {
+    if (EGRESS_OPTIMIZATION_MODE) return;
     if (!currentUser) return;
     const channel = supabase.channel('daily_task_messages_notifications')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'task_messages' }, async (payload) => {

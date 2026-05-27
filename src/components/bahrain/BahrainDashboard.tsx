@@ -21,7 +21,10 @@ import {
   MessageCircle,
   Trash2,
   Edit2,
+  Lock,
+  ShieldAlert,
 } from 'lucide-react';
+import { EGRESS_OPTIMIZATION_MODE } from '@/lib/optimizationConfig';
 
 interface UrgentClient {
   company: Company;
@@ -126,6 +129,7 @@ export default function BahrainDashboard() {
   };
 
   const loadRecentMessages = useCallback(async () => {
+    if (EGRESS_OPTIMIZATION_MODE) return;
     try {
       const dataCountry = getDataCountry();
       const { data: msgs, error: msgsError } = await supabase
@@ -182,6 +186,7 @@ export default function BahrainDashboard() {
   }, []);
 
   const loadRecentDescUpdates = useCallback(async () => {
+    if (EGRESS_OPTIMIZATION_MODE) return;
     try {
       const dataCountry = getDataCountry();
       const { data: logs, error: logsError } = await supabase
@@ -1074,7 +1079,12 @@ export default function BahrainDashboard() {
             <span style={badgeStyle}>Global Feed</span>
           </div>
           
-          {recentMessages.length === 0 ? (
+          {EGRESS_OPTIMIZATION_MODE ? (
+            <OptimizationPlaceholder
+              title="Recent Message Feed Paused"
+              description="The global message center is temporarily paused in Optimization Mode to reduce database network traffic. Individual task chat rooms remain fully functional."
+            />
+          ) : recentMessages.length === 0 ? (
             <EmptyState message="No messages posted yet" icon="💬" />
           ) : (
             <div className="custom-scrollbar timeline-container" style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '450px', overflowY: 'auto', paddingRight: '4px' }}>
@@ -1175,7 +1185,12 @@ export default function BahrainDashboard() {
             <span style={badgeStyle}>System Logs</span>
           </div>
           
-          {recentDescUpdates.length === 0 ? (
+          {EGRESS_OPTIMIZATION_MODE ? (
+            <OptimizationPlaceholder
+              title="Activity Logs Paused"
+              description="The global system logs feed is temporarily paused in Optimization Mode to reduce database network egress. Specific task history logs remain available."
+            />
+          ) : recentDescUpdates.length === 0 ? (
             <EmptyState message="No description updates found" icon="📝" />
           ) : (
             <div className="custom-scrollbar timeline-container" style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '450px', overflowY: 'auto', paddingRight: '4px' }}>
@@ -1232,7 +1247,7 @@ export default function BahrainDashboard() {
                       
                       {/* blockquote layout */}
                       <div style={{ fontSize: '13px', color: '#475569', lineHeight: 1.5, background: '#f8fafc', padding: '10px 14px', borderRadius: '10px', borderLeft: '3px solid #10b981', margin: '8px 0', fontFamily: 'monospace', wordBreak: 'break-all' }}>
-                        "{update.description_preview}"
+                        &ldquo;{update.description_preview}&rdquo;
                       </div>
                       
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginTop: '6px' }}>
@@ -1469,6 +1484,101 @@ function EmptyState({ message, icon }: { message: string; icon?: string }) {
     <div style={{ textAlign: 'center', padding: '40px 20px', color: '#94a3b8', background: '#f8fafc', borderRadius: '16px', border: '1px dashed #e2e8f0' }}>
       {icon && <div style={{ fontSize: '28px', marginBottom: '10px' }}>{icon}</div>}
       <div style={{ fontSize: '14px', fontWeight: 600 }}>{message}</div>
+    </div>
+  );
+}
+
+function OptimizationPlaceholder({ title, description }: { title: string; description: string }) {
+  return (
+    <div style={{
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: '44px 24px',
+      background: 'linear-gradient(135deg, rgba(248, 250, 252, 0.9) 0%, rgba(241, 245, 249, 0.9) 100%)',
+      borderRadius: '20px',
+      border: '1px solid rgba(226, 232, 240, 0.8)',
+      textAlign: 'center',
+      backdropFilter: 'blur(8px)',
+      boxShadow: 'inset 0 2px 4px rgba(255,255,255,0.9), 0 4px 20px rgba(15,23,42,0.03)',
+      margin: '8px 0',
+      position: 'relative',
+      overflow: 'hidden'
+    }}>
+      {/* Mesh gradients for modern HSL glow */}
+      <div style={{
+        position: 'absolute',
+        top: '-40px',
+        right: '-40px',
+        width: '120px',
+        height: '120px',
+        borderRadius: '50%',
+        background: 'radial-gradient(circle, rgba(59, 130, 246, 0.08) 0%, rgba(59, 130, 246, 0) 70%)',
+        filter: 'blur(8px)'
+      }} />
+      <div style={{
+        position: 'absolute',
+        bottom: '-40px',
+        left: '-40px',
+        width: '120px',
+        height: '120px',
+        borderRadius: '50%',
+        background: 'radial-gradient(circle, rgba(139, 92, 246, 0.08) 0%, rgba(139, 92, 246, 0) 70%)',
+        filter: 'blur(8px)'
+      }} />
+
+      {/* Premium Badge */}
+      <div style={{
+        background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)',
+        color: '#2563eb',
+        width: '52px',
+        height: '52px',
+        borderRadius: '16px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: '16px',
+        boxShadow: '0 8px 16px -4px rgba(59, 130, 246, 0.12)',
+        border: '1px solid rgba(59, 130, 246, 0.08)'
+      }}>
+        <ShieldAlert size={24} strokeWidth={2.25} />
+      </div>
+
+      <h4 style={{
+        fontSize: '15px',
+        fontWeight: 800,
+        color: '#0f172a',
+        margin: '0 0 8px 0',
+        letterSpacing: '-0.2px'
+      }}>{title}</h4>
+      
+      <p style={{
+        fontSize: '13px',
+        color: '#64748b',
+        margin: 0,
+        lineHeight: 1.5,
+        maxWidth: '440px',
+        fontWeight: 500
+      }}>{description}</p>
+
+      <div style={{
+        marginTop: '18px',
+        fontSize: '10px',
+        color: '#1e40af',
+        background: '#eff6ff',
+        padding: '5px 12px',
+        borderRadius: '20px',
+        fontWeight: 700,
+        textTransform: 'uppercase',
+        letterSpacing: '0.5px',
+        border: '1px solid rgba(59, 130, 246, 0.12)',
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '5px'
+      }}>
+        <Lock size={10} /> database traffic optimized
+      </div>
     </div>
   );
 }
