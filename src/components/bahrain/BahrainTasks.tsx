@@ -762,8 +762,10 @@ export default function BahrainTasks() {
           <option value="">All Status</option>
           {(() => {
             const allStatuses = new Set<string>(dynamicStatuses);
-            // Always include statuses from actual tasks so filters match real data
-            tasks.forEach(t => { if (t.status) allStatuses.add(t.status); });
+            // For Bahrain keep aggregating legacy task statuses, for other countries strictly sync with Edits section
+            if (!dataCountry || dataCountry === 'Bahrain') {
+              tasks.forEach(t => { if (t.status) allStatuses.add(t.status); });
+            }
             return Array.from(allStatuses).sort((a, b) => a.localeCompare(b)).map(s => <option key={s} value={s}>{s}</option>);
           })()}
         </select>
