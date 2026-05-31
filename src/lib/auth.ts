@@ -24,10 +24,11 @@ function deleteCookie(name: string) {
 // ─── Auth functions ────────────────────────────────────────────────
 
 export async function loginUser(username: string, password: string, country?: string): Promise<User | null> {
+  const cleanUsername = username.trim();
   let query = supabase
     .from('users')
     .select('id, username, role, country, permissions, created_at')
-    .eq('username', username)
+    .ilike('username', cleanUsername)
     .eq('password', password);
 
   // If country is specified, scope login to that country
@@ -39,24 +40,28 @@ export async function loginUser(username: string, password: string, country?: st
 
   if (error || !data || data.length === 0) return null;
   
+  // Filter exact matches case-insensitively to prevent wildcard exploits (e.g., matching '%')
+  const exactMatches = data.filter(u => u.username.toLowerCase() === cleanUsername.toLowerCase());
+
   // If exactly one match, return it
-  if (data.length === 1) return data[0] as User;
+  if (exactMatches.length === 1) return exactMatches[0] as User;
   
   // Multiple matches (same username+password, different countries)
   // Return null to signal disambiguation is needed
   return null;
 }
 
-// Get all countries a username+password combo exists in (for disambiguation)
 export async function getLoginCountries(username: string, password: string): Promise<string[]> {
+  const cleanUsername = username.trim();
   const { data } = await supabase
     .from('users')
-    .select('country')
-    .eq('username', username)
+    .select('country, username')
+    .ilike('username', cleanUsername)
     .eq('password', password);
 
   if (!data) return [];
-  return data.map(u => u.country).filter(Boolean) as string[];
+  const exactMatches = data.filter(u => u.username.toLowerCase() === cleanUsername.toLowerCase());
+  return exactMatches.map(u => u.country).filter(Boolean) as string[];
 }
 
 /**
