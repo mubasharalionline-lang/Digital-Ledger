@@ -40,8 +40,10 @@ export default function BahrainCompanies() {
     // Fetch all companies for the country
     let { data } = await supabase.from('companies').select('id, company_name, country, tax_registration, industry, compliance_type, status, google_drive_link, notes, created_at').eq('country', dataCountry || 'Bahrain').order('company_name');
     
-    // If not admin, only show companies they have tasks for
-    if (!isAdminUser && currentUser && data) {
+    // Partners with can_view_companies see all companies (like admins).
+    // Other non-admin users only see companies they have tasks for.
+    const canViewCompanies = currentUser?.permissions?.can_view_companies === true;
+    if (!isAdminUser && !canViewCompanies && currentUser && data) {
       const { data: userTasks } = await supabase.from('tasks').select('company_id').eq('assigned_to', currentUser.id);
       if (userTasks) {
         const assignedCompanyIds = new Set(userTasks.map(t => t.company_id));

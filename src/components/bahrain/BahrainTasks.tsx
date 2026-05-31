@@ -210,14 +210,17 @@ export default function BahrainTasks() {
 
   // Filter tasks
   // Determine if the user is actively looking for completed tasks via filter or search
-  const isCompletedFilterActive = filterStatus && (filterStatus.toLowerCase() === 'complete' || filterStatus.toLowerCase() === 'completed');
+  const isCompletedFilterActive = filterStatus && (() => {
+    const fl = filterStatus.toLowerCase();
+    return fl === 'complete' || fl === 'completed' || fl === 'closed' || fl === 'filed' || fl === 'done' || fl.includes('complete') || fl.includes('closed') || fl.includes('filed') || fl.includes('done');
+  })();
   const isSearchActive = search.trim().length > 0;
 
   const filtered = tasks.filter(t => {
     const sl = (t.status || '').toLowerCase();
     // Hide completed tasks by default, but show them when the user
     // explicitly filters by a completed status or uses the search bar
-    if ((sl === 'complete' || sl === 'completed') && !isCompletedFilterActive && !isSearchActive) {
+    if ((sl === 'complete' || sl === 'completed' || sl === 'closed' || sl === 'filed' || sl === 'done') && !isCompletedFilterActive && !isSearchActive) {
       return false;
     }
 
@@ -759,10 +762,8 @@ export default function BahrainTasks() {
           <option value="">All Status</option>
           {(() => {
             const allStatuses = new Set<string>(dynamicStatuses);
-            // For Bahrain keep aggregating legacy task statuses, for other countries strictly sync with Edits section
-            if (!dataCountry || dataCountry === 'Bahrain') {
-              tasks.forEach(t => { if (t.status) allStatuses.add(t.status); });
-            }
+            // Always include statuses from actual tasks so filters match real data
+            tasks.forEach(t => { if (t.status) allStatuses.add(t.status); });
             return Array.from(allStatuses).sort((a, b) => a.localeCompare(b)).map(s => <option key={s} value={s}>{s}</option>);
           })()}
         </select>
@@ -774,10 +775,12 @@ export default function BahrainTasks() {
           <option value="">All Companies</option>
           {companies.map(c => <option key={c.id} value={c.id}>{c.company_name}</option>)}
         </select>
-        <select value={filterPartner} onChange={e => setFilterPartner(e.target.value)} style={filterStyle}>
-          <option value="">All Partners</option>
-          {partners.map(p => <option key={p.id} value={p.id}>{p.username}</option>)}
-        </select>
+        {isAdminUser && (
+          <select value={filterPartner} onChange={e => setFilterPartner(e.target.value)} style={filterStyle}>
+            <option value="">All Partners</option>
+            {partners.map(p => <option key={p.id} value={p.id}>{p.username}</option>)}
+          </select>
+        )}
         <select value={filterTaskType} onChange={e => setFilterTaskType(e.target.value)} style={filterStyle}>
           <option value="">All Task Types</option>
           {taskTypes.filter(t => t.active).map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
@@ -1395,7 +1398,7 @@ export default function BahrainTasks() {
                     )}
                   </td>
                   <td style={compactCell}>
-                    {canManageTask(task) ? (
+                    {isAdminUser ? (
                       <select value={task.assigned_to || ''} onChange={e => handleAssign(task.id, e.target.value)}
                         style={{ padding: '5px 6px', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#f8fafc', fontSize: '11px', color: '#334155', minWidth: '110px', cursor: 'pointer', outline: 'none', fontWeight: 500 }}>
                         <option value="">Unassigned</option>
@@ -1655,7 +1658,7 @@ export default function BahrainTasks() {
                   </select>
                 </FormField>
               </div>
-              {(isAdminUser || (detailTask && canManageTask(detailTask))) && (
+              {isAdminUser && (
                 <FormField label="Assign Partners">
                   <MultiSelect
                     options={partners.map(p => ({ id: p.id, label: p.username }))}

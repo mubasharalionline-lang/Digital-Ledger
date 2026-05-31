@@ -34,6 +34,8 @@ export default function CompanyDetailPage() {
   const { id } = useParams();
   const router = useRouter();
   const terms = getTerminology();
+  // Partners with can_view_companies get edit access to company details
+  const canEditCompany = (u: User | null) => isAdmin(u) || u?.permissions?.can_view_companies === true;
   const [user, setUser] = useState<User | null>(null);
   const [company, setCompany] = useState<Company | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -357,7 +359,7 @@ export default function CompanyDetailPage() {
             </h1>
           </div>
           {company.status && (() => {
-            if (!isAdmin(user)) {
+            if (!canEditCompany(user)) {
               const s = company.status.toLowerCase();
               let cls = 'badge-pending';
               if (s.includes('completed') || s.includes('done')) cls = 'badge-completed';
@@ -391,7 +393,7 @@ export default function CompanyDetailPage() {
               </select>
             );
           })()}
-          {isAdmin(user) && (
+          {canEditCompany(user) && (
             <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
               {company.google_drive_link && (
                 <button
@@ -406,9 +408,11 @@ export default function CompanyDetailPage() {
               <button onClick={openEditModal} className="btn btn-secondary" style={{ padding: '7px 12px', fontSize: '13px' }}>
                 <Pencil size={14} /> Edit
               </button>
-              <button onClick={deleteCompany} className="btn btn-danger" style={{ padding: '7px 12px', fontSize: '13px' }}>
-                <Trash2 size={14} /> Delete
-              </button>
+              {isAdmin(user) && (
+                <button onClick={deleteCompany} className="btn btn-danger" style={{ padding: '7px 12px', fontSize: '13px' }}>
+                  <Trash2 size={14} /> Delete
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -464,7 +468,7 @@ export default function CompanyDetailPage() {
                   {tasks.length}
                 </span>
               </div>
-              {isAdmin(user) && (
+              {canEditCompany(user) && (
                 <button className="btn btn-primary" style={{ padding: '8px 14px', fontSize: '13px' }}
                   onClick={() => { resetTaskForm(); setShowTaskModal(true); }}>
                   <Plus size={14} /> Add Task
@@ -613,7 +617,7 @@ export default function CompanyDetailPage() {
                 <StickyNote size={16} color="var(--warning)" />
                 <h3 style={{ fontSize: '15px', fontWeight: 600 }}>Quick Notes</h3>
               </div>
-              {isAdmin(user) && !editingNotes && (
+              {canEditCompany(user) && !editingNotes && (
                 <button
                   onClick={() => setEditingNotes(true)}
                   style={{
