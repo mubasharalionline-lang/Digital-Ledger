@@ -49,6 +49,29 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     setUser(u);
     setCountry(c);
     loadCountries();
+
+    // Listen for cross-tab session changes
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'dl_user') {
+        // If session was cleared or changed to a different user, reload to sync UI
+        const newUserStr = e.newValue;
+        if (!newUserStr) {
+          router.push('/');
+        } else {
+          try {
+            const newUser = JSON.parse(newUserStr);
+            if (newUser.id !== u.id) {
+              window.location.reload();
+            }
+          } catch (err) {
+            window.location.reload();
+          }
+        }
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
   }, [router, loadCountries]);
 
   const handleLogout = () => { clearSession(); router.push('/'); };
