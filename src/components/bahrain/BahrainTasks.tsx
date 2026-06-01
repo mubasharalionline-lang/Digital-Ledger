@@ -33,6 +33,7 @@ export default function BahrainTasks() {
   const [filterPriority, setFilterPriority] = useState(searchParams.get('priority') || '');
   const [filterCompany, setFilterCompany] = useState(searchParams.get('company') || '');
   const [filterPartner, setFilterPartner] = useState(searchParams.get('partner') || '');
+  const [filterAuditor, setFilterAuditor] = useState(searchParams.get('auditor') || '');
   const [filterTaskType, setFilterTaskType] = useState(searchParams.get('taskType') || '');
   const [search, setSearch] = useState(searchParams.get('search') || '');
 
@@ -69,7 +70,7 @@ export default function BahrainTasks() {
   // Reset tooltip if filters or search changes to prevent orphaned tooltips
   useEffect(() => {
     setActiveTooltipTaskId(null);
-  }, [search, filterStatus, filterPriority, filterCompany, filterPartner, filterTaskType]);
+  }, [search, filterStatus, filterPriority, filterCompany, filterPartner, filterTaskType, filterAuditor]);
 
   const handleTooltipMouseEnter = () => {
     if (tooltipTimeoutRef.current) {
@@ -235,6 +236,7 @@ export default function BahrainTasks() {
       const hasPartner = (t.assigned_partners && t.assigned_partners.includes(filterPartner)) || t.assigned_to === filterPartner;
       if (!hasPartner) return false;
     }
+    if (filterAuditor && t.auditor_id !== filterAuditor) return false;
     // Task Type filter
     if (filterTaskType) {
       const ttIds = t.task_type_ids && t.task_type_ids.length > 0 ? t.task_type_ids : (t.task_type_id ? t.task_type_id.split(',').map(s => s.trim()).filter(Boolean) : []);
@@ -783,6 +785,10 @@ export default function BahrainTasks() {
             {partners.map(p => <option key={p.id} value={p.id}>{p.username}</option>)}
           </select>
         )}
+        <select value={filterAuditor} onChange={e => setFilterAuditor(e.target.value)} style={filterStyle}>
+          <option value="">All Auditors</option>
+          {auditors.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+        </select>
         <select value={filterTaskType} onChange={e => setFilterTaskType(e.target.value)} style={filterStyle}>
           <option value="">All Task Types</option>
           {taskTypes.filter(t => t.active).map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
@@ -794,9 +800,9 @@ export default function BahrainTasks() {
           placeholder="Search tasks..."
           style={{ ...filterStyle, flex: 1, minWidth: '180px' }}
         />
-        {(filterStatus || filterPriority || filterCompany || filterPartner || filterTaskType || search) && (
+        {(filterStatus || filterPriority || filterCompany || filterPartner || filterAuditor || filterTaskType || search) && (
           <button
-            onClick={() => { setFilterStatus(''); setFilterPriority(''); setFilterCompany(''); setFilterPartner(''); setFilterTaskType(''); setSearch(''); }}
+            onClick={() => { setFilterStatus(''); setFilterPriority(''); setFilterCompany(''); setFilterPartner(''); setFilterAuditor(''); setFilterTaskType(''); setSearch(''); }}
             style={{ padding: '10px 18px', background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: '10px', cursor: 'pointer', fontWeight: 600, fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap', transition: 'all 0.15s ease' }}
             onMouseEnter={e => { e.currentTarget.style.background = '#fee2e2'; }}
             onMouseLeave={e => { e.currentTarget.style.background = '#fef2f2'; }}
