@@ -1302,10 +1302,12 @@ export default function BahrainTasks() {
               const lines: string[] = [`*Status: ${waGenStatus}*`, ''];
               matchingTasks.forEach((task, idx) => {
                 const comp = companies.find(c => c.id === task.company_id);
-                const auditYear = task.deadline ? new Date(task.deadline).getFullYear().toString() : new Date(task.created_at).getFullYear().toString();
+                const ttIds = task.task_type_ids && task.task_type_ids.length > 0 ? task.task_type_ids : (task.task_type_id ? task.task_type_id.split(',').map(s => s.trim()).filter(Boolean) : []);
+                const ttNames = ttIds.map(id => taskTypes.find(t => t.id === id)?.name).filter(Boolean).join(', ') || 'N/A';
                 lines.push(`${idx + 1}. *${comp?.company_name || 'Unknown'}*`);
+                lines.push(`   Task Type: ${ttNames}`);
                 lines.push(`   Description: ${task.description || 'N/A'}`);
-                lines.push(`   Audit Year: ${auditYear}`);
+                lines.push(`   Due Date: ${task.deadline || 'N/A'}`);
                 lines.push('');
               });
               return lines.join('\n').trim();
@@ -1681,12 +1683,11 @@ export default function BahrainTasks() {
                             const comp = companies.find(c => c.id === task.company_id);
                             const ttIds = task.task_type_ids && task.task_type_ids.length > 0 ? task.task_type_ids : (task.task_type_id ? task.task_type_id.split(',').map(s => s.trim()).filter(Boolean) : []);
                             const ttNames = ttIds.map(id => taskTypes.find(t => t.id === id)?.name).filter(Boolean).join(', ') || 'N/A';
-                            const auditYear = task.deadline ? new Date(task.deadline).getFullYear().toString() : new Date(task.created_at).getFullYear().toString();
                             const msg = [
                               `*Company:* ${comp?.company_name || 'Unknown'}`,
                               `*Task Type:* ${ttNames}`,
                               `*Status:* ${task.status || 'N/A'}`,
-                              `*Audit Year:* ${auditYear}`,
+                              `*Due Date:* ${task.deadline || 'N/A'}`,
                               `*Description:* ${task.description || 'No description'}`,
                             ].join('\n');
                             window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
