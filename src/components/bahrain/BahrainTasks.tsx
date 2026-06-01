@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase';
 import type { Task, Company, User, TaskType, StatusLog } from '@/lib/supabase';
 import { getDataCountry, getSession, isAdmin } from '@/lib/auth';
 import { BAHRAIN_PRIORITIES, BAHRAIN_STATUSES } from '@/lib/bahrain';
-import { Plus, Eye, Trash2, X, Edit2, MoreHorizontal, Clock, CheckCircle2, Check, BarChart3, PieChart, Activity, ArrowRight, TrendingUp, Building2, Share2 } from 'lucide-react';
+import { Plus, Eye, Trash2, X, Edit2, MoreHorizontal, Clock, CheckCircle2, Check, BarChart3, PieChart, Activity, ArrowRight, TrendingUp, Building2, Share2, MessageSquare, Copy, Send } from 'lucide-react';
 import { EGRESS_OPTIMIZATION_MODE } from '@/lib/optimizationConfig';
 
 export default function BahrainTasks() {
@@ -139,6 +139,8 @@ export default function BahrainTasks() {
   const [showCompletedModal, setShowCompletedModal] = useState(false);
   const [showTaskTypeModal, setShowTaskTypeModal] = useState(false);
   const [showStatusModal, setShowStatusModal] = useState(false);
+  const [waGenStatus, setWaGenStatus] = useState('');
+  const [waGenCopied, setWaGenCopied] = useState(false);
   const [recentActivityLogs, setRecentActivityLogs] = useState<any[]>([]);
   const [recentLoading, setRecentLoading] = useState(false);
   const [detailCompany, setDetailCompany] = useState<Company | null>(null);
@@ -1010,33 +1012,32 @@ export default function BahrainTasks() {
             <ArrowRight size={16} color="#94a3b8" />
           </div>
 
-          {/* Card 4: Status Distribution */}
+          {/* Card 4: WhatsApp Message Generator */}
           <div
-            onClick={() => setShowStatusModal(true)}
+            onClick={() => { setShowStatusModal(true); setWaGenStatus(''); setWaGenCopied(false); }}
             style={{
-              background: '#ffffff', borderRadius: '14px', padding: '16px 18px',
-              border: '1px solid #e2e8f0', cursor: 'pointer',
+              background: 'linear-gradient(135deg, #ffffff 0%, #f0fdf4 100%)', borderRadius: '14px', padding: '16px 18px',
+              border: '1px solid #bbf7d0', cursor: 'pointer',
               boxShadow: '0 2px 8px rgba(0,0,0,0.04)', transition: 'all 0.2s ease',
               display: 'flex', alignItems: 'center', gap: '14px',
             }}
-            onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 4px 16px rgba(249,115,22,0.12)'; e.currentTarget.style.borderColor = '#fdba74'; }}
-            onMouseLeave={e => { e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.04)'; e.currentTarget.style.borderColor = '#e2e8f0'; }}
+            onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 4px 16px rgba(37,211,102,0.18)'; e.currentTarget.style.borderColor = '#86efac'; }}
+            onMouseLeave={e => { e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.04)'; e.currentTarget.style.borderColor = '#bbf7d0'; }}
           >
-            <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: 'linear-gradient(135deg, #ffedd5, #fed7aa)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <PieChart size={20} color="#ea580c" />
+            <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: 'linear-gradient(135deg, #dcfce7, #bbf7d0)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="#25D366">
+                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+              </svg>
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.3px' }}>Status Overview</div>
+              <div style={{ fontSize: '11px', color: '#16a34a', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.3px' }}>WhatsApp Generator</div>
               <div style={{ fontSize: '22px', fontWeight: 800, color: '#0f172a', lineHeight: 1.2 }}>
-                {(() => {
-                  const statusSet = new Set<string>();
-                  tasks.forEach(t => { if (t.status) statusSet.add(t.status); });
-                  return statusSet.size;
-                })()}
+                <MessageSquare size={20} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '4px' }} />
+                Share
               </div>
-              <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '1px' }}>Statuses · Click to view</div>
+              <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '1px' }}>Generate by status · Click</div>
             </div>
-            <ArrowRight size={16} color="#94a3b8" />
+            <ArrowRight size={16} color="#22c55e" />
           </div>
         </div>
       )}
@@ -1282,65 +1283,149 @@ export default function BahrainTasks() {
         </Modal>
       )}
 
-      {/* ─── Status Distribution Modal ─── */}
+      {/* ─── WhatsApp Message Generator Modal ─── */}
       {showStatusModal && (
-        <Modal title="Status Distribution" onClose={() => setShowStatusModal(false)}>
+        <Modal title="" onClose={() => setShowStatusModal(false)}>
           {(() => {
-            const statusCount: Record<string, number> = {};
-            tasks.forEach(t => {
-              const s = t.status || 'Unknown';
-              statusCount[s] = (statusCount[s] || 0) + 1;
-            });
-            const total = tasks.length;
-            const entries = Object.entries(statusCount)
-              .map(([name, count]) => ({ name, count }))
-              .sort((a, b) => b.count - a.count);
+            // Collect all unique statuses from tasks
+            const allStatuses = [...new Set(tasks.map(t => t.status).filter(Boolean))] as string[];
+            allStatuses.sort((a, b) => a.localeCompare(b));
 
-            const statusBarColors: Record<string, string> = {};
-            const defaultColors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899', '#6366f1', '#14b8a6', '#f97316'];
-            entries.forEach((e, i) => {
-              const sl = e.name.toLowerCase();
-              if (sl.includes('complete') || sl.includes('closed') || sl.includes('filed') || sl.includes('done')) statusBarColors[e.name] = '#059669';
-              else if (sl.includes('progress') || sl.includes('active')) statusBarColors[e.name] = '#2563eb';
-              else if (sl.includes('pending') || sl.includes('waiting') || sl.includes('query')) statusBarColors[e.name] = '#d97706';
-              else if (sl.includes('review') || sl.includes('ready')) statusBarColors[e.name] = '#7c3aed';
-              else if (sl.includes('not started')) statusBarColors[e.name] = '#94a3b8';
-              else statusBarColors[e.name] = defaultColors[i % defaultColors.length];
-            });
+            // Tasks matching selected status
+            const matchingTasks = waGenStatus
+              ? tasks.filter(t => t.status === waGenStatus)
+              : [];
+
+            // Build the WhatsApp message
+            const buildMessage = () => {
+              if (!waGenStatus || matchingTasks.length === 0) return '';
+              const lines: string[] = [`*Status: ${waGenStatus}*`, ''];
+              matchingTasks.forEach((task, idx) => {
+                const comp = companies.find(c => c.id === task.company_id);
+                const auditYear = task.deadline ? new Date(task.deadline).getFullYear().toString() : new Date(task.created_at).getFullYear().toString();
+                lines.push(`${idx + 1}. *${comp?.company_name || 'Unknown'}*`);
+                lines.push(`   Description: ${task.description || 'N/A'}`);
+                lines.push(`   Audit Year: ${auditYear}`);
+                lines.push('');
+              });
+              return lines.join('\n').trim();
+            };
+
+            const message = buildMessage();
 
             return (
-              <div style={{ maxHeight: '65vh', overflowY: 'auto' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  {entries.map((entry) => {
-                    const pct = total > 0 ? ((entry.count / total) * 100) : 0;
-                    const color = statusBarColors[entry.name];
-                    return (
-                      <div key={entry.name} onClick={() => { setShowStatusModal(false); setFilterStatus(entry.name); }}
-                        style={{ cursor: 'pointer', padding: '10px 12px', borderRadius: '10px', transition: 'all 0.15s', border: '1px solid transparent' }}
-                        title={`Click to filter by "${entry.name}"`}
-                        onMouseEnter={e => { e.currentTarget.style.background = '#fff7ed'; e.currentTarget.style.borderColor = '#fed7aa'; }}
-                        onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'transparent'; }}
-                      >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: color }} />
-                            <span style={{ fontSize: '13px', fontWeight: 600, color: '#1e293b' }}>{entry.name}</span>
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 600 }}>{entry.count} ({pct.toFixed(1)}%)</span>
-                            <ArrowRight size={12} color="#fdba74" />
-                          </div>
-                        </div>
-                        <div style={{ width: '100%', height: '8px', background: '#f1f5f9', borderRadius: '4px', overflow: 'hidden' }}>
-                          <div style={{ width: `${pct}%`, height: '100%', background: color, borderRadius: '4px', transition: 'width 0.6s ease' }} />
-                        </div>
+              <div>
+                {/* Premium header */}
+                <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+                  <div style={{ width: '56px', height: '56px', borderRadius: '16px', background: 'linear-gradient(135deg, #25D366, #128C7E)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px', boxShadow: '0 6px 20px rgba(37,211,102,0.3)' }}>
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="#ffffff">
+                      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+                    </svg>
+                  </div>
+                  <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#0f172a', margin: '0 0 4px', letterSpacing: '-0.3px' }}>WhatsApp Message Generator</h3>
+                  <p style={{ fontSize: '13px', color: '#64748b', margin: 0 }}>Select a status to generate a shareable message</p>
+                </div>
+
+                {/* Status selector */}
+                <div style={{ marginBottom: '20px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '8px', display: 'block' }}>Select Status</label>
+                  <select
+                    value={waGenStatus}
+                    onChange={e => { setWaGenStatus(e.target.value); setWaGenCopied(false); }}
+                    style={{
+                      width: '100%', padding: '12px 16px', borderRadius: '12px',
+                      border: '2px solid #e2e8f0', fontSize: '14px', fontWeight: 600,
+                      color: '#0f172a', background: '#ffffff', outline: 'none',
+                      transition: 'border-color 0.2s ease', cursor: 'pointer',
+                      appearance: 'none',
+                      backgroundImage: 'url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'%2364748b\' stroke-width=\'2\' stroke-linecap=\'round\' stroke-linejoin=\'round\'%3e%3cpolyline points=\'6 9 12 15 18 9\'%3e%3c/polyline%3e%3c/svg%3e")',
+                      backgroundRepeat: 'no-repeat',
+                      backgroundPosition: 'right 14px center',
+                      backgroundSize: '16px',
+                      paddingRight: '40px',
+                    }}
+                    onFocus={e => e.currentTarget.style.borderColor = '#25D366'}
+                    onBlur={e => e.currentTarget.style.borderColor = '#e2e8f0'}
+                  >
+                    <option value="">— Choose a status —</option>
+                    {allStatuses.map(s => {
+                      const count = tasks.filter(t => t.status === s).length;
+                      return <option key={s} value={s}>{s} ({count} task{count !== 1 ? 's' : ''})</option>;
+                    })}
+                  </select>
+                </div>
+
+                {/* Results */}
+                {waGenStatus && matchingTasks.length === 0 && (
+                  <div style={{ textAlign: 'center', padding: '30px', color: '#94a3b8', fontSize: '14px' }}>No tasks found with status "{waGenStatus}"</div>
+                )}
+
+                {waGenStatus && matchingTasks.length > 0 && (
+                  <>
+                    {/* Count badge */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
+                      <div style={{ padding: '4px 12px', borderRadius: '20px', background: '#dcfce7', color: '#15803d', fontSize: '12px', fontWeight: 700 }}>
+                        {matchingTasks.length} task{matchingTasks.length !== 1 ? 's' : ''}
                       </div>
-                    );
-                  })}
-                </div>
-                <div style={{ marginTop: '20px', padding: '12px 16px', background: '#f8fafc', borderRadius: '10px', fontSize: '12px', color: '#64748b', fontWeight: 600 }}>
-                  Total: {total} task{total !== 1 ? 's' : ''} across {entries.length} status{entries.length !== 1 ? 'es' : ''}
-                </div>
+                      <span style={{ fontSize: '12px', color: '#94a3b8' }}>matching "{waGenStatus}"</span>
+                    </div>
+
+                    {/* Message preview */}
+                    <div style={{
+                      background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '14px',
+                      padding: '16px', marginBottom: '18px', maxHeight: '240px', overflowY: 'auto',
+                    }}>
+                      <div style={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.4px', color: '#16a34a', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <MessageSquare size={12} /> Message Preview
+                      </div>
+                      <pre style={{
+                        fontSize: '12px', lineHeight: 1.7, color: '#1e293b',
+                        whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                        margin: 0, fontFamily: 'inherit',
+                      }}>{message}</pre>
+                    </div>
+
+                    {/* Action buttons */}
+                    <div style={{ display: 'flex', gap: '10px' }}>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(message).then(() => {
+                            setWaGenCopied(true);
+                            setTimeout(() => setWaGenCopied(false), 2500);
+                          });
+                        }}
+                        style={{
+                          flex: 1, padding: '12px 16px', borderRadius: '12px',
+                          border: '1.5px solid #e2e8f0', background: waGenCopied ? '#f0fdf4' : '#ffffff',
+                          color: waGenCopied ? '#16a34a' : '#475569', fontWeight: 600, fontSize: '13px',
+                          cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          gap: '8px', transition: 'all 0.2s ease',
+                        }}
+                        onMouseEnter={e => { if (!waGenCopied) { e.currentTarget.style.background = '#f8fafc'; e.currentTarget.style.borderColor = '#cbd5e1'; } }}
+                        onMouseLeave={e => { if (!waGenCopied) { e.currentTarget.style.background = '#ffffff'; e.currentTarget.style.borderColor = '#e2e8f0'; } }}
+                      >
+                        {waGenCopied ? <><Check size={15} /> Copied!</> : <><Copy size={15} /> Copy Message</>}
+                      </button>
+                      <button
+                        onClick={() => {
+                          window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, '_blank');
+                        }}
+                        style={{
+                          flex: 1, padding: '12px 16px', borderRadius: '12px',
+                          border: 'none', background: 'linear-gradient(135deg, #25D366, #128C7E)',
+                          color: '#ffffff', fontWeight: 700, fontSize: '13px',
+                          cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          gap: '8px', boxShadow: '0 4px 14px rgba(37,211,102,0.35)',
+                          transition: 'all 0.2s ease',
+                        }}
+                        onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 6px 20px rgba(37,211,102,0.45)'; }}
+                        onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 4px 14px rgba(37,211,102,0.35)'; }}
+                      >
+                        <Send size={15} /> Share via WhatsApp
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
             );
           })()}
