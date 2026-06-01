@@ -57,6 +57,13 @@ export default function BahrainTasks() {
   const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number; align: 'top' | 'bottom' }>({ x: 0, y: 0, align: 'bottom' });
   const tooltipTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  // Ref to track which task the tooltip is currently locked to, preventing re-render loops
+  const activeTooltipRef = useRef<string | null>(null);
+
+  // Recent Modifications inline edit states
+  const [recentEditId, setRecentEditId] = useState<string | null>(null);
+  const [recentEditValue, setRecentEditValue] = useState('');
+  const [recentEditSaving, setRecentEditSaving] = useState(false);
 
   // Clean up tooltip timeout on unmount
   useEffect(() => {
@@ -69,6 +76,7 @@ export default function BahrainTasks() {
 
   // Reset tooltip if filters or search changes to prevent orphaned tooltips
   useEffect(() => {
+    activeTooltipRef.current = null;
     setActiveTooltipTaskId(null);
   }, [search, filterStatus, filterPriority, filterCompany, filterPartner, filterTaskType, filterAuditor]);
 
@@ -80,8 +88,52 @@ export default function BahrainTasks() {
   };
 
   const handleTooltipMouseLeave = () => {
+    activeTooltipRef.current = null;
     setActiveTooltipTaskId(null);
   };
+
+  // Save description from Recent Modifications inline edit
+  async function saveRecentEditDescription(taskId: string) {
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return;
+    if (recentEditValue === task.description) {
+      setRecentEditId(null);
+      return;
+    }
+    setRecentEditSaving(true);
+    const previousDesc = task.description;
+    // Optimistic update
+    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, description: recentEditValue } : t));
+    const { data, error } = await supabase.from('tasks').update({ description: recentEditValue }).eq('id', taskId).select();
+    if (error) {
+      console.error('Description update error:', error);
+      setTasks(prev => prev.map(t => t.id === taskId ? { ...t, description: previousDesc } : t));
+      alert('Error updating description: ' + error.message);
+    } else if (!data || data.length === 0) {
+      setTasks(prev => prev.map(t => t.id === taskId ? { ...t, description: previousDesc } : t));
+      alert('Update blocked by Supabase Row Level Security (RLS).');
+    } else {
+      // Also update the log entry in the recent activity panel
+      setRecentActivityLogs(prev => prev.map((log: any) => {
+        if (log.task_id === taskId && log.task) {
+          return { ...log, task: { ...log.task, description: recentEditValue } };
+        }
+        return log;
+      }));
+      if (currentUser) {
+        await supabase.from('status_log').insert({
+          task_id: taskId,
+          status: task.status || 'Unknown',
+          updated_by: currentUser.id,
+          remarks: `Description updated to: ${recentEditValue}`
+        });
+      }
+      sessionStorage.removeItem('tasks_data_time');
+      sessionStorage.removeItem('dashboard_data_time_v2');
+    }
+    setRecentEditSaving(false);
+    setRecentEditId(null);
+  }
   // Stat card modal states
   const [showRecentModal, setShowRecentModal] = useState(false);
   const [showCompletedModal, setShowCompletedModal] = useState(false);
@@ -827,14 +879,14 @@ export default function BahrainTasks() {
                   .order('created_at', { ascending: false })
                   .limit(200);
                 if (logs) {
-                  // Group by task_id, get latest per task, take top 20
+                  // Group by task_id, get latest per task, take top 40
                   const taskMap = new Map<string, any>();
                   logs.forEach((log: any) => {
                     if (tasks.some(t => t.id === log.task_id)) {
                       if (!taskMap.has(log.task_id)) taskMap.set(log.task_id, log);
                     }
                   });
-                  const top20 = Array.from(taskMap.values()).slice(0, 20);
+                  const top20 = Array.from(taskMap.values()).slice(0, 40);
                   // Fetch missing user information
                   const unresolvedIds = new Set<string>();
                   const { user: sessionUser } = getSession();
@@ -991,45 +1043,126 @@ export default function BahrainTasks() {
 
       {/* ─── Recently Modified Modal ─── */}
       {showRecentModal && (
-        <Modal title="Recently Modified Tasks (Latest 20)" onClose={() => setShowRecentModal(false)}>
+        <Modal title="Recently Modified Tasks (Latest 40)" onClose={() => { setShowRecentModal(false); setRecentEditId(null); }}>
           {recentLoading ? (
             <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>Loading activity history...</div>
           ) : recentActivityLogs.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>No recent activity found</div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '65vh', overflowY: 'auto' }}>
-              {recentActivityLogs.map((log: any, i: number) => (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '80vh', overflowY: 'auto' }}>
+              {recentActivityLogs.map((log: any, i: number) => {
+                const isEditingThis = recentEditId === log.task_id;
+                const taskDesc = tasks.find(t => t.id === log.task_id)?.description || '';
+                return (
                 <div key={log.id || i} style={{
                   display: 'flex', alignItems: 'flex-start', gap: '12px',
-                  padding: '14px 16px', background: '#f8fafc', borderRadius: '12px',
-                  border: '1px solid #f1f5f9', transition: 'all 0.15s', cursor: 'pointer',
-                }}
-                  title="Click to view task details"
-                  onClick={() => { setShowRecentModal(false); if (log.task_id) viewDetail(log.task_id); }}
-                  onMouseEnter={e => { e.currentTarget.style.background = '#eff6ff'; e.currentTarget.style.borderColor = '#bfdbfe'; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = '#f8fafc'; e.currentTarget.style.borderColor = '#f1f5f9'; }}
-                >
-                  <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'linear-gradient(135deg, #dbeafe, #bfdbfe)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: '2px' }}>
-                    <Activity size={14} color="#2563eb" />
+                  padding: '16px 18px', background: isEditingThis ? '#eff6ff' : '#f8fafc', borderRadius: '14px',
+                  border: isEditingThis ? '1.5px solid #93c5fd' : '1px solid #f1f5f9', transition: 'all 0.15s',
+                }}>
+                  <div
+                    style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'linear-gradient(135deg, #dbeafe, #bfdbfe)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: '2px', cursor: 'pointer' }}
+                    title="View task details"
+                    onClick={() => { setShowRecentModal(false); setRecentEditId(null); if (log.task_id) viewDetail(log.task_id); }}
+                  >
+                    <Activity size={16} color="#2563eb" />
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                      <span style={{ fontWeight: 700, fontSize: '13px', color: '#0f172a' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                      <span
+                        style={{ fontWeight: 700, fontSize: '14px', color: '#0f172a', cursor: 'pointer' }}
+                        title="Click to view task details"
+                        onClick={() => { setShowRecentModal(false); setRecentEditId(null); if (log.task_id) viewDetail(log.task_id); }}
+                      >
                         #{log.task_id?.slice(0, 6)} — {log.company?.company_name || 'Unknown Company'}
                       </span>
                       <span style={{ fontSize: '11px', color: '#94a3b8', whiteSpace: 'nowrap', marginLeft: '8px' }}>
                         {new Date(log.created_at).toLocaleString()}
                       </span>
                     </div>
-                    <div style={{ fontSize: '12px', color: '#475569', marginBottom: '3px' }}>
-                      <span style={{ padding: '2px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 600, background: '#eff6ff', color: '#2563eb', marginRight: '6px' }}>{log.status}</span>
+                    <div style={{ fontSize: '12px', color: '#475569', marginBottom: '5px' }}>
+                      <span style={{ padding: '3px 10px', borderRadius: '8px', fontSize: '11px', fontWeight: 600, background: '#eff6ff', color: '#2563eb', marginRight: '6px' }}>{log.status}</span>
                       {log.remarks && <span style={{ color: '#64748b' }}>{log.remarks}</span>}
                     </div>
-                    <div style={{ fontSize: '11px', color: '#94a3b8' }}>By: {log.updaterName}</div>
+                    <div style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '6px' }}>By: {log.updaterName}</div>
+                    {/* Description with inline edit */}
+                    {isEditingThis ? (
+                      <div style={{ marginTop: '6px', padding: '10px', background: '#ffffff', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+                        <div style={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.4px', color: '#64748b', marginBottom: '6px' }}>✏️ Edit Description</div>
+                        <textarea
+                          autoFocus
+                          value={recentEditValue}
+                          onChange={e => setRecentEditValue(e.target.value)}
+                          style={{
+                            width: '100%',
+                            minHeight: '70px',
+                            padding: '8px 10px',
+                            fontSize: '12px',
+                            borderRadius: '8px',
+                            border: '1.5px solid #3b82f6',
+                            outline: 'none',
+                            resize: 'vertical',
+                            fontFamily: 'inherit',
+                            color: '#1e293b',
+                            lineHeight: 1.5,
+                            boxSizing: 'border-box',
+                          }}
+                          onKeyDown={e => {
+                            if (e.key === 'Escape') setRecentEditId(null);
+                            else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) saveRecentEditDescription(log.task_id);
+                          }}
+                        />
+                        <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '8px' }}>
+                          <button
+                            onClick={() => setRecentEditId(null)}
+                            style={{ padding: '5px 12px', border: '1px solid #e2e8f0', background: '#f8fafc', color: '#64748b', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px', transition: 'all 0.15s' }}
+                            onMouseEnter={e => e.currentTarget.style.background = '#e2e8f0'}
+                            onMouseLeave={e => e.currentTarget.style.background = '#f8fafc'}
+                          >
+                            <X size={12} /> Cancel
+                          </button>
+                          <button
+                            onClick={() => saveRecentEditDescription(log.task_id)}
+                            disabled={recentEditSaving}
+                            style={{ padding: '5px 12px', border: 'none', background: recentEditSaving ? '#93c5fd' : '#3b82f6', color: '#fff', borderRadius: '6px', cursor: recentEditSaving ? 'not-allowed' : 'pointer', fontSize: '11px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px', transition: 'all 0.15s', boxShadow: '0 2px 6px rgba(59,130,246,0.3)' }}
+                          >
+                            <Check size={12} /> {recentEditSaving ? 'Saving...' : 'Save'}
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ marginTop: '6px', display: 'flex', alignItems: 'flex-start', gap: '8px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '10px', padding: '10px 12px' }}>
+                        <div style={{ fontSize: '12px', color: '#1e293b', lineHeight: 1.6, flex: 1, minWidth: 0 }}>
+                          <span style={{ fontWeight: 700, color: '#16a34a', marginRight: '6px', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.3px' }}>📋 Description:</span>
+                          {taskDesc ? (
+                            <span style={{ color: '#0f172a', fontWeight: 500 }}>{taskDesc.length > 120 ? taskDesc.slice(0, 120) + '…' : taskDesc}</span>
+                          ) : (
+                            <span style={{ color: '#94a3b8', fontStyle: 'italic' }}>No description</span>
+                          )}
+                        </div>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setRecentEditId(log.task_id);
+                            setRecentEditValue(taskDesc);
+                          }}
+                          style={{
+                            background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '6px',
+                            cursor: 'pointer', padding: '4px 8px', display: 'flex', alignItems: 'center',
+                            gap: '4px', color: '#3b82f6', fontSize: '10px', fontWeight: 600,
+                            transition: 'all 0.15s', whiteSpace: 'nowrap', flexShrink: 0,
+                          }}
+                          title="Edit description inline"
+                          onMouseEnter={e => { e.currentTarget.style.background = '#dbeafe'; }}
+                          onMouseLeave={e => { e.currentTarget.style.background = '#eff6ff'; }}
+                        >
+                          <Edit2 size={11} /> Edit
+                        </button>
+                      </div>
+                    )}
                   </div>
-                  <ArrowRight size={14} color="#93c5fd" style={{ flexShrink: 0, marginTop: '8px' }} />
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </Modal>
@@ -1257,39 +1390,47 @@ export default function BahrainTasks() {
                     onMouseEnter={(e) => {
                       setHoveredDescTaskId(task.id);
                       if (task.description && inlineEditDescId !== task.id) {
-                        if (tooltipTimeoutRef.current) clearTimeout(tooltipTimeoutRef.current);
+                        if (tooltipTimeoutRef.current) {
+                          clearTimeout(tooltipTimeoutRef.current);
+                          tooltipTimeoutRef.current = null;
+                        }
                         
-                        // Prevent repeated state updates while hovering the same task
-                        if (activeTooltipTaskId === task.id) {
+                        // Skip entirely if tooltip is already showing for this task (prevents re-render loops)
+                        if (activeTooltipRef.current === task.id) {
                           return;
                         }
                         
-                        if (!containerRef.current) return;
-                        const containerRect = containerRef.current.getBoundingClientRect();
+                        // Use fixed positioning relative to viewport to avoid layout-dependent reflow loops
                         const rect = e.currentTarget.getBoundingClientRect();
                         const tooltipWidth = 330;
                         
-                        // Calculate position relative to containerRef to keep position fixed and prevent layout shifting loops
-                        let left = rect.left - containerRect.left + (rect.width / 2) - (tooltipWidth / 2);
+                        // Position using viewport coordinates (fixed positioning)
+                        let left = rect.left + (rect.width / 2) - (tooltipWidth / 2);
                         if (left < 16) left = 16;
-                        if (left + tooltipWidth > containerRect.width - 16) {
-                          left = containerRect.width - tooltipWidth - 16;
+                        if (left + tooltipWidth > window.innerWidth - 16) {
+                          left = window.innerWidth - tooltipWidth - 16;
                         }
                         
-                        const top = rect.top - containerRect.top - 6;
+                        const top = rect.top - 6;
                         const align: 'top' | 'bottom' = 'top';
                         
+                        // Lock the ref BEFORE setting state to prevent re-entry
+                        activeTooltipRef.current = task.id;
                         setTooltipPos({ x: left, y: top, align });
                         setActiveTooltipTaskId(task.id);
                       }
                     }}
                     onMouseLeave={() => {
                       setHoveredDescTaskId(null);
-                      if (tooltipTimeoutRef.current) clearTimeout(tooltipTimeoutRef.current);
-                      // Use a slightly larger grace period (150ms) to ensure smooth transition
+                      if (tooltipTimeoutRef.current) {
+                        clearTimeout(tooltipTimeoutRef.current);
+                        tooltipTimeoutRef.current = null;
+                      }
+                      // Use a grace period (200ms) so the user can move to the tooltip itself
                       tooltipTimeoutRef.current = setTimeout(() => {
+                        activeTooltipRef.current = null;
                         setActiveTooltipTaskId(null);
-                      }, 150);
+                      }, 200);
                     }}
                   >
                     {inlineEditDescId === task.id ? (
@@ -1345,6 +1486,7 @@ export default function BahrainTasks() {
                             onClick={() => {
                               setInlineEditDescId(task.id);
                               setInlineEditDescValue(task.description || '');
+                              activeTooltipRef.current = null;
                               setActiveTooltipTaskId(null); // Clear tooltip when starting edit
                             }}
                             style={{
@@ -1695,7 +1837,7 @@ export default function BahrainTasks() {
           onMouseEnter={handleTooltipMouseEnter}
           onMouseLeave={handleTooltipMouseLeave}
           style={{
-            position: 'absolute',
+            position: 'fixed',
             top: tooltipPos.y,
             left: tooltipPos.x,
             width: '330px',
