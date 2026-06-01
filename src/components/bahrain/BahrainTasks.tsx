@@ -226,7 +226,7 @@ export default function BahrainTasks() {
       const companyIds = companyList.map(c => c.id);
       let taskList: Task[] = [];
       if (companyIds.length > 0) {
-        const { data: t } = await supabase.from('tasks').select('id, title, company_id, assigned_to, assigned_partners, status, priority, deadline, admin_note, task_type_id, task_type_ids, auditor_id, description, is_daily, country, created_at').in('company_id', companyIds).neq('is_daily', true);
+        const { data: t } = await supabase.from('tasks').select('id, title, company_id, assigned_to, assigned_partners, status, priority, deadline, admin_note, task_type_id, task_type_ids, auditor_id, description, is_daily, country, pl_uploaded, created_at').in('company_id', companyIds).neq('is_daily', true);
         taskList = t || [];
       }
 
@@ -426,6 +426,27 @@ export default function BahrainTasks() {
       return;
     }
     setTasks(prev => prev.map(t => t.id === taskId ? { ...t, auditor_id: assignValue } : t));
+  }
+
+  // Toggle PL Uploaded
+  async function handlePlUploadedToggle(taskId: string) {
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return;
+    const newVal = !task.pl_uploaded;
+    // Optimistic update
+    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, pl_uploaded: newVal } : t));
+    const { data, error } = await supabase.from('tasks').update({ pl_uploaded: newVal }).eq('id', taskId).select();
+    if (error) {
+      console.error('PL uploaded toggle error:', error);
+      setTasks(prev => prev.map(t => t.id === taskId ? { ...t, pl_uploaded: !newVal } : t));
+      return;
+    }
+    if (!data || data.length === 0) {
+      setTasks(prev => prev.map(t => t.id === taskId ? { ...t, pl_uploaded: !newVal } : t));
+      alert('Update blocked by Supabase RLS.');
+      return;
+    }
+    sessionStorage.removeItem('tasks_data_time');
   }
 
   // Save inline description
@@ -1439,7 +1460,7 @@ export default function BahrainTasks() {
         <table style={{ width: '100%', borderCollapse: 'collapse', background: '#ffffff' }}>
           <thead>
             <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
-              {['ID', 'Company', 'Task Type', 'Description', 'Priority', 'Due', 'Status', 'Auditor', 'Assigned To', ''].map(h => (
+              {['PL', 'Company', 'Task Type', 'Description', 'Priority', 'Due', 'Status', 'Auditor', 'Assigned To', ''].map(h => (
                 <th key={h} style={{ padding: '11px 10px', textAlign: 'left', fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', color: '#64748b', whiteSpace: 'nowrap' }}>{h}</th>
               ))}
             </tr>
@@ -1461,7 +1482,24 @@ export default function BahrainTasks() {
 
               return (
                 <tr key={task.id} style={{ borderBottom: '1px solid #f1f5f9', transition: 'background 0.15s ease' }} onMouseEnter={e => e.currentTarget.style.background = '#fafbfc'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                  <td style={compactCell}><span style={{ fontWeight: 600, color: '#475569', fontSize: '12px' }}>#{task.id.slice(0, 6)}</span></td>
+                  <td style={compactCell}>
+                    <button
+                      onClick={() => handlePlUploadedToggle(task.id)}
+                      title={task.pl_uploaded ? 'PL Uploaded: Yes — click to change' : 'PL Uploaded: No — click to change'}
+                      style={{
+                        padding: '4px 10px', borderRadius: '20px', border: 'none', cursor: 'pointer',
+                        fontSize: '10px', fontWeight: 700, letterSpacing: '0.3px',
+                        transition: 'all 0.2s ease',
+                        background: task.pl_uploaded ? '#dcfce7' : '#fef2f2',
+                        color: task.pl_uploaded ? '#15803d' : '#dc2626',
+                        boxShadow: task.pl_uploaded ? '0 1px 3px rgba(22,163,74,0.15)' : '0 1px 3px rgba(220,38,38,0.12)',
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.05)'; }}
+                      onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; }}
+                    >
+                      {task.pl_uploaded ? '✓ Yes' : '✗ No'}
+                    </button>
+                  </td>
                   <td style={compactCell}><span style={{ fontWeight: 500, fontSize: '12px', color: '#1e293b', maxWidth: '130px', display: 'inline-block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{company?.company_name || 'Unknown'}</span></td>
                   <td style={compactCell}>
                     {ttNames.length > 0 ? (

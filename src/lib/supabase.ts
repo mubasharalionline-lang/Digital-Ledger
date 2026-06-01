@@ -70,6 +70,7 @@ export interface Task {
   repeat_daily?: boolean;
   repeat_monthly?: boolean;
   country?: string;
+  pl_uploaded?: boolean;
   created_at: string;
   // joined fields
   company?: Company;
