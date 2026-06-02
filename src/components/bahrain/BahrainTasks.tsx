@@ -139,7 +139,7 @@ export default function BahrainTasks() {
   const [showCompletedModal, setShowCompletedModal] = useState(false);
   const [showTaskTypeModal, setShowTaskTypeModal] = useState(false);
   const [showStatusModal, setShowStatusModal] = useState(false);
-  const [waGenStatus, setWaGenStatus] = useState('');
+  const [waGenStatuses, setWaGenStatuses] = useState<string[]>([]);
   const [waGenCopied, setWaGenCopied] = useState(false);
   const [recentActivityLogs, setRecentActivityLogs] = useState<any[]>([]);
   const [recentLoading, setRecentLoading] = useState(false);
@@ -326,50 +326,67 @@ export default function BahrainTasks() {
 
 
   // Inline status update
-  async function handleStatusChange(taskId: string, newStatus: string) {
+  function handleStatusChange(taskId: string, newStatus: string) {
     const task = tasks.find(t => t.id === taskId);
     if (!task || task.status === newStatus) return;
     const previousStatus = task.status;
 
-    const { data, error } = await supabase.from('tasks').update({ status: newStatus }).eq('id', taskId).select();
-    if (error) { console.error('Status update error:', error); return; }
-    if (!data || data.length === 0) {
-      alert('Update blocked by Supabase Row Level Security (RLS). Ask Admin to run the database fix script.');
-      return;
-    }
-
-    // Always use the actual logged-in user for accurate tracking
-    const { user } = getSession();
-    const updaterId = user?.id || null;
-
-    await supabase.from('status_log').insert({
-      task_id: taskId,
-      status: newStatus,
-      updated_by: updaterId,
-      remarks: `${previousStatus} → ${newStatus}`,
-    });
-
-    sessionStorage.removeItem('tasks_data_time');
-    sessionStorage.removeItem('dashboard_data_time_v2');
-
+    // Optimistic update — UI changes instantly
     setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: newStatus } : t));
+
+    // Fire DB calls in the background
+    supabase.from('tasks').update({ status: newStatus }).eq('id', taskId).select('id').then(async ({ data, error }) => {
+      if (error) {
+        console.error('Status update error:', error);
+        setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: previousStatus } : t));
+        return;
+      }
+      if (!data || data.length === 0) {
+        setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: previousStatus } : t));
+        alert('Update blocked by Supabase Row Level Security (RLS). Ask Admin to run the database fix script.');
+        return;
+      }
+
+      // Log the status change in background (non-blocking)
+      const { user } = getSession();
+      const updaterId = user?.id || null;
+      supabase.from('status_log').insert({
+        task_id: taskId,
+        status: newStatus,
+        updated_by: updaterId,
+        remarks: `${previousStatus} → ${newStatus}`,
+      }).then(({ error: logErr }) => {
+        if (logErr) console.error('Status log error:', logErr);
+      });
+
+      sessionStorage.removeItem('tasks_data_time');
+      sessionStorage.removeItem('dashboard_data_time_v2');
+    });
   }
 
-  async function handlePriorityChange(taskId: string, newPriority: string) {
+  function handlePriorityChange(taskId: string, newPriority: string) {
     const task = tasks.find(t => t.id === taskId);
     if (!task || task.priority === newPriority) return;
+    const previousPriority = task.priority;
 
-    const { data, error } = await supabase.from('tasks').update({ priority: newPriority }).eq('id', taskId).select();
-    if (error) { console.error('Priority update error:', error); return; }
-    if (!data || data.length === 0) {
-      alert('Update blocked by Supabase Row Level Security (RLS).');
-      return;
-    }
-
-    sessionStorage.removeItem('tasks_data_time');
-    sessionStorage.removeItem('dashboard_data_time_v2');
-
+    // Optimistic update — UI changes instantly
     setTasks(prev => prev.map(t => t.id === taskId ? { ...t, priority: newPriority } : t));
+
+    // Fire DB call in the background
+    supabase.from('tasks').update({ priority: newPriority }).eq('id', taskId).select('id').then(({ data, error }) => {
+      if (error) {
+        console.error('Priority update error:', error);
+        setTasks(prev => prev.map(t => t.id === taskId ? { ...t, priority: previousPriority } : t));
+        return;
+      }
+      if (!data || data.length === 0) {
+        setTasks(prev => prev.map(t => t.id === taskId ? { ...t, priority: previousPriority } : t));
+        alert('Update blocked by Supabase Row Level Security (RLS).');
+        return;
+      }
+      sessionStorage.removeItem('tasks_data_time');
+      sessionStorage.removeItem('dashboard_data_time_v2');
+    });
   }
 
   function openEditTask(task: Task) {
@@ -391,62 +408,90 @@ export default function BahrainTasks() {
   }
 
   // Inline partner assignment
-  async function handleAssign(taskId: string, partnerId: string) {
+  function handleAssign(taskId: string, partnerId: string) {
     const assignValue = partnerId && partnerId.length > 0 ? partnerId : null;
-    const { data, error } = await supabase.from('tasks').update({ assigned_to: assignValue }).eq('id', taskId).select();
-    if (error) { console.error('Assign error:', error); alert('Error assigning: ' + error.message); return; }
-    if (!data || data.length === 0) {
-      alert('Assignment blocked by Supabase Row Level Security (RLS).');
-      return;
-    }
+    const previousTask = tasks.find(t => t.id === taskId);
+    if (!previousTask) return;
 
-    if (assignValue) {
-      const partner = partners.find(p => p.id === assignValue);
-      await supabase.from('status_log').insert({
-        task_id: taskId,
-        status: tasks.find(t => t.id === taskId)?.status || 'Unknown',
-        updated_by: assignValue,
-        remarks: `Task assigned to ${partner?.username || 'Unknown'}`,
-      });
-    }
-
-    sessionStorage.removeItem('tasks_data_time');
-    sessionStorage.removeItem('dashboard_data_time_v2');
-
+    // Optimistic update — UI changes instantly
     setTasks(prev => prev.map(t => t.id === taskId ? { ...t, assigned_to: assignValue || '', assigned_partners: assignValue ? [assignValue] : [] } : t));
+
+    // Fire DB call in the background
+    supabase.from('tasks').update({ assigned_to: assignValue }).eq('id', taskId).select('id').then(async ({ data, error }) => {
+      if (error) {
+        console.error('Assign error:', error);
+        setTasks(prev => prev.map(t => t.id === taskId ? { ...t, assigned_to: previousTask.assigned_to, assigned_partners: previousTask.assigned_partners } : t));
+        alert('Error assigning: ' + error.message);
+        return;
+      }
+      if (!data || data.length === 0) {
+        setTasks(prev => prev.map(t => t.id === taskId ? { ...t, assigned_to: previousTask.assigned_to, assigned_partners: previousTask.assigned_partners } : t));
+        alert('Assignment blocked by Supabase Row Level Security (RLS).');
+        return;
+      }
+
+      if (assignValue) {
+        const partner = partners.find(p => p.id === assignValue);
+        supabase.from('status_log').insert({
+          task_id: taskId,
+          status: previousTask.status || 'Unknown',
+          updated_by: assignValue,
+          remarks: `Task assigned to ${partner?.username || 'Unknown'}`,
+        }).then(({ error: logErr }) => {
+          if (logErr) console.error('Assign log error:', logErr);
+        });
+      }
+
+      sessionStorage.removeItem('tasks_data_time');
+      sessionStorage.removeItem('dashboard_data_time_v2');
+    });
   }
 
   // Inline auditor assignment
-  async function handleAssignAuditor(taskId: string, auditorId: string) {
+  function handleAssignAuditor(taskId: string, auditorId: string) {
     const assignValue = auditorId && auditorId.length > 0 ? auditorId : null;
-    const { data, error } = await supabase.from('tasks').update({ auditor_id: assignValue }).eq('id', taskId).select();
-    if (error) { console.error('Assign auditor error:', error); alert('Error assigning auditor: ' + error.message); return; }
-    if (!data || data.length === 0) {
-      alert('Assignment blocked by Supabase Row Level Security (RLS).');
-      return;
-    }
+    const previousAuditorId = tasks.find(t => t.id === taskId)?.auditor_id;
+
+    // Optimistic update — UI changes instantly
     setTasks(prev => prev.map(t => t.id === taskId ? { ...t, auditor_id: assignValue } : t));
+
+    // Fire DB call in the background
+    supabase.from('tasks').update({ auditor_id: assignValue }).eq('id', taskId).select('id').then(({ data, error }) => {
+      if (error) {
+        console.error('Assign auditor error:', error);
+        setTasks(prev => prev.map(t => t.id === taskId ? { ...t, auditor_id: previousAuditorId } : t));
+        alert('Error assigning auditor: ' + error.message);
+        return;
+      }
+      if (!data || data.length === 0) {
+        setTasks(prev => prev.map(t => t.id === taskId ? { ...t, auditor_id: previousAuditorId } : t));
+        alert('Assignment blocked by Supabase Row Level Security (RLS).');
+        return;
+      }
+    });
   }
 
   // Toggle PL Uploaded
-  async function handlePlUploadedToggle(taskId: string) {
+  function handlePlUploadedToggle(taskId: string) {
     const task = tasks.find(t => t.id === taskId);
     if (!task) return;
     const newVal = !task.pl_uploaded;
-    // Optimistic update
+    // Optimistic update — UI changes instantly
     setTasks(prev => prev.map(t => t.id === taskId ? { ...t, pl_uploaded: newVal } : t));
-    const { data, error } = await supabase.from('tasks').update({ pl_uploaded: newVal }).eq('id', taskId).select();
-    if (error) {
-      console.error('PL uploaded toggle error:', error);
-      setTasks(prev => prev.map(t => t.id === taskId ? { ...t, pl_uploaded: !newVal } : t));
-      return;
-    }
-    if (!data || data.length === 0) {
-      setTasks(prev => prev.map(t => t.id === taskId ? { ...t, pl_uploaded: !newVal } : t));
-      alert('Update blocked by Supabase RLS.');
-      return;
-    }
-    sessionStorage.removeItem('tasks_data_time');
+    // Fire DB update in background — don't block the UI
+    supabase.from('tasks').update({ pl_uploaded: newVal }).eq('id', taskId).select('id').then(({ data, error }) => {
+      if (error) {
+        console.error('PL uploaded toggle error:', error);
+        setTasks(prev => prev.map(t => t.id === taskId ? { ...t, pl_uploaded: !newVal } : t));
+        return;
+      }
+      if (!data || data.length === 0) {
+        setTasks(prev => prev.map(t => t.id === taskId ? { ...t, pl_uploaded: !newVal } : t));
+        alert('Update blocked by Supabase RLS.');
+        return;
+      }
+      sessionStorage.removeItem('tasks_data_time');
+    });
   }
 
   // Save inline description
@@ -1035,7 +1080,7 @@ export default function BahrainTasks() {
 
           {/* Card 4: WhatsApp Message Generator */}
           <div
-            onClick={() => { setShowStatusModal(true); setWaGenStatus(''); setWaGenCopied(false); }}
+            onClick={() => { setShowStatusModal(true); setWaGenStatuses([]); setWaGenCopied(false); }}
             style={{
               background: 'linear-gradient(135deg, #ffffff 0%, #f0fdf4 100%)', borderRadius: '14px', padding: '16px 18px',
               border: '1px solid #bbf7d0', cursor: 'pointer',
@@ -1072,6 +1117,42 @@ export default function BahrainTasks() {
             <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>No recent activity found</div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '80vh', overflowY: 'auto' }}>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '8px' }}>
+                <button
+                  onClick={() => {
+                    const lines = ['*Recently Modified Tasks*', ''];
+                    recentActivityLogs.forEach((log: any, idx: number) => {
+                      const task = log.task;
+                      if (!task) return;
+                      const comp = log.company;
+                      const ttIds = task.task_type_ids && task.task_type_ids.length > 0 ? task.task_type_ids : (task.task_type_id ? task.task_type_id.split(',').map((s: string) => s.trim()).filter(Boolean) : []);
+                      const ttNames = ttIds.map((id: string) => taskTypes.find(t => t.id === id)?.name).filter(Boolean).join(', ') || 'N/A';
+                      const formattedDate = log.created_at ? new Date(log.created_at).toLocaleString() : 'N/A';
+                      
+                      lines.push(`${idx + 1}. *${comp?.company_name || 'Unknown'}*`);
+                      lines.push(`   Date: ${formattedDate}`);
+                      lines.push(`   Task Type: ${ttNames}`);
+                      lines.push(`   Status: ${task.status || 'N/A'}`);
+                      lines.push(`   Description: ${task.description || 'N/A'}`);
+                      lines.push('');
+                    });
+                    const message = lines.join('\n').trim();
+                    window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, '_blank');
+                  }}
+                  style={{
+                    padding: '8px 14px', borderRadius: '10px',
+                    border: 'none', background: 'linear-gradient(135deg, #25D366, #128C7E)',
+                    color: '#ffffff', fontWeight: 600, fontSize: '12px',
+                    cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px',
+                    boxShadow: '0 2px 8px rgba(37,211,102,0.3)',
+                    transition: 'all 0.2s ease',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(37,211,102,0.4)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(37,211,102,0.3)'; }}
+                >
+                  <Send size={14} /> Share via WhatsApp
+                </button>
+              </div>
               {recentActivityLogs.map((log: any, i: number) => {
                 const isEditingThis = recentEditId === log.task_id;
                 const taskDesc = tasks.find(t => t.id === log.task_id)?.description || '';
@@ -1312,29 +1393,76 @@ export default function BahrainTasks() {
             const allStatuses = [...new Set(tasks.map(t => t.status).filter(Boolean))] as string[];
             allStatuses.sort((a, b) => a.localeCompare(b));
 
-            // Tasks matching selected status
-            const matchingTasks = waGenStatus
-              ? tasks.filter(t => t.status === waGenStatus)
+            // Toggle a status in the multi-select array
+            const toggleStatus = (status: string) => {
+              setWaGenStatuses(prev =>
+                prev.includes(status) ? prev.filter(s => s !== status) : [...prev, status]
+              );
+              setWaGenCopied(false);
+            };
+
+            // Select / deselect all
+            const toggleAll = () => {
+              if (waGenStatuses.length === allStatuses.length) {
+                setWaGenStatuses([]);
+              } else {
+                setWaGenStatuses([...allStatuses]);
+              }
+              setWaGenCopied(false);
+            };
+
+            // Tasks matching any of the selected statuses
+            const matchingTasks = waGenStatuses.length > 0
+              ? tasks.filter(t => waGenStatuses.includes(t.status || ''))
               : [];
 
-            // Build the WhatsApp message
+            // Build the WhatsApp message — grouped by status when multiple selected
             const buildMessage = () => {
-              if (!waGenStatus || matchingTasks.length === 0) return '';
-              const lines: string[] = [`*Status: ${waGenStatus}*`, ''];
-              matchingTasks.forEach((task, idx) => {
-                const comp = companies.find(c => c.id === task.company_id);
-                const ttIds = task.task_type_ids && task.task_type_ids.length > 0 ? task.task_type_ids : (task.task_type_id ? task.task_type_id.split(',').map(s => s.trim()).filter(Boolean) : []);
-                const ttNames = ttIds.map(id => taskTypes.find(t => t.id === id)?.name).filter(Boolean).join(', ') || 'N/A';
-                lines.push(`${idx + 1}. *${comp?.company_name || 'Unknown'}*`);
-                lines.push(`   Task Type: ${ttNames}`);
-                lines.push(`   Description: ${task.description || 'N/A'}`);
-                lines.push(`   Due Date: ${task.deadline || 'N/A'}`);
-                lines.push('');
+              if (waGenStatuses.length === 0 || matchingTasks.length === 0) return '';
+
+              // Single status selected — flat list (original behaviour)
+              if (waGenStatuses.length === 1) {
+                const status = waGenStatuses[0];
+                const statusTasks = tasks.filter(t => t.status === status);
+                const lines: string[] = [`*Status: ${status}*`, ''];
+                statusTasks.forEach((task, idx) => {
+                  const comp = companies.find(c => c.id === task.company_id);
+                  const ttIds = task.task_type_ids && task.task_type_ids.length > 0 ? task.task_type_ids : (task.task_type_id ? task.task_type_id.split(',').map(s => s.trim()).filter(Boolean) : []);
+                  const ttNames = ttIds.map(id => taskTypes.find(t => t.id === id)?.name).filter(Boolean).join(', ') || 'N/A';
+                  lines.push(`${idx + 1}. *${comp?.company_name || 'Unknown'}*`);
+                  lines.push(`   Task Type: ${ttNames}`);
+                  lines.push(`   Description: ${task.description || 'N/A'}`);
+                  lines.push(`   Due Date: ${task.deadline || 'N/A'}`);
+                  lines.push('');
+                });
+                return lines.join('\n').trim();
+              }
+
+              // Multiple statuses — group under headings
+              const sections: string[] = [];
+              waGenStatuses.sort((a, b) => a.localeCompare(b)).forEach(status => {
+                const statusTasks = tasks.filter(t => t.status === status);
+                if (statusTasks.length === 0) return;
+                sections.push(`━━━━━━━━━━━━━━━━━━`);
+                sections.push(`*📌 ${status}* (${statusTasks.length})`);
+                sections.push(`━━━━━━━━━━━━━━━━━━`);
+                sections.push('');
+                statusTasks.forEach((task, idx) => {
+                  const comp = companies.find(c => c.id === task.company_id);
+                  const ttIds = task.task_type_ids && task.task_type_ids.length > 0 ? task.task_type_ids : (task.task_type_id ? task.task_type_id.split(',').map(s => s.trim()).filter(Boolean) : []);
+                  const ttNames = ttIds.map(id => taskTypes.find(t => t.id === id)?.name).filter(Boolean).join(', ') || 'N/A';
+                  sections.push(`${idx + 1}. *${comp?.company_name || 'Unknown'}*`);
+                  sections.push(`   Task Type: ${ttNames}`);
+                  sections.push(`   Description: ${task.description || 'N/A'}`);
+                  sections.push(`   Due Date: ${task.deadline || 'N/A'}`);
+                  sections.push('');
+                });
               });
-              return lines.join('\n').trim();
+              return sections.join('\n').trim();
             };
 
             const message = buildMessage();
+            const allSelected = waGenStatuses.length === allStatuses.length && allStatuses.length > 0;
 
             return (
               <div>
@@ -1346,51 +1474,119 @@ export default function BahrainTasks() {
                     </svg>
                   </div>
                   <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#0f172a', margin: '0 0 4px', letterSpacing: '-0.3px' }}>WhatsApp Message Generator</h3>
-                  <p style={{ fontSize: '13px', color: '#64748b', margin: 0 }}>Select a status to generate a shareable message</p>
+                  <p style={{ fontSize: '13px', color: '#64748b', margin: 0 }}>Select one or more statuses to generate a shareable message</p>
                 </div>
 
-                {/* Status selector */}
+                {/* Status multi-select with checkboxes */}
                 <div style={{ marginBottom: '20px' }}>
-                  <label style={{ fontSize: '12px', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '8px', display: 'block' }}>Select Status</label>
-                  <select
-                    value={waGenStatus}
-                    onChange={e => { setWaGenStatus(e.target.value); setWaGenCopied(false); }}
-                    style={{
-                      width: '100%', padding: '12px 16px', borderRadius: '12px',
-                      border: '2px solid #e2e8f0', fontSize: '14px', fontWeight: 600,
-                      color: '#0f172a', background: '#ffffff', outline: 'none',
-                      transition: 'border-color 0.2s ease', cursor: 'pointer',
-                      appearance: 'none',
-                      backgroundImage: 'url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'%2364748b\' stroke-width=\'2\' stroke-linecap=\'round\' stroke-linejoin=\'round\'%3e%3cpolyline points=\'6 9 12 15 18 9\'%3e%3c/polyline%3e%3c/svg%3e")',
-                      backgroundRepeat: 'no-repeat',
-                      backgroundPosition: 'right 14px center',
-                      backgroundSize: '16px',
-                      paddingRight: '40px',
-                    }}
-                    onFocus={e => e.currentTarget.style.borderColor = '#25D366'}
-                    onBlur={e => e.currentTarget.style.borderColor = '#e2e8f0'}
-                  >
-                    <option value="">— Choose a status —</option>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                    <label style={{ fontSize: '12px', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Select Statuses</label>
+                    <button
+                      onClick={toggleAll}
+                      style={{
+                        background: 'none', border: '1px solid #e2e8f0', borderRadius: '8px',
+                        padding: '4px 12px', fontSize: '11px', fontWeight: 600,
+                        color: allSelected ? '#dc2626' : '#25D366', cursor: 'pointer',
+                        transition: 'all 0.15s',
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.background = allSelected ? '#fef2f2' : '#f0fdf4'; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = 'none'; }}
+                    >
+                      {allSelected ? 'Deselect All' : 'Select All'}
+                    </button>
+                  </div>
+                  <div style={{
+                    maxHeight: '200px', overflowY: 'auto', borderRadius: '12px',
+                    border: '2px solid #e2e8f0', background: '#ffffff', padding: '6px',
+                  }}>
                     {allStatuses.map(s => {
                       const count = tasks.filter(t => t.status === s).length;
-                      return <option key={s} value={s}>{s} ({count} task{count !== 1 ? 's' : ''})</option>;
+                      const isChecked = waGenStatuses.includes(s);
+                      const sc = statusColor(s);
+                      return (
+                        <label
+                          key={s}
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: '10px',
+                            padding: '9px 12px', borderRadius: '8px', cursor: 'pointer',
+                            transition: 'all 0.15s ease',
+                            background: isChecked ? '#f0fdf4' : 'transparent',
+                            border: isChecked ? '1px solid #bbf7d0' : '1px solid transparent',
+                            marginBottom: '2px',
+                          }}
+                          onMouseEnter={e => { if (!isChecked) e.currentTarget.style.background = '#f8fafc'; }}
+                          onMouseLeave={e => { if (!isChecked) e.currentTarget.style.background = 'transparent'; }}
+                        >
+                          <div style={{
+                            width: '18px', height: '18px', borderRadius: '5px', flexShrink: 0,
+                            border: isChecked ? '2px solid #25D366' : '2px solid #cbd5e1',
+                            background: isChecked ? '#25D366' : '#ffffff',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            transition: 'all 0.15s ease',
+                          }}>
+                            {isChecked && (
+                              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
+                                <polyline points="20 6 9 17 4 12" />
+                              </svg>
+                            )}
+                          </div>
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => toggleStatus(s)}
+                            style={{ display: 'none' }}
+                          />
+                          <span style={{
+                            padding: '3px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: 600,
+                            background: sc.bg, color: sc.color, border: `1px solid ${sc.border}`,
+                          }}>{s}</span>
+                          <span style={{ fontSize: '12px', color: '#94a3b8', marginLeft: 'auto', fontWeight: 500 }}>
+                            {count} task{count !== 1 ? 's' : ''}
+                          </span>
+                        </label>
+                      );
                     })}
-                  </select>
+                    {allStatuses.length === 0 && (
+                      <div style={{ textAlign: 'center', padding: '20px', color: '#94a3b8', fontSize: '13px' }}>No statuses found</div>
+                    )}
+                  </div>
+                  {waGenStatuses.length > 0 && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '10px' }}>
+                      {waGenStatuses.map(s => (
+                        <span
+                          key={s}
+                          onClick={() => toggleStatus(s)}
+                          style={{
+                            padding: '3px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: 600,
+                            background: '#dcfce7', color: '#15803d', cursor: 'pointer',
+                            display: 'flex', alignItems: 'center', gap: '4px',
+                            transition: 'all 0.15s',
+                          }}
+                          onMouseEnter={e => { e.currentTarget.style.background = '#fecaca'; e.currentTarget.style.color = '#dc2626'; }}
+                          onMouseLeave={e => { e.currentTarget.style.background = '#dcfce7'; e.currentTarget.style.color = '#15803d'; }}
+                        >
+                          {s} <X size={10} />
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 {/* Results */}
-                {waGenStatus && matchingTasks.length === 0 && (
-                  <div style={{ textAlign: 'center', padding: '30px', color: '#94a3b8', fontSize: '14px' }}>No tasks found with status "{waGenStatus}"</div>
+                {waGenStatuses.length > 0 && matchingTasks.length === 0 && (
+                  <div style={{ textAlign: 'center', padding: '30px', color: '#94a3b8', fontSize: '14px' }}>No tasks found for the selected status{waGenStatuses.length !== 1 ? 'es' : ''}</div>
                 )}
 
-                {waGenStatus && matchingTasks.length > 0 && (
+                {waGenStatuses.length > 0 && matchingTasks.length > 0 && (
                   <>
                     {/* Count badge */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px', flexWrap: 'wrap' }}>
                       <div style={{ padding: '4px 12px', borderRadius: '20px', background: '#dcfce7', color: '#15803d', fontSize: '12px', fontWeight: 700 }}>
                         {matchingTasks.length} task{matchingTasks.length !== 1 ? 's' : ''}
                       </div>
-                      <span style={{ fontSize: '12px', color: '#94a3b8' }}>matching "{waGenStatus}"</span>
+                      <span style={{ fontSize: '12px', color: '#94a3b8' }}>
+                        across {waGenStatuses.length} status{waGenStatuses.length !== 1 ? 'es' : ''}
+                      </span>
                     </div>
 
                     {/* Message preview */}
