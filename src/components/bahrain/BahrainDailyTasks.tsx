@@ -367,14 +367,17 @@ export default function BahrainDailyTasks() {
 
 
   const filtered = tasks.filter(t => {
-    const isAssigned = (t.assigned_partners && t.assigned_partners.includes(currentUser?.id || '')) || t.assigned_to === currentUser?.id;
+    const activePartnerIds = t.assigned_partners && t.assigned_partners.length > 0 
+      ? t.assigned_partners 
+      : (t.assigned_to ? [t.assigned_to] : []);
+
+    const isAssigned = activePartnerIds.includes(currentUser?.id || '');
     if (!isAdminUser && !isAssigned) return false;
     
     if (filterStatus && t.status !== filterStatus) return false;
     if (filterPriority && t.priority !== filterPriority) return false;
     if (filterPartner) {
-      const pId = filterPartner;
-      if (t.assigned_to !== pId && !(t.assigned_partners && t.assigned_partners.includes(pId))) return false;
+      if (!activePartnerIds.includes(filterPartner)) return false;
     }
     
     if (search) {
@@ -703,7 +706,9 @@ export default function BahrainDailyTasks() {
                 <td style={compactCell}><span style={{ fontSize: '12px', color: '#475569', whiteSpace: 'nowrap' }}>{task.deadline || '—'}</span></td>
                 <td style={compactCell}>
                   {(() => {
-                    const allAssignedIds = Array.from(new Set([task.assigned_to, ...(task.assigned_partners || [])].filter(Boolean)));
+                    const allAssignedIds = task.assigned_partners && task.assigned_partners.length > 0 
+                      ? task.assigned_partners 
+                      : (task.assigned_to ? [task.assigned_to] : []);
                     if (allAssignedIds.length > 1) {
                       return (
                         <span style={{ fontSize: '12px', color: '#334155', fontWeight: 500 }}>

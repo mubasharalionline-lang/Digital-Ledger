@@ -14,9 +14,10 @@ function resolveTask(task: Task, ctx: ExportCtx) {
   const company = ctx.companies.find(c => c.id === task.company_id);
   const ttIds = task.task_type_ids?.length ? task.task_type_ids : (task.task_type_id ? task.task_type_id.split(',').map(s => s.trim()).filter(Boolean) : []);
   const ttNames = ttIds.map(id => ctx.taskTypes.find(t => t.id === id)?.name).filter(Boolean).join(', ');
-  const primaryName = ctx.partners.find(p => p.id === task.assigned_to)?.username;
-  const partnerNames = (task.assigned_partners || []).map(id => ctx.partners.find(p => p.id === id)?.username);
-  const allNames = Array.from(new Set([primaryName, ...partnerNames].filter(Boolean)));
+  const activePartnerIds = task.assigned_partners && task.assigned_partners.length > 0 
+    ? task.assigned_partners 
+    : (task.assigned_to ? [task.assigned_to] : []);
+  const allNames = activePartnerIds.map(id => ctx.partners.find(p => p.id === id)?.username).filter(Boolean);
   const assigned = allNames.length > 0 ? allNames.join(', ') : 'Unassigned';
   const auditor = ctx.auditors.find(a => a.id === task.auditor_id)?.name || '';
   return {
@@ -60,8 +61,10 @@ export function filterTasks(tasks: Task[], filter: {
     }
     if (filter.status && t.status !== filter.status) return false;
     if (filter.partnerId) {
-      const has = t.assigned_to === filter.partnerId || t.assigned_partners?.includes(filter.partnerId);
-      if (!has) return false;
+      const activeIds = t.assigned_partners && t.assigned_partners.length > 0 
+        ? t.assigned_partners 
+        : (t.assigned_to ? [t.assigned_to] : []);
+      if (!activeIds.includes(filter.partnerId)) return false;
     }
     if (filter.auditorId && t.auditor_id !== filter.auditorId) return false;
     if (filter.mode === 'completed' && !isCompleted(t.status)) return false;
