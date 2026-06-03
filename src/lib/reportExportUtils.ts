@@ -14,9 +14,10 @@ function resolveTask(task: Task, ctx: ExportCtx) {
   const company = ctx.companies.find(c => c.id === task.company_id);
   const ttIds = task.task_type_ids?.length ? task.task_type_ids : (task.task_type_id ? task.task_type_id.split(',').map(s => s.trim()).filter(Boolean) : []);
   const ttNames = ttIds.map(id => ctx.taskTypes.find(t => t.id === id)?.name).filter(Boolean).join(', ');
-  const assigned = task.assigned_partners?.length
-    ? task.assigned_partners.map(id => ctx.partners.find(p => p.id === id)?.username).filter(Boolean).join(', ')
-    : (ctx.partners.find(p => p.id === task.assigned_to)?.username || 'Unassigned');
+  const primaryName = ctx.partners.find(p => p.id === task.assigned_to)?.username;
+  const partnerNames = (task.assigned_partners || []).map(id => ctx.partners.find(p => p.id === id)?.username);
+  const allNames = Array.from(new Set([primaryName, ...partnerNames].filter(Boolean)));
+  const assigned = allNames.length > 0 ? allNames.join(', ') : 'Unassigned';
   const auditor = ctx.auditors.find(a => a.id === task.auditor_id)?.name || '';
   return {
     'Task ID': task.id.slice(0, 8), 'Company': company?.company_name || 'Unknown',

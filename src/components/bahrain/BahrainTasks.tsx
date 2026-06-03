@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import type { Task, Company, User, TaskType, StatusLog } from '@/lib/supabase';
@@ -140,6 +141,7 @@ export default function BahrainTasks() {
   const [showTaskTypeModal, setShowTaskTypeModal] = useState(false);
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [waGenStatuses, setWaGenStatuses] = useState<string[]>([]);
+  const [waGenPartners, setWaGenPartners] = useState<string[]>([]);
   const [waGenCopied, setWaGenCopied] = useState(false);
   const [recentActivityLogs, setRecentActivityLogs] = useState<any[]>([]);
   const [recentLoading, setRecentLoading] = useState(false);
@@ -151,6 +153,7 @@ export default function BahrainTasks() {
   const [updateBy, setUpdateBy] = useState('');
   const [updateRemarks, setUpdateRemarks] = useState('');
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [menuPos, setMenuPos] = useState<{ top?: number, bottom?: number, right: number, maxHeight?: string }>({ top: 0, right: 0 });
 
   // Inline Create Company state
   const [showInlineCompanyForm, setShowInlineCompanyForm] = useState(false);
@@ -255,12 +258,18 @@ export default function BahrainTasks() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  // Close action menu when clicking outside
+  // Close action menu when clicking outside or scrolling
   useEffect(() => {
     if (!openMenuId) return;
-    const handleClick = () => setOpenMenuId(null);
-    document.addEventListener('click', handleClick);
-    return () => document.removeEventListener('click', handleClick);
+    const handleClose = () => setOpenMenuId(null);
+    document.addEventListener('click', handleClose);
+    window.addEventListener('scroll', handleClose, true);
+    window.addEventListener('resize', handleClose);
+    return () => {
+      document.removeEventListener('click', handleClose);
+      window.removeEventListener('scroll', handleClose, true);
+      window.removeEventListener('resize', handleClose);
+    };
   }, [openMenuId]);
 
   // Filter tasks
@@ -629,14 +638,36 @@ export default function BahrainTasks() {
       });
     } else {
       const oldTask = tasks.find(t => t.id === editingTaskId);
-      if (oldTask && oldTask.status !== firstStatus) {
+      if (oldTask) {
         const { user } = getSession();
-        await supabase.from('status_log').insert({
-          task_id: editingTaskId,
-          status: firstStatus,
-          updated_by: user?.id || null,
-          remarks: `Status updated via Edit Form`,
-        });
+        let remarksArr = [];
+
+        // Check if status changed
+        if (oldTask.status !== firstStatus && firstStatus) {
+           remarksArr.push(`Status updated from ${oldTask.status} to ${firstStatus}`);
+        }
+
+        // Check if assignment changed
+        const oldAssign = oldTask.assigned_partners || (oldTask.assigned_to ? [oldTask.assigned_to] : []);
+        const newAssign = assignArray;
+        const oldSorted = [...oldAssign].sort();
+        const newSorted = [...newAssign].sort();
+        if (JSON.stringify(oldSorted) !== JSON.stringify(newSorted)) {
+           const oldPartnerNames = oldAssign.map(id => partners.find(p => p.id === id)?.username).filter(Boolean);
+           const newPartnerNames = newAssign.map(id => partners.find(p => p.id === id)?.username).filter(Boolean);
+           const oldNamesStr = oldPartnerNames.length > 0 ? oldPartnerNames.join(', ') : 'Unassigned';
+           const newNamesStr = newPartnerNames.length > 0 ? newPartnerNames.join(', ') : 'Unassigned';
+           remarksArr.push(`Assignment updated: ${oldNamesStr} → ${newNamesStr}`);
+        }
+
+        if (remarksArr.length > 0) {
+          await supabase.from('status_log').insert({
+            task_id: editingTaskId,
+            status: firstStatus || oldTask.status,
+            updated_by: user?.id || null,
+            remarks: remarksArr.join(' | '),
+          });
+        }
       }
     }
 
@@ -740,9 +771,27 @@ export default function BahrainTasks() {
     const transitionNote = previousStatus !== updateStatus
       ? `${previousStatus} → ${updateStatus}`
       : `Status unchanged (${updateStatus})`;
-    const fullRemarks = updateRemarks
-      ? `${transitionNote} | ${updateRemarks}`
-      : transitionNote;
+
+    // Check if assignments changed
+    const previousPartners = detailTask.assigned_partners || (detailTask.assigned_to ? [detailTask.assigned_to] : []);
+    const oldSorted = [...previousPartners].sort();
+    const newSorted = [...updatePartners].sort();
+    const assignmentChanged = JSON.stringify(oldSorted) !== JSON.stringify(newSorted);
+
+    let assignmentNote = '';
+    if (assignmentChanged) {
+       const oldPartnerNames = previousPartners.map(id => partners.find(p => p.id === id)?.username).filter(Boolean);
+       const newPartnerNames = updatePartners.map(id => partners.find(p => p.id === id)?.username).filter(Boolean);
+       const oldNamesStr = oldPartnerNames.length > 0 ? oldPartnerNames.join(', ') : 'Unassigned';
+       const newNamesStr = newPartnerNames.length > 0 ? newPartnerNames.join(', ') : 'Unassigned';
+       assignmentNote = `Assignment updated: ${oldNamesStr} → ${newNamesStr}`;
+    }
+
+    const notesArr = [transitionNote];
+    if (assignmentChanged) notesArr.push(assignmentNote);
+    if (updateRemarks) notesArr.push(updateRemarks);
+
+    const fullRemarks = notesArr.join(' | ');
 
     const { error: e2 } = await supabase.from('status_log').insert({
       task_id: detailTask.id,
@@ -1080,7 +1129,7 @@ export default function BahrainTasks() {
 
           {/* Card 4: WhatsApp Message Generator */}
           <div
-            onClick={() => { setShowStatusModal(true); setWaGenStatuses([]); setWaGenCopied(false); }}
+            onClick={() => { setShowStatusModal(true); setWaGenStatuses([]); setWaGenPartners([]); setWaGenCopied(false); }}
             style={{
               background: 'linear-gradient(135deg, #ffffff 0%, #f0fdf4 100%)', borderRadius: '14px', padding: '16px 18px',
               border: '1px solid #bbf7d0', cursor: 'pointer',
@@ -1122,7 +1171,7 @@ export default function BahrainTasks() {
                   onClick={() => {
                     const lines: string[] = [];
                     lines.push('━━━━━━━━━━━━━━━━━━');
-                    lines.push('🕐 *Recently Modified Tasks*');
+                    lines.push('*Recently Modified Tasks*');
                     lines.push('━━━━━━━━━━━━━━━━━━');
                     lines.push('');
                     recentActivityLogs.forEach((log: any, idx: number) => {
@@ -1132,17 +1181,18 @@ export default function BahrainTasks() {
                       const ttIds = task.task_type_ids && task.task_type_ids.length > 0 ? task.task_type_ids : (task.task_type_id ? task.task_type_id.split(',').map((s: string) => s.trim()).filter(Boolean) : []);
                       const ttNames = ttIds.map((id: string) => taskTypes.find(t => t.id === id)?.name).filter(Boolean).join(', ') || 'N/A';
                       const formattedDate = log.created_at ? new Date(log.created_at).toLocaleString() : 'N/A';
-                      const assignedNames = (task.assigned_partners && task.assigned_partners.length > 0)
-                        ? task.assigned_partners.map((id: string) => partners.find(p => p.id === id)?.username).filter(Boolean).join(', ')
-                        : (partners.find((p: any) => p.id === task.assigned_to)?.username || 'Unassigned');
+                      const primaryName = partners.find((p: any) => p.id === task.assigned_to)?.username;
+                      const partnerNames = (task.assigned_partners || []).map((id: string) => partners.find(p => p.id === id)?.username);
+                      const allNames = Array.from(new Set([primaryName, ...partnerNames].filter(Boolean)));
+                      const assignedNames = allNames.length > 0 ? allNames.join(', ') : 'Unassigned';
                       
-                      lines.push(`${idx + 1}️⃣ *${comp?.company_name || 'Unknown'}*`);
-                      lines.push(`   📝 CR: ${comp?.cr_number || 'N/A'}`);
-                      lines.push(`   👤 Assigned To: ${assignedNames}`);
-                      lines.push(`   📊 Status: ${task.status || 'N/A'}`);
-                      lines.push(`   📄 Description: ${task.description || 'N/A'}`);
-                      lines.push(`   📋 Audit Type: ${ttNames}`);
-                      lines.push(`   🕐 Modified: ${formattedDate}`);
+                      lines.push(`Company: ${comp?.company_name || 'Unknown'}`);
+                      lines.push(`CR Number: ${comp?.cr_number || 'N/A'}`);
+                      lines.push(`Assigned To: ${assignedNames}`);
+                      lines.push(`Status: ${task.status || 'N/A'}`);
+                      lines.push(`Description: ${task.description || 'N/A'}`);
+                      lines.push(`Audit Type: ${ttNames}`);
+                      lines.push(`Modified: ${formattedDate}`);
                       lines.push('');
                     });
                     const message = lines.join('\n').trim();
@@ -1398,9 +1448,19 @@ export default function BahrainTasks() {
       {showStatusModal && (
         <Modal title="" onClose={() => setShowStatusModal(false)}>
           {(() => {
-            // Collect all unique statuses from tasks
+            // Collect all unique statuses and partners from tasks
             const allStatuses = [...new Set(tasks.map(t => t.status).filter(Boolean))] as string[];
             allStatuses.sort((a, b) => a.localeCompare(b));
+
+            // Extract all unique partners assigned to any task
+            const taskPartnerIds = new Set<string>();
+            tasks.forEach(t => {
+              if (t.assigned_to) taskPartnerIds.add(t.assigned_to);
+              if (t.assigned_partners) t.assigned_partners.forEach(p => taskPartnerIds.add(p));
+            });
+            const allPartnerIds = [...taskPartnerIds];
+            const allPartners = allPartnerIds.map(id => partners.find(p => p.id === id)).filter(Boolean) as User[];
+            allPartners.sort((a, b) => a.username.localeCompare(b.username));
 
             // Toggle a status in the multi-select array
             const toggleStatus = (status: string) => {
@@ -1410,8 +1470,15 @@ export default function BahrainTasks() {
               setWaGenCopied(false);
             };
 
-            // Select / deselect all
-            const toggleAll = () => {
+            const togglePartner = (partnerId: string) => {
+              setWaGenPartners(prev =>
+                prev.includes(partnerId) ? prev.filter(p => p !== partnerId) : [...prev, partnerId]
+              );
+              setWaGenCopied(false);
+            };
+
+            // Select / deselect all statuses
+            const toggleAllStatuses = () => {
               if (waGenStatuses.length === allStatuses.length) {
                 setWaGenStatuses([]);
               } else {
@@ -1420,21 +1487,35 @@ export default function BahrainTasks() {
               setWaGenCopied(false);
             };
 
-            // Tasks matching any of the selected statuses
-            const matchingTasks = waGenStatuses.length > 0
-              ? tasks.filter(t => waGenStatuses.includes(t.status || ''))
+            // Select / deselect all partners
+            const toggleAllPartners = () => {
+              if (waGenPartners.length === allPartners.length) {
+                setWaGenPartners([]);
+              } else {
+                setWaGenPartners(allPartners.map(p => p.id));
+              }
+              setWaGenCopied(false);
+            };
+
+            // Tasks matching any of the selected statuses AND selected partners
+            const matchingTasks = (waGenStatuses.length > 0 || waGenPartners.length > 0)
+              ? tasks.filter(t => {
+                  const statusMatch = waGenStatuses.length === 0 || waGenStatuses.includes(t.status || '');
+                  const partnerMatch = waGenPartners.length === 0 || waGenPartners.includes(t.assigned_to || '') || (t.assigned_partners && t.assigned_partners.some(p => waGenPartners.includes(p)));
+                  return statusMatch && partnerMatch;
+                })
               : [];
 
-            // Build the WhatsApp message — grouped by status when multiple selected
+            // Build the WhatsApp message — grouped by status or partner
             const buildMessage = () => {
-              if (waGenStatuses.length === 0 || matchingTasks.length === 0) return '';
+              if ((waGenStatuses.length === 0 && waGenPartners.length === 0) || matchingTasks.length === 0) return '';
 
               // Helper to resolve assigned names
               const getAssignedNames = (task: Task) => {
-                if (task.assigned_partners && task.assigned_partners.length > 0) {
-                  return task.assigned_partners.map(id => partners.find(p => p.id === id)?.username).filter(Boolean).join(', ') || 'Unassigned';
-                }
-                return partners.find(p => p.id === task.assigned_to)?.username || 'Unassigned';
+                const primaryName = partners.find(p => p.id === task.assigned_to)?.username;
+                const partnerNames = (task.assigned_partners || []).map(id => partners.find(p => p.id === id)?.username);
+                const allNames = Array.from(new Set([primaryName, ...partnerNames].filter(Boolean)));
+                return allNames.length > 0 ? allNames.join(', ') : 'Unassigned';
               };
 
               // Helper to resolve audit type (task type names)
@@ -1443,53 +1524,66 @@ export default function BahrainTasks() {
                 return ttIds.map(id => taskTypes.find(t => t.id === id)?.name).filter(Boolean).join(', ') || 'N/A';
               };
 
-              // Single status selected
-              if (waGenStatuses.length === 1) {
-                const status = waGenStatuses[0];
-                const statusTasks = tasks.filter(t => t.status === status);
-                const lines: string[] = [];
-                lines.push('━━━━━━━━━━━━━━━━━━');
-                lines.push(`📌 *Status: ${status}* (${statusTasks.length})`);
-                lines.push('━━━━━━━━━━━━━━━━━━');
+              // Format a single task
+              const formatTask = (task: Task, idx: number, lines: string[]) => {
+                const comp = companies.find(c => c.id === task.company_id);
+                lines.push(`Company: ${comp?.company_name || 'Unknown'}`);
+                lines.push(`CR Number: ${comp?.cr_number || 'N/A'}`);
+                lines.push(`Assigned To: ${getAssignedNames(task)}`);
+                lines.push(`Status: ${task.status || 'N/A'}`);
+                lines.push(`Description: ${task.description || 'N/A'}`);
+                lines.push(`Audit Type: ${getAuditType(task)}`);
                 lines.push('');
-                statusTasks.forEach((task, idx) => {
-                  const comp = companies.find(c => c.id === task.company_id);
-                  lines.push(`${idx + 1}️⃣ *${comp?.company_name || 'Unknown'}*`);
-                  lines.push(`   📝 CR: ${comp?.cr_number || 'N/A'}`);
-                  lines.push(`   👤 Assigned To: ${getAssignedNames(task)}`);
-                  lines.push(`   📊 Status: ${task.status || 'N/A'}`);
-                  lines.push(`   📄 Description: ${task.description || 'N/A'}`);
-                  lines.push(`   📋 Audit Type: ${getAuditType(task)}`);
-                  lines.push('');
+              };
+
+              const sections: string[] = [];
+
+              // If grouping by status makes sense (multiple statuses, or status is selected and partner is single/none)
+              if (waGenStatuses.length > 1 || (waGenStatuses.length === 1 && waGenPartners.length <= 1) || (waGenStatuses.length > 0 && waGenPartners.length > 0)) {
+                waGenStatuses.sort((a, b) => a.localeCompare(b)).forEach(status => {
+                  const statusTasks = matchingTasks.filter(t => t.status === status);
+                  if (statusTasks.length === 0) return;
+                  if (waGenStatuses.length > 1 || waGenPartners.length > 1) {
+                    sections.push('━━━━━━━━━━━━━━━━━━');
+                    sections.push(`*Status: ${status}* (${statusTasks.length})`);
+                    sections.push('━━━━━━━━━━━━━━━━━━');
+                    sections.push('');
+                  } else {
+                    sections.push('━━━━━━━━━━━━━━━━━━');
+                    sections.push(`*Status: ${status}* (${statusTasks.length})`);
+                    sections.push('━━━━━━━━━━━━━━━━━━');
+                    sections.push('');
+                  }
+                  statusTasks.forEach((task, idx) => formatTask(task, idx, sections));
                 });
-                return lines.join('\n').trim();
+              } 
+              // Otherwise, group by partner
+              else if (waGenPartners.length > 0) {
+                waGenPartners.forEach(partnerId => {
+                  const partner = partners.find(p => p.id === partnerId);
+                  const partnerTasks = matchingTasks.filter(t => t.assigned_to === partnerId || (t.assigned_partners && t.assigned_partners.includes(partnerId)));
+                  if (partnerTasks.length === 0) return;
+                  if (waGenPartners.length > 1) {
+                    sections.push('━━━━━━━━━━━━━━━━━━');
+                    sections.push(`*Partner: ${partner?.username || 'Unknown'}* (${partnerTasks.length})`);
+                    sections.push('━━━━━━━━━━━━━━━━━━');
+                    sections.push('');
+                  } else {
+                    sections.push('━━━━━━━━━━━━━━━━━━');
+                    sections.push(`*Partner: ${partner?.username || 'Unknown'}* (${partnerTasks.length})`);
+                    sections.push('━━━━━━━━━━━━━━━━━━');
+                    sections.push('');
+                  }
+                  partnerTasks.forEach((task, idx) => formatTask(task, idx, sections));
+                });
               }
 
-              // Multiple statuses — group under headings
-              const sections: string[] = [];
-              waGenStatuses.sort((a, b) => a.localeCompare(b)).forEach(status => {
-                const statusTasks = tasks.filter(t => t.status === status);
-                if (statusTasks.length === 0) return;
-                sections.push('━━━━━━━━━━━━━━━━━━');
-                sections.push(`📌 *${status}* (${statusTasks.length})`);
-                sections.push('━━━━━━━━━━━━━━━━━━');
-                sections.push('');
-                statusTasks.forEach((task, idx) => {
-                  const comp = companies.find(c => c.id === task.company_id);
-                  sections.push(`${idx + 1}️⃣ *${comp?.company_name || 'Unknown'}*`);
-                  sections.push(`   📝 CR: ${comp?.cr_number || 'N/A'}`);
-                  sections.push(`   👤 Assigned To: ${getAssignedNames(task)}`);
-                  sections.push(`   📊 Status: ${task.status || 'N/A'}`);
-                  sections.push(`   📄 Description: ${task.description || 'N/A'}`);
-                  sections.push(`   📋 Audit Type: ${getAuditType(task)}`);
-                  sections.push('');
-                });
-              });
               return sections.join('\n').trim();
             };
 
             const message = buildMessage();
-            const allSelected = waGenStatuses.length === allStatuses.length && allStatuses.length > 0;
+            const allStatusesSelected = waGenStatuses.length === allStatuses.length && allStatuses.length > 0;
+            const allPartnersSelected = waGenPartners.length === allPartners.length && allPartners.length > 0;
 
             return (
               <div>
@@ -1501,110 +1595,218 @@ export default function BahrainTasks() {
                     </svg>
                   </div>
                   <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#0f172a', margin: '0 0 4px', letterSpacing: '-0.3px' }}>WhatsApp Message Generator</h3>
-                  <p style={{ fontSize: '13px', color: '#64748b', margin: 0 }}>Select one or more statuses to generate a shareable message</p>
+                  <div style={{ fontSize: '13px', color: '#64748b', textAlign: 'center', margin: 0 }}>
+                    Select statuses and/or partners to generate a shareable message
+                  </div>
                 </div>
 
-                {/* Status multi-select with checkboxes */}
-                <div style={{ marginBottom: '20px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-                    <label style={{ fontSize: '12px', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Select Statuses</label>
-                    <button
-                      onClick={toggleAll}
-                      style={{
-                        background: 'none', border: '1px solid #e2e8f0', borderRadius: '8px',
-                        padding: '4px 12px', fontSize: '11px', fontWeight: 600,
-                        color: allSelected ? '#dc2626' : '#25D366', cursor: 'pointer',
-                        transition: 'all 0.15s',
-                      }}
-                      onMouseEnter={e => { e.currentTarget.style.background = allSelected ? '#fef2f2' : '#f0fdf4'; }}
-                      onMouseLeave={e => { e.currentTarget.style.background = 'none'; }}
-                    >
-                      {allSelected ? 'Deselect All' : 'Select All'}
-                    </button>
-                  </div>
-                  <div style={{
-                    maxHeight: '200px', overflowY: 'auto', borderRadius: '12px',
-                    border: '2px solid #e2e8f0', background: '#ffffff', padding: '6px',
-                  }}>
-                    {allStatuses.map(s => {
-                      const count = tasks.filter(t => t.status === s).length;
-                      const isChecked = waGenStatuses.includes(s);
-                      const sc = statusColor(s);
-                      return (
-                        <label
-                          key={s}
-                          style={{
-                            display: 'flex', alignItems: 'center', gap: '10px',
-                            padding: '9px 12px', borderRadius: '8px', cursor: 'pointer',
-                            transition: 'all 0.15s ease',
-                            background: isChecked ? '#f0fdf4' : 'transparent',
-                            border: isChecked ? '1px solid #bbf7d0' : '1px solid transparent',
-                            marginBottom: '2px',
-                          }}
-                          onMouseEnter={e => { if (!isChecked) e.currentTarget.style.background = '#f8fafc'; }}
-                          onMouseLeave={e => { if (!isChecked) e.currentTarget.style.background = 'transparent'; }}
-                        >
-                          <div style={{
-                            width: '18px', height: '18px', borderRadius: '5px', flexShrink: 0,
-                            border: isChecked ? '2px solid #25D366' : '2px solid #cbd5e1',
-                            background: isChecked ? '#25D366' : '#ffffff',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            transition: 'all 0.15s ease',
-                          }}>
-                            {isChecked && (
-                              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
-                                <polyline points="20 6 9 17 4 12" />
-                              </svg>
-                            )}
-                          </div>
-                          <input
-                            type="checkbox"
-                            checked={isChecked}
-                            onChange={() => toggleStatus(s)}
-                            style={{ display: 'none' }}
-                          />
-                          <span style={{
-                            padding: '3px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: 600,
-                            background: sc.bg, color: sc.color, border: `1px solid ${sc.border}`,
-                          }}>{s}</span>
-                          <span style={{ fontSize: '12px', color: '#94a3b8', marginLeft: 'auto', fontWeight: 500 }}>
-                            {count} task{count !== 1 ? 's' : ''}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px', marginTop: '20px' }}>
+                  {/* Left Column: Status multi-select */}
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                      <label style={{ fontSize: '12px', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Select Statuses</label>
+                      <button
+                        onClick={toggleAllStatuses}
+                        style={{
+                          background: 'none', border: '1px solid #e2e8f0', borderRadius: '8px',
+                          padding: '4px 12px', fontSize: '11px', fontWeight: 600,
+                          color: allStatusesSelected ? '#dc2626' : '#25D366', cursor: 'pointer',
+                          transition: 'all 0.15s',
+                        }}
+                        onMouseEnter={e => { e.currentTarget.style.background = allStatusesSelected ? '#fef2f2' : '#f0fdf4'; }}
+                        onMouseLeave={e => { e.currentTarget.style.background = 'none'; }}
+                      >
+                        {allStatusesSelected ? 'Deselect All' : 'Select All'}
+                      </button>
+                    </div>
+                    <div style={{
+                      maxHeight: '200px', overflowY: 'auto', borderRadius: '12px',
+                      border: '2px solid #e2e8f0', background: '#ffffff', padding: '6px',
+                    }}>
+                      {allStatuses.map(s => {
+                        const count = tasks.filter(t => t.status === s).length;
+                        const isChecked = waGenStatuses.includes(s);
+                        const sc = statusColor(s);
+                        return (
+                          <label
+                            key={s}
+                            style={{
+                              display: 'flex', alignItems: 'center', gap: '10px',
+                              padding: '9px 12px', borderRadius: '8px', cursor: 'pointer',
+                              transition: 'all 0.15s ease',
+                              background: isChecked ? '#f0fdf4' : 'transparent',
+                              border: isChecked ? '1px solid #bbf7d0' : '1px solid transparent',
+                              marginBottom: '2px',
+                            }}
+                            onMouseEnter={e => { if (!isChecked) e.currentTarget.style.background = '#f8fafc'; }}
+                            onMouseLeave={e => { if (!isChecked) e.currentTarget.style.background = 'transparent'; }}
+                          >
+                            <div style={{
+                              width: '18px', height: '18px', borderRadius: '5px', flexShrink: 0,
+                              border: isChecked ? '2px solid #25D366' : '2px solid #cbd5e1',
+                              background: isChecked ? '#25D366' : '#ffffff',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              transition: 'all 0.15s ease',
+                            }}>
+                              {isChecked && (
+                                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
+                                  <polyline points="20 6 9 17 4 12" />
+                                </svg>
+                              )}
+                            </div>
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => toggleStatus(s)}
+                              style={{ display: 'none' }}
+                            />
+                            <span style={{
+                              padding: '3px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: 600,
+                              background: sc.bg, color: sc.color, border: `1px solid ${sc.border}`,
+                            }}>{s}</span>
+                            <span style={{ fontSize: '12px', color: '#94a3b8', marginLeft: 'auto', fontWeight: 500 }}>
+                              {count}
+                            </span>
+                          </label>
+                        );
+                      })}
+                      {allStatuses.length === 0 && (
+                        <div style={{ textAlign: 'center', padding: '20px', color: '#94a3b8', fontSize: '13px' }}>No statuses found</div>
+                      )}
+                    </div>
+                    {waGenStatuses.length > 0 && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '10px' }}>
+                        {waGenStatuses.map(s => (
+                          <span
+                            key={s}
+                            onClick={() => toggleStatus(s)}
+                            style={{
+                              padding: '3px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: 600,
+                              background: '#dcfce7', color: '#15803d', cursor: 'pointer',
+                              display: 'flex', alignItems: 'center', gap: '4px',
+                              transition: 'all 0.15s',
+                            }}
+                            onMouseEnter={e => { e.currentTarget.style.background = '#fecaca'; e.currentTarget.style.color = '#dc2626'; }}
+                            onMouseLeave={e => { e.currentTarget.style.background = '#dcfce7'; e.currentTarget.style.color = '#15803d'; }}
+                          >
+                            {s} <X size={10} />
                           </span>
-                        </label>
-                      );
-                    })}
-                    {allStatuses.length === 0 && (
-                      <div style={{ textAlign: 'center', padding: '20px', color: '#94a3b8', fontSize: '13px' }}>No statuses found</div>
+                        ))}
+                      </div>
                     )}
                   </div>
-                  {waGenStatuses.length > 0 && (
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '10px' }}>
-                      {waGenStatuses.map(s => (
-                        <span
-                          key={s}
-                          onClick={() => toggleStatus(s)}
-                          style={{
-                            padding: '3px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: 600,
-                            background: '#dcfce7', color: '#15803d', cursor: 'pointer',
-                            display: 'flex', alignItems: 'center', gap: '4px',
-                            transition: 'all 0.15s',
-                          }}
-                          onMouseEnter={e => { e.currentTarget.style.background = '#fecaca'; e.currentTarget.style.color = '#dc2626'; }}
-                          onMouseLeave={e => { e.currentTarget.style.background = '#dcfce7'; e.currentTarget.style.color = '#15803d'; }}
-                        >
-                          {s} <X size={10} />
-                        </span>
-                      ))}
+
+                  {/* Right Column: Partner multi-select */}
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                      <label style={{ fontSize: '12px', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Select Partners</label>
+                      <button
+                        onClick={toggleAllPartners}
+                        style={{
+                          background: 'none', border: '1px solid #e2e8f0', borderRadius: '8px',
+                          padding: '4px 12px', fontSize: '11px', fontWeight: 600,
+                          color: allPartnersSelected ? '#dc2626' : '#25D366', cursor: 'pointer',
+                          transition: 'all 0.15s',
+                        }}
+                        onMouseEnter={e => { e.currentTarget.style.background = allPartnersSelected ? '#fef2f2' : '#f0fdf4'; }}
+                        onMouseLeave={e => { e.currentTarget.style.background = 'none'; }}
+                      >
+                        {allPartnersSelected ? 'Deselect All' : 'Select All'}
+                      </button>
                     </div>
-                  )}
+                    <div style={{
+                      maxHeight: '200px', overflowY: 'auto', borderRadius: '12px',
+                      border: '2px solid #e2e8f0', background: '#ffffff', padding: '6px',
+                    }}>
+                      {allPartners.map(p => {
+                        const count = tasks.filter(t => t.assigned_to === p.id || (t.assigned_partners && t.assigned_partners.includes(p.id))).length;
+                        const isChecked = waGenPartners.includes(p.id);
+                        return (
+                          <label
+                            key={p.id}
+                            style={{
+                              display: 'flex', alignItems: 'center', gap: '10px',
+                              padding: '9px 12px', borderRadius: '8px', cursor: 'pointer',
+                              transition: 'all 0.15s ease',
+                              background: isChecked ? '#f0fdf4' : 'transparent',
+                              border: isChecked ? '1px solid #bbf7d0' : '1px solid transparent',
+                              marginBottom: '2px',
+                            }}
+                            onMouseEnter={e => { if (!isChecked) e.currentTarget.style.background = '#f8fafc'; }}
+                            onMouseLeave={e => { if (!isChecked) e.currentTarget.style.background = 'transparent'; }}
+                          >
+                            <div style={{
+                              width: '18px', height: '18px', borderRadius: '5px', flexShrink: 0,
+                              border: isChecked ? '2px solid #25D366' : '2px solid #cbd5e1',
+                              background: isChecked ? '#25D366' : '#ffffff',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              transition: 'all 0.15s ease',
+                            }}>
+                              {isChecked && (
+                                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
+                                  <polyline points="20 6 9 17 4 12" />
+                                </svg>
+                              )}
+                            </div>
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => togglePartner(p.id)}
+                              style={{ display: 'none' }}
+                            />
+                            <div style={{
+                              width: '24px', height: '24px', borderRadius: '50%',
+                              background: 'linear-gradient(135deg, #e2e8f0, #cbd5e1)',
+                              color: '#475569', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              fontSize: '10px', fontWeight: 700
+                            }}>
+                              {p.username.substring(0, 2).toUpperCase()}
+                            </div>
+                            <span style={{ fontSize: '13px', fontWeight: 600, color: '#1e293b' }}>
+                              {p.username}
+                            </span>
+                            <span style={{ fontSize: '12px', color: '#94a3b8', marginLeft: 'auto', fontWeight: 500 }}>
+                              {count}
+                            </span>
+                          </label>
+                        );
+                      })}
+                      {allPartners.length === 0 && (
+                        <div style={{ textAlign: 'center', padding: '20px', color: '#94a3b8', fontSize: '13px' }}>No partners found</div>
+                      )}
+                    </div>
+                    {waGenPartners.length > 0 && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '10px' }}>
+                        {waGenPartners.map(pId => {
+                          const pName = allPartners.find(p => p.id === pId)?.username;
+                          return (
+                            <span
+                              key={pId}
+                              onClick={() => togglePartner(pId)}
+                              style={{
+                                padding: '3px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: 600,
+                                background: '#dbeafe', color: '#1d4ed8', cursor: 'pointer',
+                                display: 'flex', alignItems: 'center', gap: '4px',
+                                transition: 'all 0.15s',
+                              }}
+                              onMouseEnter={e => { e.currentTarget.style.background = '#fecaca'; e.currentTarget.style.color = '#dc2626'; }}
+                              onMouseLeave={e => { e.currentTarget.style.background = '#dbeafe'; e.currentTarget.style.color = '#1d4ed8'; }}
+                            >
+                              {pName} <X size={10} />
+                            </span>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* Results */}
-                {waGenStatuses.length > 0 && matchingTasks.length === 0 && (
-                  <div style={{ textAlign: 'center', padding: '30px', color: '#94a3b8', fontSize: '14px' }}>No tasks found for the selected status{waGenStatuses.length !== 1 ? 'es' : ''}</div>
+                {(waGenStatuses.length > 0 || waGenPartners.length > 0) && matchingTasks.length === 0 && (
+                  <div style={{ textAlign: 'center', padding: '30px', color: '#94a3b8', fontSize: '14px' }}>No tasks found for the selected combination</div>
                 )}
 
-                {waGenStatuses.length > 0 && matchingTasks.length > 0 && (
+                {(waGenStatuses.length > 0 || waGenPartners.length > 0) && matchingTasks.length > 0 && (
                   <>
                     {/* Count badge */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px', flexWrap: 'wrap' }}>
@@ -1612,7 +1814,7 @@ export default function BahrainTasks() {
                         {matchingTasks.length} task{matchingTasks.length !== 1 ? 's' : ''}
                       </div>
                       <span style={{ fontSize: '12px', color: '#94a3b8' }}>
-                        across {waGenStatuses.length} status{waGenStatuses.length !== 1 ? 'es' : ''}
+                        matching the selected filters
                       </span>
                     </div>
 
@@ -1904,14 +2106,37 @@ export default function BahrainTasks() {
                       </select>
                     ) : (
                       <span style={{ fontSize: '12px' }}>
-                        {(task.assigned_partners && task.assigned_partners.length > 0)
-                          ? task.assigned_partners.map(id => partners.find(p => p.id === id)?.username).filter(Boolean).join(', ')
-                          : (partners.find(p => p.id === task.assigned_to)?.username || 'Unassigned')}
+                        {(() => {
+                          const primaryName = partners.find(p => p.id === task.assigned_to)?.username;
+                          const partnerNames = (task.assigned_partners || []).map(id => partners.find(p => p.id === id)?.username);
+                          const allNames = Array.from(new Set([primaryName, ...partnerNames].filter(Boolean)));
+                          return allNames.length > 0 ? allNames.join(', ') : 'Unassigned';
+                        })()}
                       </span>
                     )}
                   </td>
                   <td style={{ ...compactCell, position: 'relative', width: '44px' }}>
-                    <button onClick={e => { e.stopPropagation(); setOpenMenuId(isMenuOpen ? null : task.id); }}
+                    <button onClick={e => { 
+                      e.stopPropagation(); 
+                      if (isMenuOpen) {
+                        setOpenMenuId(null);
+                      } else {
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        const menuHeight = 180;
+                        let top: number | undefined = rect.bottom + 4;
+                        let bottom: number | undefined = undefined;
+                        let maxHeight = `calc(100vh - ${top}px - 10px)`;
+                        
+                        if (rect.bottom + menuHeight > window.innerHeight && rect.top > window.innerHeight - rect.bottom) {
+                          top = undefined;
+                          bottom = window.innerHeight - rect.top + 4;
+                          maxHeight = `calc(${rect.top}px - 10px)`;
+                        }
+                        
+                        setMenuPos({ top, bottom, right: window.innerWidth - rect.right, maxHeight });
+                        setOpenMenuId(task.id);
+                      }
+                    }}
                       style={{
                         background: isMenuOpen ? '#f1f5f9' : 'transparent',
                         border: 'none',
@@ -1927,8 +2152,8 @@ export default function BahrainTasks() {
                       onMouseLeave={e => { if (!isMenuOpen) { e.currentTarget.style.background = 'transparent'; } }}>
                       <MoreHorizontal size={18} color="#64748b" />
                     </button>
-                    {isMenuOpen && (
-                      <div style={{ position: 'absolute', top: '100%', right: 0, background: '#fff', borderRadius: '12px', boxShadow: '0 8px 30px rgba(0,0,0,0.12)', border: '1px solid #e2e8f0', zIndex: 50, minWidth: '165px', overflow: 'hidden' }}
+                    {isMenuOpen && typeof window !== 'undefined' && createPortal(
+                      <div style={{ position: 'fixed', top: menuPos.top, bottom: menuPos.bottom, right: menuPos.right, maxHeight: menuPos.maxHeight || 'none', overflowY: 'auto', background: '#fff', borderRadius: '12px', boxShadow: '0 8px 30px rgba(0,0,0,0.12)', border: '1px solid #e2e8f0', zIndex: 9999, minWidth: '165px' }}
                         onClick={e => e.stopPropagation()}>
                         <button onClick={() => { viewDetail(task.id); setOpenMenuId(null); }} style={menuItemStyle}>
                           <Eye size={14} color="#3b82f6" /> View Details
@@ -1944,20 +2169,21 @@ export default function BahrainTasks() {
                             const comp = companies.find(c => c.id === task.company_id);
                             const ttIds = task.task_type_ids && task.task_type_ids.length > 0 ? task.task_type_ids : (task.task_type_id ? task.task_type_id.split(',').map(s => s.trim()).filter(Boolean) : []);
                             const ttNames = ttIds.map(id => taskTypes.find(t => t.id === id)?.name).filter(Boolean).join(', ') || 'N/A';
-                            const assignedNames = (task.assigned_partners && task.assigned_partners.length > 0)
-                              ? task.assigned_partners.map(id => partners.find(p => p.id === id)?.username).filter(Boolean).join(', ')
-                              : (partners.find(p => p.id === task.assigned_to)?.username || 'Unassigned');
+                            const primaryName = partners.find(p => p.id === task.assigned_to)?.username;
+                            const partnerNames = (task.assigned_partners || []).map(id => partners.find(p => p.id === id)?.username);
+                            const allNames = Array.from(new Set([primaryName, ...partnerNames].filter(Boolean)));
+                            const assignedNames = allNames.length > 0 ? allNames.join(', ') : 'Unassigned';
                             const msg = [
                               '━━━━━━━━━━━━━━━━━━',
-                              '📋 *Task Update*',
+                              '*Task Update*',
                               '━━━━━━━━━━━━━━━━━━',
                               '',
-                              `🏢 *Company:* ${comp?.company_name || 'Unknown'}`,
-                              `📝 *CR Number:* ${comp?.cr_number || 'N/A'}`,
-                              `👤 *Assigned To:* ${assignedNames}`,
-                              `📊 *Status:* ${task.status || 'N/A'}`,
-                              `📄 *Description:* ${task.description || 'No description'}`,
-                              `📋 *Audit Type:* ${ttNames}`,
+                              `Company: ${comp?.company_name || 'Unknown'}`,
+                              `CR Number: ${comp?.cr_number || 'N/A'}`,
+                              `Assigned To: ${assignedNames}`,
+                              `Status: ${task.status || 'N/A'}`,
+                              `Description: ${task.description || 'No description'}`,
+                              `Audit Type: ${ttNames}`,
                             ].join('\n');
                             window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
                             setOpenMenuId(null);
@@ -1977,7 +2203,8 @@ export default function BahrainTasks() {
                             <Trash2 size={14} color="#ef4444" /> Delete
                           </button>
                         </>)}
-                      </div>
+                      </div>,
+                      document.body
                     )}
                   </td>
                 </tr>

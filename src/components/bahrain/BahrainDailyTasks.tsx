@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import type { Task, User, StatusLog } from '@/lib/supabase';
@@ -63,6 +64,21 @@ export default function BahrainDailyTasks() {
   const [inlineEditDescValue, setInlineEditDescValue] = useState('');
   const [hoveredDescTaskId, setHoveredDescTaskId] = useState<string | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [menuPos, setMenuPos] = useState<{ top?: number, bottom?: number, right: number, maxHeight?: string }>({ top: 0, right: 0 });
+
+  // Close action menu when clicking outside or scrolling
+  useEffect(() => {
+    if (!openMenuId) return;
+    const handleClose = () => setOpenMenuId(null);
+    document.addEventListener('click', handleClose);
+    window.addEventListener('scroll', handleClose, true);
+    window.addEventListener('resize', handleClose);
+    return () => {
+      document.removeEventListener('click', handleClose);
+      window.removeEventListener('scroll', handleClose, true);
+      window.removeEventListener('resize', handleClose);
+    };
+  }, [openMenuId]);
 
   const dataCountry = getDataCountry();
 
@@ -162,7 +178,22 @@ export default function BahrainDailyTasks() {
   async function handleAssign(taskId: string, assignValue: string) {
     if (!isAdminUser) return;
     try {
+      const oldTask = tasks.find(t => t.id === taskId);
+      const oldAssignee = oldTask?.assigned_to || '';
+      
       await supabase.from('tasks').update({ assigned_to: assignValue || null }).eq('id', taskId);
+      
+      const oldName = partners.find(p => p.id === oldAssignee)?.username || 'Unassigned';
+      const newName = partners.find(p => p.id === assignValue)?.username || 'Unassigned';
+      if (oldAssignee !== assignValue) {
+         await supabase.from('status_log').insert({
+           task_id: taskId,
+           status: oldTask?.status || 'Pending',
+           updated_by: currentUser?.id,
+           remarks: `Assignment updated: ${oldName} → ${newName}`
+         });
+      }
+
       setTasks(prev => prev.map(t => t.id === taskId ? { ...t, assigned_to: assignValue } : t));
     } catch (e) {
       console.error(e);
@@ -376,8 +407,38 @@ export default function BahrainDailyTasks() {
         };
         if (newTask.status) updatePayload.status = newTask.status;
 
+        // Check for changes to log
+        const oldTask = tasks.find(t => t.id === editingTaskId);
         const { error } = await supabase.from('tasks').update(updatePayload).eq('id', editingTaskId);
         if (error) { console.error('Update error:', error); alert('Failed to update task: ' + error.message); return; }
+
+        if (oldTask) {
+           let remarksArr = [];
+           if (newTask.status && oldTask.status !== newTask.status) {
+             remarksArr.push(`Status updated from ${oldTask.status} to ${newTask.status}`);
+           }
+           
+           const oldAssign = oldTask.assigned_partners || (oldTask.assigned_to ? [oldTask.assigned_to] : []);
+           const newAssign = newTask.assigned_partners || (newTask.assigned_to ? [newTask.assigned_to] : []);
+           const oldSorted = [...oldAssign].sort();
+           const newSorted = [...newAssign].sort();
+           if (JSON.stringify(oldSorted) !== JSON.stringify(newSorted)) {
+             const oldPartnerNames = oldAssign.map(id => partners.find(p => p.id === id)?.username).filter(Boolean);
+             const newPartnerNames = newAssign.map(id => partners.find(p => p.id === id)?.username).filter(Boolean);
+             const oldNamesStr = oldPartnerNames.length > 0 ? oldPartnerNames.join(', ') : 'Unassigned';
+             const newNamesStr = newPartnerNames.length > 0 ? newPartnerNames.join(', ') : 'Unassigned';
+             remarksArr.push(`Assignment updated: ${oldNamesStr} → ${newNamesStr}`);
+           }
+
+           if (remarksArr.length > 0) {
+              await supabase.from('status_log').insert({
+                task_id: editingTaskId,
+                status: newTask.status || oldTask.status,
+                updated_by: currentUser?.id,
+                remarks: remarksArr.join(' | ')
+              });
+           }
+        }
       } else {
         const { error } = await supabase.from('tasks').insert({
           title: newTask.title,
@@ -667,7 +728,27 @@ export default function BahrainDailyTasks() {
                   })()}
                 </td>
                 <td style={{ ...compactCell, position: 'relative', width: '40px' }}>
-                  <button onClick={e => { e.stopPropagation(); setOpenMenuId(isMenuOpen ? null : task.id); }}
+                  <button onClick={e => { 
+                    e.stopPropagation(); 
+                    if (isMenuOpen) {
+                      setOpenMenuId(null);
+                    } else {
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      const menuHeight = 160;
+                      let top: number | undefined = rect.bottom + 4;
+                      let bottom: number | undefined = undefined;
+                      let maxHeight = `calc(100vh - ${top}px - 10px)`;
+                      
+                      if (rect.bottom + menuHeight > window.innerHeight && rect.top > window.innerHeight - rect.bottom) {
+                        top = undefined;
+                        bottom = window.innerHeight - rect.top + 4;
+                        maxHeight = `calc(${rect.top}px - 10px)`;
+                      }
+                      
+                      setMenuPos({ top, bottom, right: window.innerWidth - rect.right, maxHeight });
+                      setOpenMenuId(task.id);
+                    }
+                  }}
                     style={{
                       background: isMenuOpen ? '#f1f5f9' : 'transparent',
                       border: 'none',
@@ -683,8 +764,8 @@ export default function BahrainDailyTasks() {
                     onMouseLeave={e => { if (!isMenuOpen) e.currentTarget.style.background = 'transparent'; }}>
                     <MoreHorizontal size={16} color="#64748b" />
                   </button>
-                  {isMenuOpen && (
-                    <div style={{ position: 'absolute', top: '100%', right: 0, background: '#fff', borderRadius: '12px', boxShadow: '0 8px 30px rgba(0,0,0,0.12)', border: '1px solid #e2e8f0', zIndex: 50, minWidth: '155px', overflow: 'hidden' }}
+                  {isMenuOpen && typeof window !== 'undefined' && createPortal(
+                    <div style={{ position: 'fixed', top: menuPos.top, bottom: menuPos.bottom, right: menuPos.right, maxHeight: menuPos.maxHeight || 'none', overflowY: 'auto', background: '#fff', borderRadius: '12px', boxShadow: '0 8px 30px rgba(0,0,0,0.12)', border: '1px solid #e2e8f0', zIndex: 9999, minWidth: '155px' }}
                       onClick={e => e.stopPropagation()}>
                       <button onClick={() => { viewDetail(task.id); setOpenMenuId(null); }} style={menuItemStyle}>
                         <Eye size={14} color="#3b82f6" /> View Details
@@ -704,7 +785,8 @@ export default function BahrainDailyTasks() {
                           <Trash2 size={14} color="#ef4444" /> Delete
                         </button>
                       </>)}
-                    </div>
+                    </div>,
+                    document.body
                   )}
                 </td>
               </tr>
