@@ -72,6 +72,7 @@ export default function CompanyDetailPage() {
   const [editStatus, setEditStatus] = useState('Yet to Start');
   const [editStaffList, setEditStaffList] = useState<{ id: string; role: string; username: string }[]>([]);
   const [editGoogleDriveLink, setEditGoogleDriveLink] = useState('');
+  const [editCrNumber, setEditCrNumber] = useState('');
   const [savingCompany, setSavingCompany] = useState(false);
 
   useEffect(() => {
@@ -89,7 +90,7 @@ export default function CompanyDetailPage() {
     if (dataCountry) staffQuery = staffQuery.eq('country', dataCountry);
 
     const [companyRes, tasksRes, staffRes, allStaffRes] = await Promise.all([
-      supabase.from('companies').select('id, company_name, notes, job, start_date, due_date, status, country, google_drive_link, created_at').eq('id', id).single(),
+      supabase.from('companies').select('id, company_name, notes, job, start_date, due_date, status, country, google_drive_link, cr_number, created_at').eq('id', id).single(),
       supabase.from('tasks')
         .select('*, assignee:users!tasks_assigned_to_fkey(username)')
         .eq('company_id', id)
@@ -139,6 +140,7 @@ export default function CompanyDetailPage() {
       username: cs.user?.username || ''
     })));
     setEditGoogleDriveLink(company.google_drive_link || '');
+    setEditCrNumber(company.cr_number || '');
     setShowEditModal(true);
   }
 
@@ -160,6 +162,7 @@ export default function CompanyDetailPage() {
       due_date: editDueDate || null,
       status: editStatus,
       google_drive_link: editGoogleDriveLink.trim() || null,
+      cr_number: editCrNumber.trim() || null,
     }).eq('id', id);
 
     // Delete old staff links
@@ -418,6 +421,11 @@ export default function CompanyDetailPage() {
         </div>
         {/* Detail meta row */}
         <div className="company-meta-row">
+          {company.cr_number && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 600, background: 'var(--bg-tertiary)', padding: '2px 10px', borderRadius: '6px', border: '1px solid var(--border-light)' }}>
+              📝 CR: {company.cr_number}
+            </span>
+          )}
           {company.job && (
             <span className="job-tag"><Briefcase size={11} /> {company.job}</span>
           )}
@@ -841,6 +849,11 @@ export default function CompanyDetailPage() {
                 <label className="label">Company Name *</label>
                 <input className="input" type="text" placeholder="Enter company name"
                   value={editName} onChange={e => setEditName(e.target.value)} required autoFocus />
+              </div>
+              <div style={{ marginBottom: '14px' }}>
+                <label className="label">CR Number</label>
+                <input className="input" type="text" placeholder="Enter CR number"
+                  value={editCrNumber} onChange={e => setEditCrNumber(e.target.value)} />
               </div>
               <div style={{ marginBottom: '14px' }}>
                 <label className="label">Job</label>

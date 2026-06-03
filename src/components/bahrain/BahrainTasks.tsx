@@ -196,7 +196,7 @@ export default function BahrainTasks() {
       }
 
       const [compsRes, ttRes, usersRes, statusRes, audRes] = await Promise.all([
-        supabase.from('companies').select('id, company_name, notes, country, created_at').eq('country', dataCountry || 'Bahrain'),
+        supabase.from('companies').select('id, company_name, notes, country, cr_number, created_at').eq('country', dataCountry || 'Bahrain'),
         supabase.from('task_types').select('id, name, category, jurisdiction, status_options, active, created_at').eq('active', true).eq('country', dataCountry || 'Bahrain'),
         usersQuery,
         dataCountry
@@ -1120,7 +1120,11 @@ export default function BahrainTasks() {
               <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '8px' }}>
                 <button
                   onClick={() => {
-                    const lines = ['*Recently Modified Tasks*', ''];
+                    const lines: string[] = [];
+                    lines.push('━━━━━━━━━━━━━━━━━━');
+                    lines.push('🕐 *Recently Modified Tasks*');
+                    lines.push('━━━━━━━━━━━━━━━━━━');
+                    lines.push('');
                     recentActivityLogs.forEach((log: any, idx: number) => {
                       const task = log.task;
                       if (!task) return;
@@ -1128,12 +1132,17 @@ export default function BahrainTasks() {
                       const ttIds = task.task_type_ids && task.task_type_ids.length > 0 ? task.task_type_ids : (task.task_type_id ? task.task_type_id.split(',').map((s: string) => s.trim()).filter(Boolean) : []);
                       const ttNames = ttIds.map((id: string) => taskTypes.find(t => t.id === id)?.name).filter(Boolean).join(', ') || 'N/A';
                       const formattedDate = log.created_at ? new Date(log.created_at).toLocaleString() : 'N/A';
+                      const assignedNames = (task.assigned_partners && task.assigned_partners.length > 0)
+                        ? task.assigned_partners.map((id: string) => partners.find(p => p.id === id)?.username).filter(Boolean).join(', ')
+                        : (partners.find((p: any) => p.id === task.assigned_to)?.username || 'Unassigned');
                       
-                      lines.push(`${idx + 1}. *${comp?.company_name || 'Unknown'}*`);
-                      lines.push(`   Date: ${formattedDate}`);
-                      lines.push(`   Task Type: ${ttNames}`);
-                      lines.push(`   Status: ${task.status || 'N/A'}`);
-                      lines.push(`   Description: ${task.description || 'N/A'}`);
+                      lines.push(`${idx + 1}️⃣ *${comp?.company_name || 'Unknown'}*`);
+                      lines.push(`   📝 CR: ${comp?.cr_number || 'N/A'}`);
+                      lines.push(`   👤 Assigned To: ${assignedNames}`);
+                      lines.push(`   📊 Status: ${task.status || 'N/A'}`);
+                      lines.push(`   📄 Description: ${task.description || 'N/A'}`);
+                      lines.push(`   📋 Audit Type: ${ttNames}`);
+                      lines.push(`   🕐 Modified: ${formattedDate}`);
                       lines.push('');
                     });
                     const message = lines.join('\n').trim();
@@ -1420,19 +1429,37 @@ export default function BahrainTasks() {
             const buildMessage = () => {
               if (waGenStatuses.length === 0 || matchingTasks.length === 0) return '';
 
-              // Single status selected — flat list (original behaviour)
+              // Helper to resolve assigned names
+              const getAssignedNames = (task: Task) => {
+                if (task.assigned_partners && task.assigned_partners.length > 0) {
+                  return task.assigned_partners.map(id => partners.find(p => p.id === id)?.username).filter(Boolean).join(', ') || 'Unassigned';
+                }
+                return partners.find(p => p.id === task.assigned_to)?.username || 'Unassigned';
+              };
+
+              // Helper to resolve audit type (task type names)
+              const getAuditType = (task: Task) => {
+                const ttIds = task.task_type_ids && task.task_type_ids.length > 0 ? task.task_type_ids : (task.task_type_id ? task.task_type_id.split(',').map(s => s.trim()).filter(Boolean) : []);
+                return ttIds.map(id => taskTypes.find(t => t.id === id)?.name).filter(Boolean).join(', ') || 'N/A';
+              };
+
+              // Single status selected
               if (waGenStatuses.length === 1) {
                 const status = waGenStatuses[0];
                 const statusTasks = tasks.filter(t => t.status === status);
-                const lines: string[] = [`*Status: ${status}*`, ''];
+                const lines: string[] = [];
+                lines.push('━━━━━━━━━━━━━━━━━━');
+                lines.push(`📌 *Status: ${status}* (${statusTasks.length})`);
+                lines.push('━━━━━━━━━━━━━━━━━━');
+                lines.push('');
                 statusTasks.forEach((task, idx) => {
                   const comp = companies.find(c => c.id === task.company_id);
-                  const ttIds = task.task_type_ids && task.task_type_ids.length > 0 ? task.task_type_ids : (task.task_type_id ? task.task_type_id.split(',').map(s => s.trim()).filter(Boolean) : []);
-                  const ttNames = ttIds.map(id => taskTypes.find(t => t.id === id)?.name).filter(Boolean).join(', ') || 'N/A';
-                  lines.push(`${idx + 1}. *${comp?.company_name || 'Unknown'}*`);
-                  lines.push(`   Task Type: ${ttNames}`);
-                  lines.push(`   Description: ${task.description || 'N/A'}`);
-                  lines.push(`   Due Date: ${task.deadline || 'N/A'}`);
+                  lines.push(`${idx + 1}️⃣ *${comp?.company_name || 'Unknown'}*`);
+                  lines.push(`   📝 CR: ${comp?.cr_number || 'N/A'}`);
+                  lines.push(`   👤 Assigned To: ${getAssignedNames(task)}`);
+                  lines.push(`   📊 Status: ${task.status || 'N/A'}`);
+                  lines.push(`   📄 Description: ${task.description || 'N/A'}`);
+                  lines.push(`   📋 Audit Type: ${getAuditType(task)}`);
                   lines.push('');
                 });
                 return lines.join('\n').trim();
@@ -1443,18 +1470,18 @@ export default function BahrainTasks() {
               waGenStatuses.sort((a, b) => a.localeCompare(b)).forEach(status => {
                 const statusTasks = tasks.filter(t => t.status === status);
                 if (statusTasks.length === 0) return;
-                sections.push(`━━━━━━━━━━━━━━━━━━`);
-                sections.push(`*📌 ${status}* (${statusTasks.length})`);
-                sections.push(`━━━━━━━━━━━━━━━━━━`);
+                sections.push('━━━━━━━━━━━━━━━━━━');
+                sections.push(`📌 *${status}* (${statusTasks.length})`);
+                sections.push('━━━━━━━━━━━━━━━━━━');
                 sections.push('');
                 statusTasks.forEach((task, idx) => {
                   const comp = companies.find(c => c.id === task.company_id);
-                  const ttIds = task.task_type_ids && task.task_type_ids.length > 0 ? task.task_type_ids : (task.task_type_id ? task.task_type_id.split(',').map(s => s.trim()).filter(Boolean) : []);
-                  const ttNames = ttIds.map(id => taskTypes.find(t => t.id === id)?.name).filter(Boolean).join(', ') || 'N/A';
-                  sections.push(`${idx + 1}. *${comp?.company_name || 'Unknown'}*`);
-                  sections.push(`   Task Type: ${ttNames}`);
-                  sections.push(`   Description: ${task.description || 'N/A'}`);
-                  sections.push(`   Due Date: ${task.deadline || 'N/A'}`);
+                  sections.push(`${idx + 1}️⃣ *${comp?.company_name || 'Unknown'}*`);
+                  sections.push(`   📝 CR: ${comp?.cr_number || 'N/A'}`);
+                  sections.push(`   👤 Assigned To: ${getAssignedNames(task)}`);
+                  sections.push(`   📊 Status: ${task.status || 'N/A'}`);
+                  sections.push(`   📄 Description: ${task.description || 'N/A'}`);
+                  sections.push(`   📋 Audit Type: ${getAuditType(task)}`);
                   sections.push('');
                 });
               });
@@ -1917,12 +1944,20 @@ export default function BahrainTasks() {
                             const comp = companies.find(c => c.id === task.company_id);
                             const ttIds = task.task_type_ids && task.task_type_ids.length > 0 ? task.task_type_ids : (task.task_type_id ? task.task_type_id.split(',').map(s => s.trim()).filter(Boolean) : []);
                             const ttNames = ttIds.map(id => taskTypes.find(t => t.id === id)?.name).filter(Boolean).join(', ') || 'N/A';
+                            const assignedNames = (task.assigned_partners && task.assigned_partners.length > 0)
+                              ? task.assigned_partners.map(id => partners.find(p => p.id === id)?.username).filter(Boolean).join(', ')
+                              : (partners.find(p => p.id === task.assigned_to)?.username || 'Unassigned');
                             const msg = [
-                              `*Company:* ${comp?.company_name || 'Unknown'}`,
-                              `*Task Type:* ${ttNames}`,
-                              `*Status:* ${task.status || 'N/A'}`,
-                              `*Due Date:* ${task.deadline || 'N/A'}`,
-                              `*Description:* ${task.description || 'No description'}`,
+                              '━━━━━━━━━━━━━━━━━━',
+                              '📋 *Task Update*',
+                              '━━━━━━━━━━━━━━━━━━',
+                              '',
+                              `🏢 *Company:* ${comp?.company_name || 'Unknown'}`,
+                              `📝 *CR Number:* ${comp?.cr_number || 'N/A'}`,
+                              `👤 *Assigned To:* ${assignedNames}`,
+                              `📊 *Status:* ${task.status || 'N/A'}`,
+                              `📄 *Description:* ${task.description || 'No description'}`,
+                              `📋 *Audit Type:* ${ttNames}`,
                             ].join('\n');
                             window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
                             setOpenMenuId(null);

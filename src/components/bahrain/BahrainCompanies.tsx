@@ -17,7 +17,7 @@ export default function BahrainCompanies() {
   const dataCountry = getDataCountry();
   const router = useRouter();
 
-  const [form, setForm] = useState({ name: '', country: dataCountry || 'Bahrain', tax_registration: '', industry: '', compliance_type: '', google_drive_link: '' });
+  const [form, setForm] = useState({ name: '', country: dataCountry || 'Bahrain', tax_registration: '', industry: '', compliance_type: '', google_drive_link: '', cr_number: '' });
 
   // Click-outside handler for Quick Actions panel
   useEffect(() => {
@@ -76,6 +76,7 @@ export default function BahrainCompanies() {
         industry: form.industry.trim(),
         compliance_type: form.compliance_type.trim(),
         google_drive_link: form.google_drive_link.trim() || null,
+        cr_number: form.cr_number.trim() || null,
         notes: '',
         status: 'Active',
       });
@@ -85,7 +86,7 @@ export default function BahrainCompanies() {
       sessionStorage.removeItem('tasks_data_time');
       
       setShowModal(false);
-      setForm({ name: '', country: companyCountry, tax_registration: '', industry: '', compliance_type: '', google_drive_link: '' });
+      setForm({ name: '', country: companyCountry, tax_registration: '', industry: '', compliance_type: '', google_drive_link: '', cr_number: '' });
       loadData();
     } catch (e: any) {
       alert('Error: ' + e.message);
@@ -377,6 +378,9 @@ export default function BahrainCompanies() {
                 </Field>
                 <Field label="Tax Registration">
                   <input value={form.tax_registration} onChange={e => setForm(p => ({ ...p, tax_registration: e.target.value }))} placeholder="Enter tax registration" style={inpStyle} />
+                </Field>
+                <Field label="CR Number">
+                  <input value={form.cr_number} onChange={e => setForm(p => ({ ...p, cr_number: e.target.value }))} placeholder="Enter CR number" style={inpStyle} />
                 </Field>
                 <Field label="Industry">
                   <input value={form.industry} onChange={e => setForm(p => ({ ...p, industry: e.target.value }))} placeholder="e.g., Finance, Tech" style={inpStyle} />
