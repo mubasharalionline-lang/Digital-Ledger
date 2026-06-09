@@ -106,13 +106,6 @@ export default function BahrainCompanies() {
   const filtered = companies.filter(c => !searchTerm || c.company_name.toLowerCase().includes(searchTerm.toLowerCase()));
 
   const listCell = { padding: '14px 16px', fontSize: '13px', color: '#475569' };
-  const Field = ({ label, children }: { label: string, children: React.ReactNode }) => (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-      <label style={{ fontSize: '12px', fontWeight: 600, color: '#64748b' }}>{label}</label>
-      {children}
-    </div>
-  );
-  const inpStyle = { padding: '10px 14px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '14px', outline: 'none' };
 
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '80px 20px' }}>

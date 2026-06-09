@@ -2054,7 +2054,7 @@ export default function BahrainTasks() {
                         <span style={{ fontSize: '11px', color: '#475569', maxWidth: '150px', display: 'inline-block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {task.description || '—'}
                         </span>
-                        {hoveredDescTaskId === task.id && canManageTask(task) && (
+                        {canManageTask(task) && (
                           <button
                             onClick={() => {
                               setInlineEditDescId(task.id);
@@ -2072,7 +2072,13 @@ export default function BahrainTasks() {
                               alignItems: 'center',
                               justifyContent: 'center',
                               color: '#3b82f6',
-                              transition: 'all 0.15s ease'
+                              transition: 'all 0.15s ease',
+                              opacity: hoveredDescTaskId === task.id ? 1 : 0,
+                              pointerEvents: hoveredDescTaskId === task.id ? 'auto' as const : 'none' as const,
+                              /* Fixed dimensions prevent layout shift on hover */
+                              width: '22px',
+                              height: '22px',
+                              flexShrink: 0,
                             }}
                             title="Edit Description"
                             onMouseEnter={e => { e.currentTarget.style.background = '#dbeafe'; }}
@@ -2467,7 +2473,7 @@ export default function BahrainTasks() {
         </Modal>
       )}
 
-      {activeTooltipTaskId && (
+      {activeTooltipTaskId && typeof window !== 'undefined' && createPortal(
         <div
           onMouseEnter={handleTooltipMouseEnter}
           onMouseLeave={handleTooltipMouseLeave}
@@ -2514,7 +2520,8 @@ export default function BahrainTasks() {
               {tasks.find(t => t.id === activeTooltipTaskId)?.description || ''}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
