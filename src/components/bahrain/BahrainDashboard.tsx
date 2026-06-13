@@ -99,8 +99,7 @@ export default function BahrainDashboard() {
 
       const companyList = companiesRes.data || [];
       const companyIds = companyList.map(c => c.id);
-      const newTotalCompanies = companyList.length;
-      setTotalCompanies(newTotalCompanies);
+      let newTotalCompanies = companyList.length;
       setActivePartners((usersRes.data || []).length);
 
        // Fetch tasks (depends on companyIds)
@@ -108,20 +107,34 @@ export default function BahrainDashboard() {
       const userAuditorAccess: string[] = currentUser?.permissions?.auditor_access || [];
       if (companyIds.length > 0) {
         let taskQuery = supabase.from('tasks').select('id, title, company_id, assigned_to, assigned_partners, status, priority, deadline, task_type_id, task_type_ids, auditor_id, description, is_daily, country, created_at').in('company_id', companyIds).neq('is_daily', true);
-        // For non-admin users, we must filter client-side because Supabase
-        // can't do OR across a column and a JSONB array in a single .eq()
         const { data: tasks } = await taskQuery;
         let allTasks = tasks || [];
 
         if (!isAdminUser && currentUser) {
-          allTasks = allTasks.filter(t =>
-            t.assigned_to === currentUser.id ||
-            (t.assigned_partners && t.assigned_partners.includes(currentUser.id)) ||
-            (userAuditorAccess.length > 0 && userAuditorAccess.includes(t.auditor_id || ''))
-          );
+          const isTaskAllowed = (t: Task) => {
+            const activePartnerIds = t.assigned_partners && t.assigned_partners.length > 0
+              ? t.assigned_partners
+              : (t.assigned_to ? [t.assigned_to] : []);
+            const isAssigned = activePartnerIds.includes(currentUser.id);
+            const hasAuditorAccess = t.auditor_id ? userAuditorAccess.includes(t.auditor_id) : false;
+            if (userAuditorAccess.length > 0) {
+              return hasAuditorAccess;
+            }
+            return isAssigned && !t.auditor_id;
+          };
+          allTasks = allTasks.filter(isTaskAllowed);
         }
         taskList = allTasks;
       }
+      
+      let allowedCompanyList = companyList;
+      if (!isAdminUser && currentUser) {
+        allowedCompanyList = companyList.filter(c => 
+          taskList.some(t => t.company_id === c.id)
+        );
+      }
+      newTotalCompanies = allowedCompanyList.length;
+      setTotalCompanies(newTotalCompanies);
       
       const newTotalTasks = taskList.length;
       setTotalTasks(newTotalTasks);

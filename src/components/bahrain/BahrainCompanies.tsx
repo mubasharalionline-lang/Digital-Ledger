@@ -40,16 +40,40 @@ export default function BahrainCompanies() {
     // Fetch all companies for the country
     let { data } = await supabase.from('companies').select('id, company_name, country, tax_registration, industry, compliance_type, status, google_drive_link, notes, created_at').eq('country', dataCountry || 'Bahrain').order('company_name');
     
-    // Partners with can_view_companies see all companies (like admins).
-    // Other non-admin users only see companies they have tasks for.
+    const userAuditorAccess: string[] = currentUser?.permissions?.auditor_access || [];
     const canViewCompanies = currentUser?.permissions?.can_view_companies === true;
-    if (!isAdminUser && !canViewCompanies && currentUser && data) {
-      const { data: userTasks } = await supabase.from('tasks').select('company_id').eq('assigned_to', currentUser.id);
-      if (userTasks) {
-        const assignedCompanyIds = new Set(userTasks.map(t => t.company_id));
-        data = data.filter(c => assignedCompanyIds.has(c.id));
-      } else {
-        data = []; // No tasks, no companies
+    
+    if (!isAdminUser && currentUser && data) {
+      if (userAuditorAccess.length > 0) {
+        const { data: countryTasks } = await supabase
+          .from('tasks')
+          .select('company_id, auditor_id')
+          .eq('country', dataCountry || 'Bahrain')
+          .neq('is_daily', true);
+        
+        if (countryTasks) {
+          const allowedCompanyIds = new Set(
+            countryTasks
+              .filter(t => t.auditor_id && userAuditorAccess.includes(t.auditor_id))
+              .map(t => t.company_id)
+              .filter(Boolean)
+          );
+          data = data.filter(c => allowedCompanyIds.has(c.id));
+        } else {
+          data = [];
+        }
+      } else if (!canViewCompanies) {
+        const { data: userTasks } = await supabase
+          .from('tasks')
+          .select('company_id')
+          .eq('assigned_to', currentUser.id);
+        
+        if (userTasks) {
+          const assignedCompanyIds = new Set(userTasks.map(t => t.company_id));
+          data = data.filter(c => assignedCompanyIds.has(c.id));
+        } else {
+          data = [];
+        }
       }
     }
     

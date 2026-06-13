@@ -14,6 +14,18 @@ export default function BahrainTasks() {
   const { user: currentUser } = getSession();
   const isAdminUser = isAdmin(currentUser);
   const userAuditorAccess: string[] = currentUser?.permissions?.auditor_access || [];
+  const isTaskAllowed = (t: Task) => {
+    if (isAdminUser) return true;
+    const activePartnerIds = t.assigned_partners && t.assigned_partners.length > 0
+      ? t.assigned_partners
+      : (t.assigned_to ? [t.assigned_to] : []);
+    const isAssigned = activePartnerIds.includes(currentUser?.id || '');
+    const hasAuditorAccess = t.auditor_id ? userAuditorAccess.includes(t.auditor_id) : false;
+    if (userAuditorAccess.length > 0) {
+      return hasAuditorAccess;
+    }
+    return isAssigned && !t.auditor_id;
+  };
   const canManageTask = (task: Task) => isAdminUser || userAuditorAccess.includes(task.auditor_id || '');
   const canUpdateStatus = isAdminUser || userAuditorAccess.length > 0 || (currentUser?.permissions?.can_update_status ?? true);
 
@@ -233,18 +245,30 @@ export default function BahrainTasks() {
         taskList = t || [];
       }
 
-      setCompanies(companyList);
+      let filteredTaskList = taskList;
+      let filteredCompanyList = companyList;
+      let filteredAuditorList = audList;
+
+      if (!isAdminUser) {
+        filteredTaskList = taskList.filter(isTaskAllowed);
+        filteredCompanyList = companyList.filter(c => 
+          filteredTaskList.some(t => t.company_id === c.id)
+        );
+        filteredAuditorList = audList.filter(a => userAuditorAccess.includes(a.id));
+      }
+
+      setCompanies(filteredCompanyList);
       setTaskTypes(ttList);
       setPartners(usersList);
-      setAuditors(audList);
-      setTasks(taskList);
+      setAuditors(filteredAuditorList);
+      setTasks(filteredTaskList);
 
       sessionStorage.setItem(cacheKey, JSON.stringify({
-        companies: companyList,
+        companies: filteredCompanyList,
         taskTypes: ttList,
         partners: usersList,
-        auditors: audList,
-        tasks: taskList,
+        auditors: filteredAuditorList,
+        tasks: filteredTaskList,
         dynamicStatuses: resolvedStatuses,
         statusObjects: sObjs
       }));
@@ -986,7 +1010,7 @@ export default function BahrainTasks() {
       </div>
 
       {/* ─── 4 Compact Stat Cards ─── */}
-      {isAdminUser && (
+      {(isAdminUser || !isAdminUser) && (
         <div className="task-stat-cards" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '14px', marginBottom: '20px' }}>
           {/* Card 1: Recently Modified Tasks */}
           <div

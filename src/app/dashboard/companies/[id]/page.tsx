@@ -105,9 +105,43 @@ export default function CompanyDetailPage() {
       return;
     }
 
+    const { user: currentUser } = getSession();
+    const isAdminUser = isAdmin(currentUser);
+    const userAuditorAccess: string[] = currentUser?.permissions?.auditor_access || [];
+    
+    const rawTasks = tasksRes.data || [];
+    let filteredTasks = rawTasks;
+    let isCompanyAllowed = true;
+
+    if (!isAdminUser && currentUser) {
+      const isTaskAllowed = (t: Task) => {
+        const activePartnerIds = t.assigned_partners && t.assigned_partners.length > 0
+          ? t.assigned_partners
+          : (t.assigned_to ? [t.assigned_to] : []);
+        const isAssigned = activePartnerIds.includes(currentUser.id);
+        const hasAuditorAccess = t.auditor_id ? userAuditorAccess.includes(t.auditor_id) : false;
+        if (userAuditorAccess.length > 0) {
+          return hasAuditorAccess;
+        }
+        return isAssigned && !t.auditor_id;
+      };
+      
+      filteredTasks = rawTasks.filter(isTaskAllowed);
+      
+      // If there are tasks but none are allowed, the partner has no access to this company
+      if (rawTasks.length > 0 && filteredTasks.length === 0) {
+        isCompanyAllowed = false;
+      }
+    }
+
+    if (!isCompanyAllowed) {
+      router.push('/dashboard/companies');
+      return;
+    }
+
     setCompany(companyRes.data);
     setNotes(companyRes.data?.notes || '');
-    setTasks(tasksRes.data || []);
+    setTasks(filteredTasks);
     setCompanyStaff(staffRes.data || []);
     setAllStaff(allStaffRes.data || []);
     setLoading(false);
