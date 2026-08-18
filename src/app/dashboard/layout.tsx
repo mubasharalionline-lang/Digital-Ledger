@@ -175,40 +175,56 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       {/* Sidebar */}
       <aside className={`glass sidebar ${mobileOpen ? 'mobile-open' : ''}`}
         style={{
-          width: collapsed ? '64px' : '220px', minHeight: '100vh', position: 'fixed',
+          width: collapsed ? '68px' : '236px', minHeight: '100vh', position: 'fixed',
           left: 0, top: 0, bottom: 0, display: 'flex', flexDirection: 'column',
-          borderRight: '1px solid var(--border-light)',
-          transition: 'transform 0.3s cubic-bezier(0.25,0.1,0.25,1), width 0.3s cubic-bezier(0.25,0.1,0.25,1)',
+          background: '#ffffff',
+          borderRight: '1px solid #e2e8f0',
+          boxShadow: '1px 0 12px rgba(0,0,0,0.02)',
+          transition: 'transform 0.25s cubic-bezier(0.25,0.1,0.25,1), width 0.25s cubic-bezier(0.25,0.1,0.25,1)',
           zIndex: 50, overflow: 'hidden',
         }}>
-        <div style={{ padding: collapsed ? '12px 10px' : '12px 16px', borderBottom: '1px solid var(--border-light)', display: 'flex', alignItems: 'center', gap: '10px', minHeight: '52px' }}>
-          <div style={{ overflow: 'hidden', height: '36px', width: collapsed ? '36px' : '170px', transition: 'width 0.3s cubic-bezier(0.25,0.1,0.25,1)', position: 'relative' }}>
+        {/* Brand / Logo */}
+        <div style={{
+          padding: collapsed ? '14px 8px' : '14px 16px',
+          borderBottom: '1px solid #f1f5f9',
+          display: 'flex', alignItems: 'center', justifyContent: collapsed ? 'center' : 'flex-start',
+          gap: '10px', minHeight: '56px'
+        }}>
+          <div style={{ overflow: 'hidden', height: '38px', width: collapsed ? '38px' : '180px', transition: 'width 0.25s ease', position: 'relative' }}>
             <img src="/logo.png" alt="The Digital Ledger"
-              style={{ position: 'absolute', top: 0, left: 0, height: '100%', width: '100%', objectFit: collapsed ? 'cover' : 'contain', objectPosition: 'left center', transform: collapsed ? 'scale(2.2) translateX(4px)' : 'scale(2.2)', transformOrigin: 'left center', transition: 'all 0.3s cubic-bezier(0.25,0.1,0.25,1)' }}
+              style={{
+                position: 'absolute', top: 0, left: 0, height: '100%', width: '100%',
+                objectFit: collapsed ? 'cover' : 'contain', objectPosition: 'left center',
+                transform: collapsed ? 'scale(2.2) translateX(4px)' : 'scale(2.2)',
+                transformOrigin: 'left center', transition: 'all 0.25s ease'
+              }}
               onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
           </div>
         </div>
 
         {/* Country Switcher (Super Admin only) */}
         {isSuperAdmin(user) && (
-          <div style={{ padding: collapsed ? '6px' : '6px 10px', borderBottom: '1px solid var(--border-light)', position: 'relative' }}>
+          <div style={{ padding: collapsed ? '8px 6px' : '8px 12px', borderBottom: '1px solid #f1f5f9', position: 'relative' }}>
             <button onClick={() => setShowCountryPicker(!showCountryPicker)}
               style={{
-                display: 'flex', alignItems: 'center', gap: '6px', width: '100%',
-                padding: collapsed ? '6px' : '6px 10px', borderRadius: '8px',
-                border: '1px solid var(--border-light)',
-                background: showCountryPicker ? 'var(--accent-light)' : 'var(--bg-tertiary)',
-                cursor: 'pointer', transition: 'var(--transition)',
+                display: 'flex', alignItems: 'center', gap: '8px', width: '100%',
+                padding: collapsed ? '8px' : '7px 10px', borderRadius: '10px',
+                border: '1px solid #e2e8f0',
+                background: showCountryPicker ? '#eff6ff' : '#f8fafc',
+                cursor: 'pointer', transition: 'all 0.15s ease',
                 justifyContent: collapsed ? 'center' : 'flex-start', fontFamily: 'inherit',
+                boxShadow: '0 1px 2px rgba(0,0,0,0.02)'
               }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = '#cbd5e1'; e.currentTarget.style.background = '#f1f5f9'; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.background = showCountryPicker ? '#eff6ff' : '#f8fafc'; }}
               title={collapsed ? `${country || 'Switch Country'}` : undefined}>
-              <span style={{ fontSize: '16px', flexShrink: 0 }}>{currentCountryData?.flag || '🌍'}</span>
+              <span style={{ fontSize: '16px', flexShrink: 0, filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.1))' }}>{currentCountryData?.flag || '🌍'}</span>
               {!collapsed && (
                 <>
-                  <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)', flex: 1, textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <span style={{ fontSize: '12.5px', fontWeight: 600, color: '#1e293b', flex: 1, textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {currentCountryData?.name || country || 'Select Country'}
                   </span>
-                  <ChevronDown size={14} color="var(--text-tertiary)" style={{ flexShrink: 0, transition: 'transform 0.2s', transform: showCountryPicker ? 'rotate(180deg)' : 'rotate(0deg)' }} />
+                  <ChevronDown size={13} color="#94a3b8" style={{ flexShrink: 0, transition: 'transform 0.2s', transform: showCountryPicker ? 'rotate(180deg)' : 'rotate(0deg)' }} />
                 </>
               )}
             </button>
@@ -216,43 +232,50 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             {showCountryPicker && (
               <div className="animate-fadeIn" style={{
                 position: 'absolute', top: '100%', left: collapsed ? '8px' : '12px',
-                right: collapsed ? '-100px' : '12px', minWidth: collapsed ? '200px' : undefined,
-                background: 'var(--bg-secondary)', border: '1px solid var(--border-light)',
-                borderRadius: '12px', boxShadow: '0 8px 24px rgba(0,0,0,0.1)',
-                zIndex: 999, overflow: 'hidden', marginTop: '4px',
+                right: collapsed ? '-120px' : '12px', minWidth: collapsed ? '220px' : undefined,
+                background: '#ffffff', border: '1px solid #e2e8f0',
+                borderRadius: '14px', boxShadow: '0 12px 32px rgba(0,0,0,0.12), 0 4px 12px rgba(0,0,0,0.05)',
+                zIndex: 999, overflow: 'hidden', marginTop: '6px',
               }}>
                 <div onClick={() => setShowCountryPicker(false)} style={{ position: 'fixed', inset: 0, zIndex: -1 }} />
-                {countries.map(c => {
-                  const isSelected = c.name === country || c.code === country;
-                  return (
-                    <button key={c.id} onClick={() => handleCountrySwitch(c.name)}
-                      style={{
-                        display: 'flex', alignItems: 'center', gap: '10px', width: '100%',
-                        padding: '10px 14px', border: 'none',
-                        background: isSelected ? 'var(--accent-light)' : 'transparent',
-                        cursor: 'pointer', fontSize: '13px',
-                        fontWeight: isSelected ? 600 : 400,
-                        color: isSelected ? 'var(--accent)' : 'var(--text-primary)',
-                        transition: 'var(--transition)', textAlign: 'left', fontFamily: 'inherit',
-                        borderBottom: '1px solid var(--border-light)',
-                      }}>
-                      <span style={{ fontSize: '18px' }}>{c.flag}</span>
-                      <div>
-                        <div>{c.name}</div>
-                        <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', fontWeight: 400 }}>{c.code}</div>
-                      </div>
-                      {isSelected && <span style={{ marginLeft: 'auto', width: '8px', height: '8px', borderRadius: '50%', background: 'var(--accent)', flexShrink: 0 }} />}
-                    </button>
-                  );
-                })}
+                <div style={{ padding: '6px 0' }}>
+                  {countries.map(c => {
+                    const isSelected = c.name === country || c.code === country;
+                    return (
+                      <button key={c.id} onClick={() => handleCountrySwitch(c.name)}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: '10px', width: '100%',
+                          padding: '9px 14px', border: 'none',
+                          background: isSelected ? '#eff6ff' : 'transparent',
+                          cursor: 'pointer', fontSize: '13px',
+                          fontWeight: isSelected ? 600 : 500,
+                          color: isSelected ? '#2563eb' : '#334155',
+                          transition: 'all 0.15s ease', textAlign: 'left', fontFamily: 'inherit',
+                        }}
+                        onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = '#f8fafc'; }}
+                        onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = 'transparent'; }}
+                      >
+                        <span style={{ fontSize: '18px' }}>{c.flag}</span>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ lineHeight: 1.2 }}>{c.name}</div>
+                          <div style={{ fontSize: '10.5px', color: '#94a3b8', fontWeight: 500 }}>{c.code}</div>
+                        </div>
+                        {isSelected && <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#2563eb', flexShrink: 0 }} />}
+                      </button>
+                    );
+                  })}
+                </div>
                 {/* Add Country Button */}
                 <button onClick={() => { setShowCountryPicker(false); setShowAddCountry(true); }}
                   style={{
                     display: 'flex', alignItems: 'center', gap: '8px', width: '100%',
-                    padding: '10px 14px', border: 'none', background: 'var(--bg-tertiary)',
-                    cursor: 'pointer', fontSize: '13px', fontWeight: 600,
-                    color: 'var(--accent)', fontFamily: 'inherit',
-                  }}>
+                    padding: '11px 14px', borderTop: '1px solid #f1f5f9', background: '#fafbfc',
+                    cursor: 'pointer', fontSize: '12.5px', fontWeight: 600,
+                    color: '#2563eb', fontFamily: 'inherit',
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.background = '#eff6ff'}
+                  onMouseLeave={e => e.currentTarget.style.background = '#fafbfc'}
+                >
                   <Plus size={14} /> Add New Country
                 </button>
               </div>
@@ -261,50 +284,157 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         )}
 
         {/* Navigation */}
-        <nav style={{ flex: 1, padding: '8px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-          {filteredNav.map((item) => {
+        <nav style={{ flex: 1, padding: collapsed ? '10px 6px' : '12px 10px', display: 'flex', flexDirection: 'column', gap: '3px', overflowY: 'auto' }}>
+          {filteredNav.map((item, idx) => {
             const isActive = pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href));
+            const isFirstAdminItem = item.adminOnly && (idx === 0 || !filteredNav[idx - 1]?.adminOnly);
+            
             return (
-              <button key={item.href}
-                onClick={() => { router.push(item.href); setMobileOpen(false); }}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: '10px',
-                  padding: collapsed ? '9px' : '8px 12px', borderRadius: '10px', border: 'none',
-                  background: isActive ? 'var(--accent)' : 'transparent',
-                  color: isActive ? 'white' : 'var(--text-secondary)',
-                  cursor: 'pointer', fontSize: '13px', fontWeight: isActive ? 600 : 500,
-                  transition: 'var(--transition)', textAlign: 'left',
-                  justifyContent: collapsed ? 'center' : 'flex-start',
-                  width: '100%', fontFamily: 'inherit',
-                }}
-                title={collapsed ? item.label : undefined}>
-                <span style={{ flexShrink: 0, display: 'flex' }}>{React.cloneElement(item.icon as React.ReactElement<any>, { size: 18 })}</span>
-                {!collapsed && <span>{item.label}</span>}
-              </button>
+              <React.Fragment key={item.href}>
+                {isFirstAdminItem && !collapsed && (
+                  <div style={{
+                    fontSize: '10px', fontWeight: 700, color: '#94a3b8',
+                    letterSpacing: '0.08em', textTransform: 'uppercase',
+                    padding: '16px 12px 6px 12px'
+                  }}>
+                    Admin
+                  </div>
+                )}
+                {isFirstAdminItem && collapsed && (
+                  <div style={{ height: '1px', background: '#e2e8f0', margin: '8px 4px' }} />
+                )}
+                <button
+                  onClick={() => { router.push(item.href); setMobileOpen(false); }}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '11px',
+                    padding: collapsed ? '10px' : '9px 12px', borderRadius: '10px',
+                    border: isActive ? '1px solid rgba(191, 219, 254, 0.8)' : '1px solid transparent',
+                    background: isActive ? '#eff6ff' : 'transparent',
+                    color: isActive ? '#1d4ed8' : '#475569',
+                    cursor: 'pointer', fontSize: '13.5px', fontWeight: isActive ? 600 : 500,
+                    transition: 'all 0.15s cubic-bezier(0.4, 0, 0.2, 1)', textAlign: 'left',
+                    justifyContent: collapsed ? 'center' : 'flex-start',
+                    width: '100%', fontFamily: 'inherit',
+                    position: 'relative',
+                    boxShadow: isActive ? '0 1px 3px rgba(37, 99, 235, 0.08)' : 'none'
+                  }}
+                  onMouseEnter={e => {
+                    if (!isActive) {
+                      e.currentTarget.style.background = '#f8fafc';
+                      e.currentTarget.style.color = '#0f172a';
+                    }
+                  }}
+                  onMouseLeave={e => {
+                    if (!isActive) {
+                      e.currentTarget.style.background = 'transparent';
+                      e.currentTarget.style.color = '#475569';
+                    }
+                  }}
+                  title={collapsed ? item.label : undefined}>
+                  {isActive && !collapsed && (
+                    <span style={{
+                      position: 'absolute', left: '-2px', top: '25%', bottom: '25%',
+                      width: '3.5px', borderRadius: '0 4px 4px 0', background: '#2563eb'
+                    }} />
+                  )}
+                  <span style={{
+                    flexShrink: 0, display: 'flex',
+                    color: isActive ? '#2563eb' : '#64748b',
+                    transition: 'color 0.15s ease'
+                  }}>
+                    {React.cloneElement(item.icon as React.ReactElement<any>, { size: 18, strokeWidth: isActive ? 2.2 : 1.9 })}
+                  </span>
+                  {!collapsed && <span style={{ letterSpacing: '-0.01em' }}>{item.label}</span>}
+                </button>
+              </React.Fragment>
             );
           })}
         </nav>
 
-        {/* Bottom */}
-        <div style={{ padding: '8px', borderTop: '1px solid var(--border-light)' }}>
-          <button onClick={() => setCollapsed(!collapsed)}
-            style={{ display: 'flex', alignItems: 'center', justifyContent: collapsed ? 'center' : 'flex-start', gap: '8px', padding: collapsed ? '8px' : '6px 10px', borderRadius: '8px', border: '1px solid var(--border-light)', background: 'var(--bg-tertiary)', color: 'var(--text-tertiary)', cursor: 'pointer', fontSize: '12px', width: '100%', transition: 'var(--transition)', fontFamily: 'inherit', fontWeight: 500 }}>
-            {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
-            {!collapsed && <span>Collapse</span>}
+        {/* Bottom User & Collapse */}
+        <div style={{ padding: '10px', borderTop: '1px solid #f1f5f9', background: '#fafbfc', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          {/* Collapse Button */}
+          <button
+            onClick={() => setCollapsed(!collapsed)}
+            title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: collapsed ? 'center' : 'space-between',
+              padding: collapsed ? '8px 0' : '8px 12px', borderRadius: '10px',
+              border: '1px solid #e2e8f0', background: '#ffffff', color: '#334155',
+              cursor: 'pointer', fontSize: '12px', width: '100%',
+              transition: 'all 0.15s ease', fontFamily: 'inherit', fontWeight: 600,
+              boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.background = '#eff6ff';
+              e.currentTarget.style.borderColor = '#bfdbfe';
+              e.currentTarget.style.color = '#1d4ed8';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = '#ffffff';
+              e.currentTarget.style.borderColor = '#e2e8f0';
+              e.currentTarget.style.color = '#334155';
+            }}
+          >
+            {!collapsed && (
+              <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <ChevronLeft size={16} color="#2563eb" />
+                <span>Collapse sidebar</span>
+              </span>
+            )}
+            {collapsed ? <ChevronRight size={18} color="#2563eb" /> : <span style={{ fontSize: '10px', color: '#94a3b8', background: '#f1f5f9', padding: '1px 5px', borderRadius: '4px' }}>◀</span>}
           </button>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: collapsed ? '8px' : '8px 10px', borderRadius: '10px', background: 'var(--bg-tertiary)', marginTop: '6px', justifyContent: collapsed ? 'center' : 'flex-start' }}>
-            <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: 'linear-gradient(135deg, #667eea, #764ba2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 600, color: 'white', flexShrink: 0 }}>
+
+          {/* User Profile Card */}
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: '9px',
+            padding: collapsed ? '8px 4px' : '8px 10px', borderRadius: '12px',
+            background: '#ffffff', border: '1px solid #e2e8f0',
+            justifyContent: collapsed ? 'center' : 'flex-start',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
+          }}>
+            <div style={{
+              width: '30px', height: '30px', borderRadius: '50%',
+              background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: '12px', fontWeight: 700, color: 'white', flexShrink: 0,
+              boxShadow: '0 2px 6px rgba(37,99,235,0.25)'
+            }}>
               {user.username.charAt(0).toUpperCase()}
             </div>
             {!collapsed && (
               <div style={{ flex: 1, overflow: 'hidden' }}>
-                <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{user.username}</div>
-                <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', textTransform: 'capitalize' }}>{user.role}</div>
+                <div style={{ fontSize: '12.5px', fontWeight: 600, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {user.username}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '1px' }}>
+                  <span style={{
+                    fontSize: '9.5px',
+                    fontWeight: 700,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.04em',
+                    padding: '1px 5px',
+                    borderRadius: '4px',
+                    background: user.role === 'admin' ? '#fef3c7' : '#f1f5f9',
+                    color: user.role === 'admin' ? '#b45309' : '#64748b'
+                  }}>
+                    {user.role}
+                  </span>
+                </div>
               </div>
             )}
             {!collapsed && (
-              <button onClick={handleLogout} style={{ background: 'none', border: 'none', color: 'var(--text-tertiary)', cursor: 'pointer', padding: '4px', borderRadius: '6px', display: 'flex', transition: 'var(--transition)' }} title="Sign out">
-                <LogOut size={14} />
+              <button
+                onClick={handleLogout}
+                style={{
+                  background: 'transparent', border: 'none', color: '#94a3b8',
+                  cursor: 'pointer', padding: '6px', borderRadius: '8px', display: 'flex',
+                  alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s ease'
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background = '#fef2f2'; e.currentTarget.style.color = '#dc2626'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#94a3b8'; }}
+                title="Sign out">
+                <LogOut size={15} />
               </button>
             )}
           </div>
@@ -326,7 +456,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       </div>
 
       {/* Main Content */}
-      <main className="main-content" style={{ flex: 1, marginLeft: collapsed ? '64px' : '220px', transition: 'margin-left 0.3s cubic-bezier(0.25,0.1,0.25,1)', padding: '24px 28px', maxWidth: '1400px', width: '100%', boxSizing: 'border-box' }}>
+      <main className="main-content" style={{ flex: 1, marginLeft: collapsed ? '68px' : '236px', transition: 'margin-left 0.25s cubic-bezier(0.25,0.1,0.25,1)', padding: '28px 32px', maxWidth: '1440px', width: '100%', boxSizing: 'border-box' }}>
         {children}
       </main>
 

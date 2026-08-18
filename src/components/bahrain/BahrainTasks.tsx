@@ -7,7 +7,7 @@ import { supabase } from '@/lib/supabase';
 import type { Task, Company, User, TaskType, StatusLog } from '@/lib/supabase';
 import { getDataCountry, getSession, isAdmin } from '@/lib/auth';
 import { BAHRAIN_PRIORITIES, BAHRAIN_STATUSES } from '@/lib/bahrain';
-import { Plus, Eye, Trash2, X, Edit2, MoreHorizontal, Clock, CheckCircle2, Check, BarChart3, PieChart, Activity, ArrowRight, TrendingUp, Building2, Share2, MessageSquare, Copy, Send } from 'lucide-react';
+import { Plus, Eye, Trash2, X, Edit2, MoreHorizontal, Clock, CheckCircle2, Check, BarChart3, PieChart, Activity, ArrowRight, TrendingUp, Building2, Share2, MessageSquare, Copy, Send, Search, ListTodo } from 'lucide-react';
 import { EGRESS_OPTIMIZATION_MODE } from '@/lib/optimizationConfig';
 
 export default function BahrainTasks() {
@@ -1010,10 +1010,20 @@ export default function BahrainTasks() {
   return (
     <div ref={containerRef} style={{ position: 'relative' }}>
       {/* Header */}
-      <div className="task-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '28px', padding: '28px 32px', background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%)', borderRadius: '20px', boxShadow: '0 4px 20px rgba(15,23,42,0.15)' }}>
+      <div className="task-header" style={{
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        marginBottom: '26px', padding: '28px 32px',
+        background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%)',
+        borderRadius: '20px', boxShadow: '0 6px 24px rgba(15,23,42,0.16)',
+        border: '1px solid rgba(255,255,255,0.06)', position: 'relative', overflow: 'hidden'
+      }}>
         <div>
-          <h2 style={{ color: '#ffffff', fontSize: '24px', fontWeight: 700, margin: 0, letterSpacing: '-0.5px' }}>Task Management</h2>
-          <p style={{ color: '#94a3b8', fontSize: '14px', margin: '6px 0 0 0' }}>Manage, assign, and track all compliance tasks</p>
+          <h2 style={{ color: '#ffffff', fontSize: '24px', fontWeight: 700, margin: 0, letterSpacing: '-0.5px' }}>
+            Task Management
+          </h2>
+          <p style={{ color: '#94a3b8', fontSize: '14px', margin: '6px 0 0 0' }}>
+            Manage, assign, and track all compliance tasks
+          </p>
         </div>
         {(isAdminUser || userAuditorAccess.length > 0) && (
           <button
@@ -1024,7 +1034,7 @@ export default function BahrainTasks() {
               border: 'none', borderRadius: '12px', cursor: 'pointer', fontWeight: 600, fontSize: '14px',
               boxShadow: '0 4px 14px rgba(0,0,0,0.15)', transition: 'all 0.2s ease',
             }}
-            onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 6px 20px rgba(0,0,0,0.2)'; }}
+            onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 6px 20px rgba(0,0,0,0.22)'; }}
             onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 4px 14px rgba(0,0,0,0.15)'; }}
           >
             <Plus size={16} /> New Task
@@ -1033,12 +1043,17 @@ export default function BahrainTasks() {
       </div>
 
       {/* Filters */}
-      <div className="task-filters" style={{ display: 'flex', gap: '14px', marginBottom: '28px', flexWrap: 'wrap', padding: '20px', background: 'rgba(255, 255, 255, 0.65)', backdropFilter: 'blur(10px)', borderRadius: '18px', border: '1px solid rgba(255,255,255,0.8)', boxShadow: '0 4px 20px rgba(0,0,0,0.03)' }}>
+      <div className="task-filters" style={{
+        display: 'flex', gap: '12px', marginBottom: '24px', flexWrap: 'wrap',
+        padding: '20px', background: 'rgba(255, 255, 255, 0.75)',
+        backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
+        borderRadius: '18px', border: '1px solid rgba(255,255,255,0.9)',
+        boxShadow: '0 4px 20px rgba(0,0,0,0.03)', alignItems: 'center'
+      }}>
         <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={filterStyle}>
           <option value="">All Status</option>
           {(() => {
             const allStatuses = new Set<string>(dynamicStatuses);
-            // For Bahrain keep aggregating legacy task statuses, for other countries strictly sync with Edits section
             if (!dataCountry || dataCountry === 'Bahrain') {
               tasks.forEach(t => { if (t.status) allStatuses.add(t.status); });
             }
@@ -1076,13 +1091,20 @@ export default function BahrainTasks() {
           <option value="has_desc">Has Description</option>
           <option value="no_desc">No Description</option>
         </select>
-        <input
-          type="text"
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          placeholder="Search tasks..."
-          style={{ ...filterStyle, flex: 1, minWidth: '180px' }}
-        />
+        <div style={{ position: 'relative', flex: '1 1 180px', minWidth: '180px' }}>
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search tasks..."
+            style={{ ...filterStyle, width: '100%', paddingRight: search ? '28px' : '12px' }}
+          />
+          {search && (
+            <button onClick={() => setSearch('')} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '2px', display: 'flex' }}>
+              <X size={13} />
+            </button>
+          )}
+        </div>
         {(filterStatus || filterPriority || filterCompany || filterPartner || filterAuditor || filterTaskType || filterDescUpdated || search) && (
           <button
             onClick={() => { setFilterStatus(''); setFilterPriority(''); setFilterCompany(''); setFilterPartner(''); setFilterAuditor(''); setFilterTaskType(''); setFilterDescUpdated(''); setSearch(''); }}
@@ -1097,7 +1119,7 @@ export default function BahrainTasks() {
 
       {/* ─── 4 Compact Stat Cards ─── */}
       {(isAdminUser || !isAdminUser) && (
-        <div className="task-stat-cards" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '14px', marginBottom: '20px' }}>
+        <div className="task-stat-cards" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '14px', marginBottom: '22px' }}>
           {/* Card 1: Recently Modified Tasks */}
           <div
             onClick={async () => {
@@ -1110,7 +1132,6 @@ export default function BahrainTasks() {
                   .order('created_at', { ascending: false })
                   .limit(200);
                 if (logs) {
-                  // Group by task_id, get latest per task, take top 40
                   const taskMap = new Map<string, any>();
                   logs.forEach((log: any) => {
                     if (tasks.some(t => t.id === log.task_id)) {
@@ -1118,7 +1139,6 @@ export default function BahrainTasks() {
                     }
                   });
                   const top20 = Array.from(taskMap.values()).slice(0, 40);
-                  // Fetch missing user information
                   const unresolvedIds = new Set<string>();
                   const { user: sessionUser } = getSession();
                   top20.forEach(log => {
@@ -1136,7 +1156,6 @@ export default function BahrainTasks() {
                     extraUsers = fetchedUsers || [];
                   }
 
-                  // Enrich with task + user info
                   const enriched = top20.map((log: any) => {
                     const task = tasks.find(t => t.id === log.task_id);
                     const company = task ? companies.find(c => c.id === task.company_id) : null;
@@ -1162,11 +1181,11 @@ export default function BahrainTasks() {
             style={{
               background: '#ffffff', borderRadius: '14px', padding: '16px 18px',
               border: '1px solid #e2e8f0', cursor: 'pointer',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.04)', transition: 'all 0.2s ease',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.03)', transition: 'all 0.2s ease',
               display: 'flex', alignItems: 'center', gap: '14px',
             }}
-            onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 4px 16px rgba(59,130,246,0.12)'; e.currentTarget.style.borderColor = '#93c5fd'; }}
-            onMouseLeave={e => { e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.04)'; e.currentTarget.style.borderColor = '#e2e8f0'; }}
+            onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 6px 18px rgba(59,130,246,0.12)'; e.currentTarget.style.borderColor = '#93c5fd'; }}
+            onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.03)'; e.currentTarget.style.borderColor = '#e2e8f0'; }}
           >
             <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: 'linear-gradient(135deg, #dbeafe, #bfdbfe)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
               <Clock size={20} color="#2563eb" />
@@ -1183,7 +1202,7 @@ export default function BahrainTasks() {
                   return recent.length;
                 })()}
               </div>
-              <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '1px' }}>Last 7 days · Click to view</div>
+              <div style={{ fontSize: '10.5px', color: '#94a3b8', marginTop: '1px' }}>Last 7 days · Click to view</div>
             </div>
             <ArrowRight size={16} color="#94a3b8" />
           </div>
@@ -1194,11 +1213,11 @@ export default function BahrainTasks() {
             style={{
               background: '#ffffff', borderRadius: '14px', padding: '16px 18px',
               border: '1px solid #e2e8f0', cursor: 'pointer',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.04)', transition: 'all 0.2s ease',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.03)', transition: 'all 0.2s ease',
               display: 'flex', alignItems: 'center', gap: '14px',
             }}
-            onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 4px 16px rgba(16,185,129,0.12)'; e.currentTarget.style.borderColor = '#6ee7b7'; }}
-            onMouseLeave={e => { e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.04)'; e.currentTarget.style.borderColor = '#e2e8f0'; }}
+            onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 6px 18px rgba(16,185,129,0.12)'; e.currentTarget.style.borderColor = '#6ee7b7'; }}
+            onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.03)'; e.currentTarget.style.borderColor = '#e2e8f0'; }}
           >
             <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: 'linear-gradient(135deg, #d1fae5, #a7f3d0)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
               <CheckCircle2 size={20} color="#059669" />
@@ -1211,7 +1230,7 @@ export default function BahrainTasks() {
                   return sl.includes('complete') || sl.includes('closed') || sl.includes('filed') || sl.includes('done');
                 }).length}
               </div>
-              <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '1px' }}>Total completed · Click to view</div>
+              <div style={{ fontSize: '10.5px', color: '#94a3b8', marginTop: '1px' }}>Total completed · Click to view</div>
             </div>
             <ArrowRight size={16} color="#94a3b8" />
           </div>
@@ -1222,11 +1241,11 @@ export default function BahrainTasks() {
             style={{
               background: '#ffffff', borderRadius: '14px', padding: '16px 18px',
               border: '1px solid #e2e8f0', cursor: 'pointer',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.04)', transition: 'all 0.2s ease',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.03)', transition: 'all 0.2s ease',
               display: 'flex', alignItems: 'center', gap: '14px',
             }}
-            onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 4px 16px rgba(139,92,246,0.12)'; e.currentTarget.style.borderColor = '#c4b5fd'; }}
-            onMouseLeave={e => { e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.04)'; e.currentTarget.style.borderColor = '#e2e8f0'; }}
+            onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 4px 16px rgba(139,92,246,0.12)'; e.currentTarget.style.borderColor = '#c4b5fd'; }}
+            onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.03)'; e.currentTarget.style.borderColor = '#e2e8f0'; }}
           >
             <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: 'linear-gradient(135deg, #ede9fe, #ddd6fe)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
               <BarChart3 size={20} color="#7c3aed" />
@@ -1236,7 +1255,7 @@ export default function BahrainTasks() {
               <div style={{ fontSize: '22px', fontWeight: 800, color: '#0f172a', lineHeight: 1.2 }}>
                 {taskTypes.filter(t => t.active).length}
               </div>
-              <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '1px' }}>Distribution · Click to view</div>
+              <div style={{ fontSize: '10.5px', color: '#94a3b8', marginTop: '1px' }}>Distribution · Click to view</div>
             </div>
             <ArrowRight size={16} color="#94a3b8" />
           </div>
@@ -1247,11 +1266,11 @@ export default function BahrainTasks() {
             style={{
               background: 'linear-gradient(135deg, #ffffff 0%, #f0fdf4 100%)', borderRadius: '14px', padding: '16px 18px',
               border: '1px solid #bbf7d0', cursor: 'pointer',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.04)', transition: 'all 0.2s ease',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.03)', transition: 'all 0.2s ease',
               display: 'flex', alignItems: 'center', gap: '14px',
             }}
-            onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 4px 16px rgba(37,211,102,0.18)'; e.currentTarget.style.borderColor = '#86efac'; }}
-            onMouseLeave={e => { e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.04)'; e.currentTarget.style.borderColor = '#bbf7d0'; }}
+            onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 6px 18px rgba(37,211,102,0.18)'; e.currentTarget.style.borderColor = '#86efac'; }}
+            onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.03)'; e.currentTarget.style.borderColor = '#bbf7d0'; }}
           >
             <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: 'linear-gradient(135deg, #dcfce7, #bbf7d0)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="#25D366">
@@ -1261,10 +1280,10 @@ export default function BahrainTasks() {
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: '11px', color: '#16a34a', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.3px' }}>WhatsApp Generator</div>
               <div style={{ fontSize: '22px', fontWeight: 800, color: '#0f172a', lineHeight: 1.2 }}>
-                <MessageSquare size={20} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '4px' }} />
+                <MessageSquare size={19} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '4px' }} />
                 Share
               </div>
-              <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '1px' }}>Generate by status · Click</div>
+              <div style={{ fontSize: '10.5px', color: '#15803d', marginTop: '1px' }}>Generate by status · Click</div>
             </div>
             <ArrowRight size={16} color="#22c55e" />
           </div>
@@ -2015,18 +2034,47 @@ export default function BahrainTasks() {
       )}
 
       {/* Tasks Table */}
-      <div className="task-table-wrap" style={{ overflowX: 'auto', borderRadius: '18px', boxShadow: '0 8px 32px rgba(0,0,0,0.05)', border: '1px solid rgba(226, 232, 240, 0.8)', background: '#ffffff' }}>
+      <div className="task-table-wrap" style={{
+        overflowX: 'auto', borderRadius: '16px',
+        boxShadow: '0 1px 4px rgba(0,0,0,0.03), 0 4px 16px rgba(0,0,0,0.02)',
+        border: '1px solid #e2e8f0', background: '#ffffff'
+      }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', background: '#ffffff' }}>
           <thead>
-            <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
-              {['PL', 'Company', 'CR Number', 'Task Type', 'Description', 'Desc Updated Date', 'Priority', 'Due', 'Status', 'Auditor', 'Assigned To', ''].map(h => (
-                <th key={h} style={{ padding: '11px 10px', textAlign: 'left', fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', color: '#64748b', whiteSpace: 'nowrap' }}>{h}</th>
+            <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+              {[
+                { label: 'PL', align: 'center' },
+                { label: 'Company', align: 'left' },
+                { label: 'CR Number', align: 'left' },
+                { label: 'Task Type', align: 'left' },
+                { label: 'Description', align: 'left' },
+                { label: 'Desc Updated', align: 'left' },
+                { label: 'Priority', align: 'left' },
+                { label: 'Due Date', align: 'left' },
+                { label: 'Status', align: 'left' },
+                { label: 'Auditor', align: 'left' },
+                { label: 'Assigned To', align: 'left' },
+                { label: '', align: 'right' }
+              ].map((h, i) => (
+                <th key={i} style={{
+                  padding: '12px 12px', textAlign: h.align as any,
+                  fontSize: '11px', fontWeight: 700, textTransform: 'uppercase',
+                  letterSpacing: '0.05em', color: '#64748b', whiteSpace: 'nowrap'
+                }}>{h.label}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 ? (
-              <tr><td colSpan={12} style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>No tasks found</td></tr>
+              <tr>
+                <td colSpan={12} style={{ textAlign: 'center', padding: '60px 20px', color: '#94a3b8' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                    <ListTodo size={36} color="#cbd5e1" />
+                    <div style={{ fontSize: '15px', fontWeight: 600, color: '#475569' }}>No matching tasks found</div>
+                    <div style={{ fontSize: '13px', color: '#94a3b8' }}>Try adjusting your filters or search keywords</div>
+                  </div>
+                </td>
+              </tr>
             ) : filtered.map(task => {
               const company = companies.find(c => c.id === task.company_id);
               const ttIds = task.task_type_ids && task.task_type_ids.length > 0 ? task.task_type_ids : (task.task_type_id ? task.task_type_id.split(',').map(s => s.trim()).filter(Boolean) : []);
@@ -2040,18 +2088,21 @@ export default function BahrainTasks() {
               const isMenuOpen = openMenuId === task.id;
 
               return (
-                <tr key={task.id} style={{ borderBottom: '1px solid #f1f5f9', transition: 'background 0.15s ease' }} onMouseEnter={e => e.currentTarget.style.background = '#fafbfc'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                  <td style={compactCell}>
+                <tr key={task.id} style={{ borderBottom: '1px solid #f1f5f9', transition: 'background 0.12s ease' }}
+                  onMouseEnter={e => e.currentTarget.style.background = '#fafbfc'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                  <td style={{ ...compactCell, textAlign: 'center' }}>
                     <button
                       onClick={() => handlePlUploadedToggle(task.id)}
                       title={task.pl_uploaded ? 'PL Uploaded: Yes — click to change' : 'PL Uploaded: No — click to change'}
                       style={{
-                        padding: '4px 10px', borderRadius: '20px', border: 'none', cursor: 'pointer',
-                        fontSize: '10px', fontWeight: 700, letterSpacing: '0.3px',
-                        transition: 'all 0.2s ease',
-                        background: task.pl_uploaded ? '#dcfce7' : '#fef2f2',
-                        color: task.pl_uploaded ? '#15803d' : '#dc2626',
-                        boxShadow: task.pl_uploaded ? '0 1px 3px rgba(22,163,74,0.15)' : '0 1px 3px rgba(220,38,38,0.12)',
+                        padding: '4px 9px', borderRadius: '14px',
+                        border: task.pl_uploaded ? '1px solid #a7f3d0' : '1px solid #fecaca',
+                        cursor: 'pointer', fontSize: '10.5px', fontWeight: 700,
+                        letterSpacing: '0.02em', transition: 'all 0.15s ease',
+                        background: task.pl_uploaded ? '#ecfdf5' : '#fef2f2',
+                        color: task.pl_uploaded ? '#059669' : '#dc2626',
+                        display: 'inline-flex', alignItems: 'center', gap: '3px'
                       }}
                       onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.05)'; }}
                       onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; }}
@@ -2059,16 +2110,38 @@ export default function BahrainTasks() {
                       {task.pl_uploaded ? '✓ Yes' : '✗ No'}
                     </button>
                   </td>
-                  <td style={compactCell}><span style={{ fontWeight: 500, fontSize: '12px', color: '#1e293b', maxWidth: '130px', display: 'inline-block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{company?.company_name || 'Unknown'}</span></td>
-                  <td style={compactCell}><span style={{ fontWeight: 500, fontSize: '11px', color: '#64748b', maxWidth: '100px', display: 'inline-block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{company?.cr_number || '—'}</span></td>
+                  <td style={compactCell}>
+                    <span style={{ fontWeight: 600, fontSize: '13px', color: '#0f172a', maxWidth: '140px', display: 'inline-block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {company?.company_name || 'Unknown'}
+                    </span>
+                  </td>
+                  <td style={compactCell}>
+                    {company?.cr_number ? (
+                      <span style={{
+                        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+                        fontSize: '11px', fontWeight: 600, color: '#475569',
+                        background: '#f1f5f9', padding: '2px 7px', borderRadius: '5px',
+                        border: '1px solid #e2e8f0', display: 'inline-block',
+                        maxWidth: '95px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
+                      }}>
+                        {company.cr_number}
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: '11px', color: '#cbd5e1' }}>—</span>
+                    )}
+                  </td>
                   <td style={compactCell}>
                     {ttNames.length > 0 ? (
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px' }}>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
                         {ttNames.map((name, i) => (
-                          <span key={i} style={{ padding: '2px 6px', borderRadius: '10px', fontSize: '10px', fontWeight: 600, background: '#EBF5FB', color: '#2980B9', border: '1px solid #AED6F1', whiteSpace: 'nowrap' }}>{name}</span>
+                          <span key={i} style={{
+                            padding: '2px 7px', borderRadius: '6px', fontSize: '11px',
+                            fontWeight: 600, background: '#eff6ff', color: '#1d4ed8',
+                            border: '1px solid #dbeafe', whiteSpace: 'nowrap'
+                          }}>{name}</span>
                         ))}
                       </div>
-                    ) : <span style={{ fontSize: '11px', color: '#94a3b8' }}>—</span>}
+                    ) : <span style={{ fontSize: '11px', color: '#cbd5e1' }}>—</span>}
                   </td>
                   <td
                     style={{ ...compactCell, position: 'relative', cursor: (task.description && inlineEditDescId !== task.id) ? 'pointer' : 'default' }}
@@ -2079,27 +2152,18 @@ export default function BahrainTasks() {
                           clearTimeout(tooltipTimeoutRef.current);
                           tooltipTimeoutRef.current = null;
                         }
-                        
-                        // Skip entirely if tooltip is already showing for this task (prevents re-render loops)
                         if (activeTooltipRef.current === task.id) {
                           return;
                         }
-                        
-                        // Use fixed positioning relative to viewport to avoid layout-dependent reflow loops
                         const rect = e.currentTarget.getBoundingClientRect();
                         const tooltipWidth = 330;
-                        
-                        // Position using viewport coordinates (fixed positioning)
                         let left = rect.left + (rect.width / 2) - (tooltipWidth / 2);
                         if (left < 16) left = 16;
                         if (left + tooltipWidth > window.innerWidth - 16) {
                           left = window.innerWidth - tooltipWidth - 16;
                         }
-                        
                         const top = rect.top - 6;
                         const align: 'top' | 'bottom' = 'top';
-                        
-                        // Lock the ref BEFORE setting state to prevent re-entry
                         activeTooltipRef.current = task.id;
                         setTooltipPos({ x: left, y: top, align });
                         setActiveTooltipTaskId(task.id);
@@ -2111,7 +2175,6 @@ export default function BahrainTasks() {
                         clearTimeout(tooltipTimeoutRef.current);
                         tooltipTimeoutRef.current = null;
                       }
-                      // Use a grace period (200ms) so the user can move to the tooltip itself
                       tooltipTimeoutRef.current = setTimeout(() => {
                         activeTooltipRef.current = null;
                         setActiveTooltipTaskId(null);
@@ -2119,22 +2182,23 @@ export default function BahrainTasks() {
                     }}
                   >
                     {inlineEditDescId === task.id ? (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: '180px', position: 'absolute', zIndex: 10, background: '#fff', padding: '8px', borderRadius: '8px', boxShadow: '0 4px 20px rgba(0,0,0,0.15)', border: '1px solid #e2e8f0', top: '50%', transform: 'translateY(-50%)', left: '10px' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: '190px', position: 'absolute', zIndex: 10, background: '#fff', padding: '10px', borderRadius: '10px', boxShadow: '0 8px 24px rgba(0,0,0,0.14)', border: '1px solid #bfdbfe', top: '50%', transform: 'translateY(-50%)', left: '10px' }}>
                         <textarea
                           autoFocus
                           value={inlineEditDescValue}
                           onChange={e => setInlineEditDescValue(e.target.value)}
                           style={{
                             width: '100%',
-                            minHeight: '60px',
-                            padding: '6px',
-                            fontSize: '11px',
+                            minHeight: '65px',
+                            padding: '8px',
+                            fontSize: '11.5px',
                             borderRadius: '6px',
-                            border: '1px solid #3b82f6',
+                            border: '1.5px solid #2563eb',
                             outline: 'none',
                             resize: 'vertical',
                             fontFamily: 'inherit',
-                            color: '#1e293b'
+                            color: '#0f172a',
+                            boxShadow: '0 0 0 3px rgba(37,99,235,0.1)'
                           }}
                           onKeyDown={e => {
                             if (e.key === 'Escape') {
@@ -2147,14 +2211,14 @@ export default function BahrainTasks() {
                         <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end', marginTop: '2px' }}>
                           <button
                             onClick={() => setInlineEditDescId(null)}
-                            style={{ padding: '4px 8px', border: '1px solid #e2e8f0', background: '#f8fafc', color: '#64748b', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10px', fontWeight: 600 }}
+                            style={{ padding: '4px 9px', border: '1px solid #e2e8f0', background: '#f8fafc', color: '#64748b', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', fontWeight: 600 }}
                             title="Cancel (Esc)"
                           >
                             <X size={12} /> Cancel
                           </button>
                           <button
                             onClick={() => saveInlineDescription(task.id)}
-                            style={{ padding: '4px 8px', border: 'none', background: '#3b82f6', color: '#fff', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10px', fontWeight: 600 }}
+                            style={{ padding: '4px 10px', border: 'none', background: '#2563eb', color: '#fff', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', fontWeight: 600 }}
                             title="Save (Ctrl+Enter)"
                           >
                             <Check size={12} /> Save
@@ -2163,7 +2227,7 @@ export default function BahrainTasks() {
                       </div>
                     ) : (
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px', minHeight: '24px' }}>
-                        <span style={{ fontSize: '11px', color: '#475569', maxWidth: '150px', display: 'inline-block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <span style={{ fontSize: '12px', color: '#475569', maxWidth: '150px', display: 'inline-block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {task.description || '—'}
                         </span>
                         {canManageTask(task) && (
@@ -2172,22 +2236,21 @@ export default function BahrainTasks() {
                               setInlineEditDescId(task.id);
                               setInlineEditDescValue(task.description || '');
                               activeTooltipRef.current = null;
-                              setActiveTooltipTaskId(null); // Clear tooltip when starting edit
+                              setActiveTooltipTaskId(null);
                             }}
                             style={{
                               background: '#eff6ff',
-                              border: '1px solid #bfdbfe',
-                              borderRadius: '4px',
+                              border: '1px solid #dbeafe',
+                              borderRadius: '6px',
                               cursor: 'pointer',
                               padding: '3px',
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: 'center',
-                              color: '#3b82f6',
+                              color: '#2563eb',
                               transition: 'all 0.15s ease',
                               opacity: hoveredDescTaskId === task.id ? 1 : 0,
                               pointerEvents: hoveredDescTaskId === task.id ? 'auto' as const : 'none' as const,
-                              /* Fixed dimensions prevent layout shift on hover */
                               width: '22px',
                               height: '22px',
                               flexShrink: 0,
@@ -2206,7 +2269,7 @@ export default function BahrainTasks() {
                     {(() => {
                       const updateDate = descUpdateMap[task.id] || (task.description ? task.created_at : null);
                       if (!updateDate || !task.description || task.description.trim() === '') {
-                        return <span style={{ fontSize: '11px', color: '#94a3b8' }}>—</span>;
+                        return <span style={{ fontSize: '11px', color: '#cbd5e1' }}>—</span>;
                       }
                       const isRecent = descUpdateMap[task.id] && (Date.now() - new Date(descUpdateMap[task.id]).getTime() < 7 * 24 * 60 * 60 * 1000);
                       return (
@@ -2214,7 +2277,7 @@ export default function BahrainTasks() {
                           title={`Last updated: ${new Date(updateDate).toLocaleString()}`}
                           style={{
                             fontSize: '11px',
-                            color: isRecent ? '#0369a1' : '#64748b',
+                            color: isRecent ? '#0284c7' : '#64748b',
                             fontWeight: isRecent ? 600 : 500,
                             whiteSpace: 'nowrap',
                             display: 'inline-flex',
@@ -2235,48 +2298,81 @@ export default function BahrainTasks() {
                   <td style={compactCell}>
                     {canUpdateStatus ? (
                       <select value={task.priority} onChange={e => handlePriorityChange(task.id, e.target.value)}
-                        style={{ padding: '4px 6px', borderRadius: '8px', border: 'none', background: pc.bg, color: pc.color, fontWeight: 700, fontSize: '10px', cursor: 'pointer', outline: 'none' }}>
+                        style={{
+                          padding: '4px 8px', borderRadius: '8px', border: '1px solid transparent',
+                          background: pc.bg, color: pc.color, fontWeight: 700,
+                          fontSize: '11px', cursor: 'pointer', outline: 'none'
+                        }}>
                         {BAHRAIN_PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
                       </select>
                     ) : (
-                      <span style={{ padding: '3px 8px', borderRadius: '20px', fontSize: '10px', fontWeight: 700, background: pc.bg, color: pc.color, whiteSpace: 'nowrap' }}>{task.priority}</span>
+                      <span style={{ padding: '3px 8px', borderRadius: '8px', fontSize: '10.5px', fontWeight: 700, background: pc.bg, color: pc.color, whiteSpace: 'nowrap' }}>
+                        {task.priority}
+                      </span>
                     )}
                   </td>
-                  <td style={compactCell}><span style={{ fontSize: '12px', color: '#475569', whiteSpace: 'nowrap' }}>{task.deadline || '—'}</span></td>
+                  <td style={compactCell}>
+                    <span style={{ fontSize: '12px', color: '#475569', fontWeight: 500, whiteSpace: 'nowrap' }}>
+                      {task.deadline || '—'}
+                    </span>
+                  </td>
                   <td style={compactCell}>
                     {canUpdateStatus ? (() => {
                       const sc = statusColor(task.status);
                       return (
                         <select value={task.status} onChange={e => handleStatusChange(task.id, e.target.value)}
-                          style={{ padding: '5px 6px', borderRadius: '8px', border: `1px solid ${sc.border}`, background: sc.bg, color: sc.color, fontWeight: 600, fontSize: '11px', cursor: 'pointer', outline: 'none', minWidth: '120px' }}>
+                          style={{
+                            padding: '5px 8px', borderRadius: '8px',
+                            border: `1px solid ${sc.border}`, background: sc.bg,
+                            color: sc.color, fontWeight: 600, fontSize: '11.5px',
+                            cursor: 'pointer', outline: 'none', minWidth: '125px'
+                          }}>
                           {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
                         </select>
                       );
                     })() : (() => {
                       const sc = statusColor(task.status);
-                      return <span style={{ padding: '3px 8px', borderRadius: '20px', fontSize: '11px', fontWeight: 600, background: sc.bg, color: sc.color, border: `1px solid ${sc.border}`, whiteSpace: 'nowrap' }}>{task.status}</span>;
+                      return (
+                        <span style={{
+                          padding: '4px 9px', borderRadius: '8px', fontSize: '11.5px',
+                          fontWeight: 600, background: sc.bg, color: sc.color,
+                          border: `1px solid ${sc.border}`, whiteSpace: 'nowrap'
+                        }}>
+                          {task.status}
+                        </span>
+                      );
                     })()}
                   </td>
                   <td style={compactCell}>
                     {isAdminUser ? (
                       <select value={task.auditor_id || ''} onChange={e => handleAssignAuditor(task.id, e.target.value)}
-                        style={{ padding: '5px 6px', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#f8fafc', fontSize: '11px', color: '#334155', minWidth: '110px', cursor: 'pointer', outline: 'none', fontWeight: 500 }}>
+                        style={{
+                          padding: '5px 8px', borderRadius: '8px', border: '1px solid #e2e8f0',
+                          background: '#f8fafc', fontSize: '11.5px', color: '#1e293b',
+                          minWidth: '110px', cursor: 'pointer', outline: 'none', fontWeight: 500
+                        }}>
                         <option value="">No Auditor</option>
                         {auditors.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                       </select>
                     ) : (
-                      <span style={{ fontSize: '12px', color: '#475569', fontWeight: 500 }}>{auditors.find(a => a.id === task.auditor_id)?.name || '—'}</span>
+                      <span style={{ fontSize: '12px', color: '#475569', fontWeight: 500 }}>
+                        {auditors.find(a => a.id === task.auditor_id)?.name || '—'}
+                      </span>
                     )}
                   </td>
                   <td style={compactCell}>
                     {isAdminUser ? (
                       <select value={task.assigned_to || ''} onChange={e => handleAssign(task.id, e.target.value)}
-                        style={{ padding: '5px 6px', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#f8fafc', fontSize: '11px', color: '#334155', minWidth: '110px', cursor: 'pointer', outline: 'none', fontWeight: 500 }}>
+                        style={{
+                          padding: '5px 8px', borderRadius: '8px', border: '1px solid #e2e8f0',
+                          background: '#f8fafc', fontSize: '11.5px', color: '#1e293b',
+                          minWidth: '110px', cursor: 'pointer', outline: 'none', fontWeight: 500
+                        }}>
                         <option value="">Unassigned</option>
                         {partners.map(p => <option key={p.id} value={p.id}>{p.username}</option>)}
                       </select>
                     ) : (
-                      <span style={{ fontSize: '12px' }}>
+                      <span style={{ fontSize: '12px', color: '#1e293b', fontWeight: 500 }}>
                         {(() => {
                           const activePartnerIds = task.assigned_partners && task.assigned_partners.length > 0 
                             ? task.assigned_partners 
@@ -2287,7 +2383,7 @@ export default function BahrainTasks() {
                       </span>
                     )}
                   </td>
-                  <td style={{ ...compactCell, position: 'relative', width: '44px' }}>
+                  <td style={{ ...compactCell, position: 'relative', width: '40px' }}>
                     <button onClick={e => { 
                       e.stopPropagation(); 
                       if (isMenuOpen) {
@@ -2310,19 +2406,18 @@ export default function BahrainTasks() {
                       }
                     }}
                       style={{
-                        background: isMenuOpen ? '#f1f5f9' : 'transparent',
+                        background: isMenuOpen ? '#eff6ff' : 'transparent',
                         border: 'none',
                         cursor: 'pointer', borderRadius: '8px', padding: '6px',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         transition: 'all 0.15s ease', position: 'relative',
                         marginLeft: 'auto',
-                        marginRight: '4px',
-                        width: '32px',
-                        height: '32px',
+                        width: '30px',
+                        height: '30px',
                       }}
                       onMouseEnter={e => { e.currentTarget.style.background = '#f1f5f9'; }}
                       onMouseLeave={e => { if (!isMenuOpen) { e.currentTarget.style.background = 'transparent'; } }}>
-                      <MoreHorizontal size={18} color="#64748b" />
+                      <MoreHorizontal size={17} color="#64748b" />
                     </button>
                     {isMenuOpen && typeof window !== 'undefined' && createPortal(
                       <div style={{ position: 'fixed', top: menuPos.top, bottom: menuPos.bottom, right: menuPos.right, maxHeight: menuPos.maxHeight || 'none', overflowY: 'auto', background: '#fff', borderRadius: '12px', boxShadow: '0 8px 30px rgba(0,0,0,0.12)', border: '1px solid #e2e8f0', zIndex: 9999, minWidth: '165px' }}
@@ -2700,25 +2795,49 @@ function MultiSelect({ options, selected, onChange, placeholder }: { options: { 
 
   return (
     <div style={{ position: 'relative' }} ref={dropdownRef}>
-      <div onClick={() => setOpen(!open)} style={{ padding: '10px 12px', border: '2px solid #BDC3C7', borderRadius: '6px', fontSize: '14px', width: '100%', background: 'var(--bg-card, #fff)', color: 'var(--text-primary, #333)', cursor: 'pointer', display: 'flex', flexWrap: 'wrap', gap: '4px', minHeight: '42px', alignItems: 'center' }}>
-        {selected.length === 0 ? <span style={{ color: '#7F8C8D' }}>{placeholder}</span> :
+      <div onClick={() => setOpen(!open)} style={{
+        padding: '8px 12px', border: open ? '1.5px solid #2563eb' : '1px solid #e2e8f0',
+        borderRadius: '10px', fontSize: '13px', width: '100%',
+        background: '#ffffff', color: '#0f172a', cursor: 'pointer',
+        display: 'flex', flexWrap: 'wrap', gap: '5px', minHeight: '40px',
+        alignItems: 'center', transition: 'all 0.15s ease',
+        boxShadow: open ? '0 0 0 3px rgba(37,99,235,0.1)' : 'none'
+      }}>
+        {selected.length === 0 ? <span style={{ color: '#94a3b8' }}>{placeholder}</span> :
           selected.map(s => {
             const opt = options.find(o => o.id === s);
             return (
-              <span key={s} style={{ background: '#5DADE2', color: '#fff', padding: '2px 8px', borderRadius: '4px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <span key={s} style={{
+                background: '#eff6ff', color: '#1d4ed8', border: '1px solid #dbeafe',
+                padding: '3px 8px', borderRadius: '6px', fontSize: '11.5px',
+                fontWeight: 600, display: 'flex', alignItems: 'center', gap: '5px'
+              }}>
                 {opt?.label || s}
-                <X size={12} onClick={(e) => toggle(s, e)} style={{ cursor: 'pointer' }} />
+                <X size={12} onClick={(e) => toggle(s, e)} style={{ cursor: 'pointer', opacity: 0.7 }} />
               </span>
             );
           })
         }
       </div>
       {open && (
-        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #BDC3C7', borderRadius: '6px', marginTop: '4px', zIndex: 100, maxHeight: '200px', overflowY: 'auto', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+        <div style={{
+          position: 'absolute', top: '100%', left: 0, right: 0,
+          background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '10px',
+          marginTop: '6px', zIndex: 100, maxHeight: '220px', overflowY: 'auto',
+          boxShadow: '0 10px 25px rgba(0,0,0,0.08)'
+        }}>
           {options.map(opt => (
-            <div key={opt.id} onClick={(e) => toggle(opt.id, e)} style={{ padding: '8px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', background: selected.includes(opt.id) ? '#F4F6F7' : 'transparent', borderBottom: '1px solid #F2F3F4' }}>
-              <input type="checkbox" checked={selected.includes(opt.id)} readOnly style={{ cursor: 'pointer' }} />
-              <span style={{ color: '#2E4053' }}>{opt.label}</span>
+            <div key={opt.id} onClick={(e) => toggle(opt.id, e)} style={{
+              padding: '9px 12px', cursor: 'pointer', display: 'flex',
+              alignItems: 'center', gap: '9px',
+              background: selected.includes(opt.id) ? '#eff6ff' : 'transparent',
+              borderBottom: '1px solid #f8fafc', transition: 'background 0.1s ease'
+            }}
+              onMouseEnter={e => { if (!selected.includes(opt.id)) e.currentTarget.style.background = '#f8fafc'; }}
+              onMouseLeave={e => { if (!selected.includes(opt.id)) e.currentTarget.style.background = 'transparent'; }}
+            >
+              <input type="checkbox" checked={selected.includes(opt.id)} readOnly style={{ cursor: 'pointer', accentColor: '#2563eb' }} />
+              <span style={{ color: selected.includes(opt.id) ? '#1d4ed8' : '#334155', fontSize: '13px', fontWeight: selected.includes(opt.id) ? 600 : 400 }}>{opt.label}</span>
             </div>
           ))}
         </div>
@@ -2731,57 +2850,55 @@ function Modal({ title, children, onClose }: { title: string; children: React.Re
   return (
     <div className="stat-modal-overlay" style={{
       position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
-      background: 'rgba(15,23,42,0.6)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
+      background: 'rgba(15,23,42,0.5)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
-      zIndex: 1000, padding: '12px', animation: 'fadeIn 0.2s ease-out',
+      zIndex: 1000, padding: '16px', animation: 'fadeIn 0.15s ease-out',
     }} onClick={onClose}>
       <div style={{
-        background: '#ffffff', borderRadius: '20px', maxWidth: '800px', width: '100%',
-        maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 25px 60px rgba(0,0,0,0.2), 0 10px 20px rgba(0,0,0,0.1)',
-        animation: 'scaleIn 0.25s ease-out', border: '1px solid rgba(226,232,240,0.6)',
+        background: '#ffffff', borderRadius: '18px', maxWidth: '820px', width: '100%',
+        maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.18)',
+        animation: 'scaleIn 0.2s ease-out', border: '1px solid #e2e8f0',
       }} onClick={e => e.stopPropagation()}>
         <div style={{
-          padding: '18px 20px', borderBottom: '1px solid #f1f5f9',
+          padding: '16px 20px', borderBottom: '1px solid #f1f5f9',
           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-          background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
-          borderRadius: '20px 20px 0 0',
+          background: '#ffffff',
+          borderRadius: '18px 18px 0 0',
         }}>
-          <h2 style={{ fontSize: '16px', color: '#0f172a', fontWeight: 700, letterSpacing: '-0.3px', margin: 0, lineHeight: 1.3 }}>{title}</h2>
+          <h2 style={{ fontSize: '16px', color: '#0f172a', fontWeight: 700, letterSpacing: '-0.01em', margin: 0, lineHeight: 1.3 }}>{title}</h2>
           <button onClick={onClose} style={{
-            background: '#f1f5f9', border: 'none', cursor: 'pointer', color: '#64748b',
-            width: '36px', height: '36px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center',
-            transition: 'all 0.15s ease', flexShrink: 0, marginLeft: '12px',
+            background: '#f8fafc', border: '1px solid #e2e8f0', cursor: 'pointer', color: '#64748b',
+            width: '32px', height: '32px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            transition: 'all 0.15s ease'
           }}
-            onMouseEnter={e => { e.currentTarget.style.background = '#e2e8f0'; e.currentTarget.style.color = '#0f172a'; }}
-            onMouseLeave={e => { e.currentTarget.style.background = '#f1f5f9'; e.currentTarget.style.color = '#64748b'; }}
-          ><X size={18} /></button>
+            onMouseEnter={e => { e.currentTarget.style.background = '#fee2e2'; e.currentTarget.style.color = '#dc2626'; e.currentTarget.style.borderColor = '#fecaca'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = '#f8fafc'; e.currentTarget.style.color = '#64748b'; e.currentTarget.style.borderColor = '#e2e8f0'; }}
+          >
+            <X size={15} />
+          </button>
         </div>
-        <div style={{ padding: '20px' }}>{children}</div>
+        <div style={{ padding: '20px' }}>
+          {children}
+        </div>
       </div>
     </div>
   );
 }
 
-// Helper: get statuses relevant for a specific task's task type(s)
-// Statuses with null task_type_ids are "universal" (show for all tasks)
-// Statuses with specific task_type_ids only show for tasks with matching types
 function getStatusesForTask(
   taskTypeIds: string[],
-  statusObjects: { name: string; task_type_ids: string[] | null }[],
+  statusObjects: { name: string; task_type_ids?: string[] | null }[],
   fallbackStatuses: string[]
 ): string[] {
-  // If no status objects loaded yet, return all statuses
   if (statusObjects.length === 0) return [...fallbackStatuses];
 
-  // If task has no task type selected, show all statuses
   if (!taskTypeIds || taskTypeIds.length === 0) {
     return [...new Set(statusObjects.map(s => s.name))].sort((a, b) => a.localeCompare(b));
   }
 
-  // Filter: show statuses that are universal (null) OR linked to any of the task's types
   const filtered = statusObjects.filter(s => {
-    if (!s.task_type_ids || s.task_type_ids.length === 0) return true; // universal
-    return s.task_type_ids.some(id => taskTypeIds.includes(id));
+    if (!s.task_type_ids || s.task_type_ids.length === 0) return true;
+    return s.task_type_ids.some((id: string) => taskTypeIds.includes(id));
   });
 
   return [...new Set(filtered.map(s => s.name))].sort((a, b) => a.localeCompare(b));
@@ -2789,42 +2906,42 @@ function getStatusesForTask(
 
 function FormField({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', marginBottom: '4px' }}>
-      <label style={{ fontWeight: 600, marginBottom: '8px', color: '#1e293b', fontSize: '13px', letterSpacing: '0.01em', display: 'flex', alignItems: 'center', gap: '4px' }}>{label}</label>
+    <div style={{ display: 'flex', flexDirection: 'column', marginBottom: '8px' }}>
+      <label style={{ fontWeight: 600, marginBottom: '6px', color: '#334155', fontSize: '12.5px', letterSpacing: '0.01em', display: 'flex', alignItems: 'center', gap: '4px' }}>{label}</label>
       {children}
     </div>
   );
 }
 
 const filterStyle: React.CSSProperties = {
-  padding: '10px 16px', border: '1px solid #cbd5e1', borderRadius: '12px', fontSize: '13px',
-  background: '#ffffff', color: '#334155', outline: 'none', transition: 'all 0.2s ease',
-  boxShadow: '0 2px 4px rgba(0,0,0,0.02)', fontWeight: 500
+  padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '12.5px',
+  background: '#ffffff', color: '#1e293b', outline: 'none', transition: 'all 0.15s ease',
+  boxShadow: '0 1px 2px rgba(0,0,0,0.02)', fontWeight: 500
 };
 
 const compactCell: React.CSSProperties = {
-  padding: '10px 10px', fontSize: '12px', verticalAlign: 'middle', color: '#334155',
+  padding: '10px 12px', fontSize: '12.5px', verticalAlign: 'middle', color: '#334155',
 };
 
 const cellStyle: React.CSSProperties = {
-  padding: '10px 10px', fontSize: '12px', verticalAlign: 'middle', color: '#334155',
+  padding: '10px 12px', fontSize: '12.5px', verticalAlign: 'middle', color: '#334155',
 };
 
 const dropdownStyle: React.CSSProperties = {
-  padding: '5px 6px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '11px',
-  width: '100%', minWidth: '120px', cursor: 'pointer', background: '#f8fafc', color: '#334155', outline: 'none',
-  transition: 'all 0.2s ease', fontWeight: 500,
+  padding: '5px 8px', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '11.5px',
+  width: '100%', minWidth: '120px', cursor: 'pointer', background: '#f8fafc', color: '#1e293b', outline: 'none',
+  transition: 'all 0.15s ease', fontWeight: 500,
 };
 
 const inputStyle: React.CSSProperties = {
-  padding: '12px 16px', border: '1.5px solid #e2e8f0', borderRadius: '12px', fontSize: '14px',
+  padding: '10px 14px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '13.5px',
   width: '100%', background: '#ffffff', color: '#0f172a', outline: 'none',
-  transition: 'border-color 0.2s ease, box-shadow 0.2s ease', fontWeight: 500,
+  transition: 'border-color 0.15s ease, box-shadow 0.15s ease', fontWeight: 500,
 };
 
 const menuItemStyle: React.CSSProperties = {
-  display: 'flex', alignItems: 'center', gap: '10px', width: '100%', padding: '10px 14px',
-  background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '13px',
+  display: 'flex', alignItems: 'center', gap: '10px', width: '100%', padding: '9px 14px',
+  background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '12.5px',
   color: '#334155', fontWeight: 500, transition: 'background 0.1s ease', textAlign: 'left',
 };
 
