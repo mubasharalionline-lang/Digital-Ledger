@@ -48,7 +48,20 @@ export default function BahrainTasks() {
   const [filterPartner, setFilterPartner] = useState(searchParams.get('partner') || '');
   const [filterAuditor, setFilterAuditor] = useState(searchParams.get('auditor') || '');
   const [filterTaskType, setFilterTaskType] = useState(searchParams.get('taskType') || '');
+  const [filterDescUpdated, setFilterDescUpdated] = useState(searchParams.get('descUpdated') || '');
   const [search, setSearch] = useState(searchParams.get('search') || '');
+  const [descUpdateMap, setDescUpdateMap] = useState<Record<string, string>>({});
+
+  const formatDescDate = (dateStr?: string | null) => {
+    if (!dateStr) return '—';
+    try {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return '—';
+      return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+    } catch {
+      return '—';
+    }
+  };
 
   // New Task modal
   const [showTaskModal, setShowTaskModal] = useState(false);
@@ -91,7 +104,7 @@ export default function BahrainTasks() {
   useEffect(() => {
     activeTooltipRef.current = null;
     setActiveTooltipTaskId(null);
-  }, [search, filterStatus, filterPriority, filterCompany, filterPartner, filterTaskType, filterAuditor]);
+  }, [search, filterStatus, filterPriority, filterCompany, filterPartner, filterTaskType, filterAuditor, filterDescUpdated]);
 
   const handleTooltipMouseEnter = () => {
     if (tooltipTimeoutRef.current) {
@@ -117,6 +130,7 @@ export default function BahrainTasks() {
     const previousDesc = task.description;
     // Optimistic update
     setTasks(prev => prev.map(t => t.id === taskId ? { ...t, description: recentEditValue } : t));
+    setDescUpdateMap(prev => ({ ...prev, [taskId]: new Date().toISOString() }));
     const { data, error } = await supabase.from('tasks').update({ description: recentEditValue }).eq('id', taskId).select();
     if (error) {
       console.error('Description update error:', error);
@@ -141,6 +155,7 @@ export default function BahrainTasks() {
           remarks: `Description updated to: ${recentEditValue}`
         });
       }
+      sessionStorage.removeItem('tasks_data_cache');
       sessionStorage.removeItem('tasks_data_time');
       sessionStorage.removeItem('dashboard_data_time_v2');
     }
@@ -196,6 +211,7 @@ export default function BahrainTasks() {
           setDynamicStatuses(parsed.dynamicStatuses.sort((a: string, b: string) => a.localeCompare(b)));
         }
         if (parsed.statusObjects) setStatusObjects(parsed.statusObjects);
+        if (parsed.descUpdateMap) setDescUpdateMap(parsed.descUpdateMap);
         setLoading(false);
         hadCache = true;
         // If cache is fresh (< 2 min), skip network entirely
@@ -210,7 +226,7 @@ export default function BahrainTasks() {
         usersQuery = usersQuery.eq('country', dataCountry);
       }
 
-      const [compsRes, ttRes, usersRes, statusRes, audRes] = await Promise.all([
+      const [compsRes, ttRes, usersRes, statusRes, audRes, descLogsRes] = await Promise.all([
         supabase.from('companies').select('id, company_name, notes, country, cr_number, created_at').eq('country', dataCountry || 'Bahrain'),
         supabase.from('task_types').select('id, name, category, jurisdiction, status_options, active, created_at').eq('active', true).eq('country', dataCountry || 'Bahrain'),
         usersQuery,
@@ -219,7 +235,8 @@ export default function BahrainTasks() {
           : supabase.from('statuses').select('name, active, task_type_ids'),
         dataCountry
           ? supabase.from('auditors').select('id, name, country').eq('country', dataCountry).order('name')
-          : supabase.from('auditors').select('id, name, country').order('name')
+          : supabase.from('auditors').select('id, name, country').order('name'),
+        supabase.from('status_log').select('task_id, created_at, remarks').ilike('remarks', '%Description%').order('created_at', { ascending: false }).limit(5000)
       ]);
 
       const companyList = compsRes.data || [];
@@ -237,6 +254,15 @@ export default function BahrainTasks() {
       // Store full status objects for task-type filtering
       const sObjs = activeStatuses.map(s => ({ name: s.name, task_type_ids: s.task_type_ids || null }));
       setStatusObjects(sObjs);
+
+      // Build map of latest description update dates
+      const descMap: Record<string, string> = {};
+      (descLogsRes.data || []).forEach((l: any) => {
+        if (!descMap[l.task_id]) {
+          descMap[l.task_id] = l.created_at;
+        }
+      });
+      setDescUpdateMap(descMap);
 
       const companyIds = companyList.map(c => c.id);
       let taskList: Task[] = [];
@@ -270,7 +296,8 @@ export default function BahrainTasks() {
         auditors: filteredAuditorList,
         tasks: filteredTaskList,
         dynamicStatuses: resolvedStatuses,
-        statusObjects: sObjs
+        statusObjects: sObjs,
+        descUpdateMap: descMap
       }));
       sessionStorage.setItem(cacheTimeKey, Date.now().toString());
 
@@ -333,6 +360,33 @@ export default function BahrainTasks() {
       const ttIds = t.task_type_ids && t.task_type_ids.length > 0 ? t.task_type_ids : (t.task_type_id ? t.task_type_id.split(',').map(s => s.trim()).filter(Boolean) : []);
       if (!ttIds.includes(filterTaskType)) return false;
     }
+    if (filterDescUpdated) {
+      const hasDescription = Boolean(t.description && t.description.trim().length > 0);
+      if (filterDescUpdated === 'no_desc') {
+        if (hasDescription) return false;
+      } else {
+        // Exclude all tasks that have no description or empty description
+        if (!hasDescription) return false;
+
+        const updateDateStr = descUpdateMap[t.id] || t.created_at || null;
+
+        if (filterDescUpdated === 'has_desc') {
+          // Already confirmed hasDescription
+        } else if (filterDescUpdated === 'updated') {
+          if (!descUpdateMap[t.id]) return false;
+        } else {
+          if (!updateDateStr) return false;
+          const updateTime = new Date(updateDateStr).getTime();
+          if (isNaN(updateTime)) return false;
+          const now = Date.now();
+          let maxAgeMs = 0;
+          if (filterDescUpdated === '24h') maxAgeMs = 24 * 60 * 60 * 1000;
+          else if (filterDescUpdated === '7d') maxAgeMs = 7 * 24 * 60 * 60 * 1000;
+          else if (filterDescUpdated === '30d') maxAgeMs = 30 * 24 * 60 * 60 * 1000;
+          if (maxAgeMs > 0 && (now - updateTime > maxAgeMs || now < updateTime - 60000)) return false;
+        }
+      }
+    }
     if (search) {
       const s = search.toLowerCase();
       const ttIds = t.task_type_ids && t.task_type_ids.length > 0 ? t.task_type_ids : (t.task_type_id ? t.task_type_id.split(',').map(s => s.trim()).filter(Boolean) : []);
@@ -341,13 +395,23 @@ export default function BahrainTasks() {
       const matchDesc = t.description?.toLowerCase().includes(s);
       const matchType = ttIds.some(id => taskTypes.find(x => x.id === id)?.name.toLowerCase().includes(s));
       const matchCompany = comp?.company_name?.toLowerCase().includes(s);
+      const matchCr = comp?.cr_number?.toLowerCase().includes(s);
       const matchStatus = t.status?.toLowerCase().includes(s);
       const matchPriority = t.priority?.toLowerCase().includes(s);
       const matchId = t.id?.toLowerCase().includes(s);
-      if (!matchTitle && !matchDesc && !matchType && !matchCompany && !matchStatus && !matchPriority && !matchId) return false;
+      if (!matchTitle && !matchDesc && !matchType && !matchCompany && !matchCr && !matchStatus && !matchPriority && !matchId) return false;
     }
     return true;
-  }).sort((a, b) => (a.status || '').localeCompare(b.status || ''));
+  }).sort((a, b) => {
+    if (filterDescUpdated && filterDescUpdated !== 'no_desc') {
+      const timeA = descUpdateMap[a.id] ? new Date(descUpdateMap[a.id]).getTime() : (a.description ? new Date(a.created_at).getTime() : 0);
+      const timeB = descUpdateMap[b.id] ? new Date(descUpdateMap[b.id]).getTime() : (b.description ? new Date(b.created_at).getTime() : 0);
+      if (timeA !== timeB) {
+        return timeB - timeA; // Descending (most recently updated descriptions first)
+      }
+    }
+    return (a.status || '').localeCompare(b.status || '');
+  });
 
   // Check for openDesc URL param
   useEffect(() => {
@@ -543,6 +607,7 @@ export default function BahrainTasks() {
     // Optimistic update
     const previousDesc = task.description;
     setTasks(prev => prev.map(t => t.id === taskId ? { ...t, description: inlineEditDescValue } : t));
+    setDescUpdateMap(prev => ({ ...prev, [taskId]: new Date().toISOString() }));
 
     const { data, error } = await supabase.from('tasks').update({ description: inlineEditDescValue }).eq('id', taskId).select();
 
@@ -562,6 +627,7 @@ export default function BahrainTasks() {
           remarks: `Description updated to: ${inlineEditDescValue}`
         });
       }
+      sessionStorage.removeItem('tasks_data_cache');
       sessionStorage.removeItem('tasks_data_time');
       sessionStorage.removeItem('dashboard_data_time_v2');
     }
@@ -670,6 +736,14 @@ export default function BahrainTasks() {
         const { user } = getSession();
         let remarksArr = [];
 
+        // Check if description changed
+        const oldDesc = (oldTask.description || '').trim();
+        const newDesc = (desc || '').trim();
+        if (oldDesc !== newDesc) {
+          remarksArr.push(`Description updated to: ${newDesc}`);
+          setDescUpdateMap(prev => ({ ...prev, [editingTaskId]: new Date().toISOString() }));
+        }
+
         // Check if status changed
         if (oldTask.status !== firstStatus && firstStatus) {
            remarksArr.push(`Status updated from ${oldTask.status} to ${firstStatus}`);
@@ -703,6 +777,7 @@ export default function BahrainTasks() {
     setEditingTaskId(null);
     setNewTask({ company_id: '', task_type_id: '', task_type_ids: [], priority: 'Medium', status: '', auditor_id: '', deadline: '', description: '', assigned_to: '', assigned_partners: [] });
 
+    sessionStorage.removeItem('tasks_data_cache');
     sessionStorage.removeItem('tasks_data_time');
     sessionStorage.removeItem('dashboard_data_time_v2');
 
@@ -830,6 +905,7 @@ export default function BahrainTasks() {
     if (e2) console.error('Log error:', e2);
 
     setDetailTask(null);
+    sessionStorage.removeItem('tasks_data_cache');
     sessionStorage.removeItem('tasks_data_time');
     sessionStorage.removeItem('dashboard_data_time_v2');
     loadData();
@@ -853,6 +929,7 @@ export default function BahrainTasks() {
         return;
       }
 
+      sessionStorage.removeItem('tasks_data_cache');
       sessionStorage.removeItem('tasks_data_time');
       sessionStorage.removeItem('dashboard_data_time_v2');
       setTasks(prev => prev.filter(t => t.id !== taskId));
@@ -990,6 +1067,15 @@ export default function BahrainTasks() {
           <option value="">All Task Types</option>
           {taskTypes.filter(t => t.active).map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
         </select>
+        <select value={filterDescUpdated} onChange={e => setFilterDescUpdated(e.target.value)} style={filterStyle}>
+          <option value="">All Descriptions</option>
+          <option value="24h">Desc Updated: Last 24 Hours</option>
+          <option value="7d">Desc Updated: Last 7 Days</option>
+          <option value="30d">Desc Updated: Last 30 Days</option>
+          <option value="updated">Desc Updated: Any Update</option>
+          <option value="has_desc">Has Description</option>
+          <option value="no_desc">No Description</option>
+        </select>
         <input
           type="text"
           value={search}
@@ -997,9 +1083,9 @@ export default function BahrainTasks() {
           placeholder="Search tasks..."
           style={{ ...filterStyle, flex: 1, minWidth: '180px' }}
         />
-        {(filterStatus || filterPriority || filterCompany || filterPartner || filterAuditor || filterTaskType || search) && (
+        {(filterStatus || filterPriority || filterCompany || filterPartner || filterAuditor || filterTaskType || filterDescUpdated || search) && (
           <button
-            onClick={() => { setFilterStatus(''); setFilterPriority(''); setFilterCompany(''); setFilterPartner(''); setFilterAuditor(''); setFilterTaskType(''); setSearch(''); }}
+            onClick={() => { setFilterStatus(''); setFilterPriority(''); setFilterCompany(''); setFilterPartner(''); setFilterAuditor(''); setFilterTaskType(''); setFilterDescUpdated(''); setSearch(''); }}
             style={{ padding: '10px 18px', background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: '10px', cursor: 'pointer', fontWeight: 600, fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap', transition: 'all 0.15s ease' }}
             onMouseEnter={e => { e.currentTarget.style.background = '#fee2e2'; }}
             onMouseLeave={e => { e.currentTarget.style.background = '#fef2f2'; }}
@@ -1373,7 +1459,7 @@ export default function BahrainTasks() {
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
                     <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
-                      {['ID', 'Company', 'Task Type', 'Status', 'Priority', 'Due Date'].map(h => (
+                      {['ID', 'Company', 'CR Number', 'Task Type', 'Status', 'Priority', 'Due Date'].map(h => (
                         <th key={h} style={{ padding: '10px 12px', textAlign: 'left', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.3px', color: '#64748b' }}>{h}</th>
                       ))}
                     </tr>
@@ -1394,6 +1480,7 @@ export default function BahrainTasks() {
                         >
                           <td style={{ padding: '10px 12px', fontSize: '12px', fontWeight: 600, color: '#475569' }}>#{task.id.slice(0, 6)}</td>
                           <td style={{ padding: '10px 12px', fontSize: '12px', color: '#1e293b', fontWeight: 500 }}>{company?.company_name || 'Unknown'}</td>
+                          <td style={{ padding: '10px 12px', fontSize: '12px', color: '#64748b', fontWeight: 500 }}>{company?.cr_number || '—'}</td>
                           <td style={{ padding: '10px 12px', fontSize: '12px' }}>
                             {ttNames.length > 0 ? ttNames.map((name, i) => (
                               <span key={i} style={{ padding: '2px 6px', borderRadius: '10px', fontSize: '10px', fontWeight: 600, background: '#EBF5FB', color: '#2980B9', border: '1px solid #AED6F1', marginRight: '4px' }}>{name}</span>
@@ -1932,14 +2019,14 @@ export default function BahrainTasks() {
         <table style={{ width: '100%', borderCollapse: 'collapse', background: '#ffffff' }}>
           <thead>
             <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
-              {['PL', 'Company', 'Task Type', 'Description', 'Priority', 'Due', 'Status', 'Auditor', 'Assigned To', ''].map(h => (
+              {['PL', 'Company', 'CR Number', 'Task Type', 'Description', 'Desc Updated Date', 'Priority', 'Due', 'Status', 'Auditor', 'Assigned To', ''].map(h => (
                 <th key={h} style={{ padding: '11px 10px', textAlign: 'left', fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', color: '#64748b', whiteSpace: 'nowrap' }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 ? (
-              <tr><td colSpan={10} style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>No tasks found</td></tr>
+              <tr><td colSpan={12} style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>No tasks found</td></tr>
             ) : filtered.map(task => {
               const company = companies.find(c => c.id === task.company_id);
               const ttIds = task.task_type_ids && task.task_type_ids.length > 0 ? task.task_type_ids : (task.task_type_id ? task.task_type_id.split(',').map(s => s.trim()).filter(Boolean) : []);
@@ -1973,6 +2060,7 @@ export default function BahrainTasks() {
                     </button>
                   </td>
                   <td style={compactCell}><span style={{ fontWeight: 500, fontSize: '12px', color: '#1e293b', maxWidth: '130px', display: 'inline-block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{company?.company_name || 'Unknown'}</span></td>
+                  <td style={compactCell}><span style={{ fontWeight: 500, fontSize: '11px', color: '#64748b', maxWidth: '100px', display: 'inline-block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{company?.cr_number || '—'}</span></td>
                   <td style={compactCell}>
                     {ttNames.length > 0 ? (
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px' }}>
@@ -2113,6 +2201,36 @@ export default function BahrainTasks() {
                         )}
                       </div>
                     )}
+                  </td>
+                  <td style={compactCell}>
+                    {(() => {
+                      const updateDate = descUpdateMap[task.id] || (task.description ? task.created_at : null);
+                      if (!updateDate || !task.description || task.description.trim() === '') {
+                        return <span style={{ fontSize: '11px', color: '#94a3b8' }}>—</span>;
+                      }
+                      const isRecent = descUpdateMap[task.id] && (Date.now() - new Date(descUpdateMap[task.id]).getTime() < 7 * 24 * 60 * 60 * 1000);
+                      return (
+                        <span
+                          title={`Last updated: ${new Date(updateDate).toLocaleString()}`}
+                          style={{
+                            fontSize: '11px',
+                            color: isRecent ? '#0369a1' : '#64748b',
+                            fontWeight: isRecent ? 600 : 500,
+                            whiteSpace: 'nowrap',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            background: isRecent ? '#f0f9ff' : 'transparent',
+                            padding: isRecent ? '2px 7px' : '0',
+                            borderRadius: isRecent ? '6px' : '0',
+                            border: isRecent ? '1px solid #bae6fd' : 'none',
+                          }}
+                        >
+                          {isRecent && <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#0284c7' }} />}
+                          {formatDescDate(updateDate)}
+                        </span>
+                      );
+                    })()}
                   </td>
                   <td style={compactCell}>
                     {canUpdateStatus ? (
@@ -2411,6 +2529,7 @@ export default function BahrainTasks() {
             padding: '20px', background: 'var(--bg-secondary, #ECF0F1)', borderRadius: '8px', marginBottom: '24px',
           }}>
             <div><strong>Company:</strong> {detailCompany?.company_name || 'Unknown'}</div>
+            <div><strong>CR Number:</strong> {detailCompany?.cr_number || '—'}</div>
             <div><strong>Type:</strong> {(() => {
               const ids = detailTask.task_type_ids && detailTask.task_type_ids.length > 0 ? detailTask.task_type_ids : (detailTask.task_type_id ? detailTask.task_type_id.split(',').map(s => s.trim()).filter(Boolean) : []);
               const names = ids.map(id => taskTypes.find(t => t.id === id)?.name).filter(Boolean);
@@ -2421,6 +2540,7 @@ export default function BahrainTasks() {
             <div><strong>Status:</strong> <span style={{ padding: '3px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: 600, background: '#D6EAF8', color: '#3498DB' }}>{detailTask.status}</span></div>
             <div><strong>Due Date:</strong> {detailTask.deadline}</div>
             <div><strong>Created:</strong> {detailTask.created_at?.slice(0, 10)}</div>
+            <div><strong>Description Updated:</strong> {formatDescDate(descUpdateMap[detailTask.id] || (detailTask.description ? detailTask.created_at : null))}</div>
             <div style={{ gridColumn: '1 / -1' }}><strong>Description:</strong><br />{detailTask.description || 'No description'}</div>
           </div>
 
