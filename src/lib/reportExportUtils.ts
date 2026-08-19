@@ -178,6 +178,7 @@ export function exportTaskManagementExcel(
       'PL': task.pl_uploaded ? 'Yes' : 'No',
       'Company': company?.company_name || 'Unknown',
       'CR Number': company?.cr_number || '',
+      'CR Link': company?.cr_link || '',
       'Task Type': ttNames || '—',
       'Description': task.description || '',
       'Desc Updated': descUpdatedStr,
@@ -199,6 +200,7 @@ export function exportTaskManagementExcel(
     { wch: 8 },  // PL
     { wch: 28 }, // Company
     { wch: 16 }, // CR Number
+    { wch: 24 }, // CR Link
     { wch: 22 }, // Task Type
     { wch: 40 }, // Description
     { wch: 16 }, // Desc Updated

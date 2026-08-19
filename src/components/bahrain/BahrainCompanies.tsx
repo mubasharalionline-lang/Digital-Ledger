@@ -17,7 +17,7 @@ export default function BahrainCompanies() {
   const dataCountry = getDataCountry();
   const router = useRouter();
 
-  const [form, setForm] = useState({ name: '', country: dataCountry || 'Bahrain', tax_registration: '', industry: '', compliance_type: '', google_drive_link: '', cr_number: '' });
+  const [form, setForm] = useState({ name: '', country: dataCountry || 'Bahrain', tax_registration: '', industry: '', compliance_type: '', google_drive_link: '', cr_number: '', cr_link: '' });
 
   // Click-outside handler for Quick Actions panel
   useEffect(() => {
@@ -38,12 +38,19 @@ export default function BahrainCompanies() {
     const isAdminUser = isAdmin(currentUser);
     
     // Fetch all companies for the country
-    let { data } = await supabase.from('companies').select('id, company_name, country, tax_registration, industry, compliance_type, status, google_drive_link, notes, created_at').eq('country', dataCountry || 'Bahrain').order('company_name');
+    let companyRows: Company[] = [];
+    const { data, error } = await supabase.from('companies').select('id, company_name, country, tax_registration, industry, compliance_type, status, google_drive_link, cr_number, cr_link, notes, created_at').eq('country', dataCountry || 'Bahrain').order('company_name');
+    if (!error && data) {
+      companyRows = data as Company[];
+    } else {
+      const fb = await supabase.from('companies').select('id, company_name, country, tax_registration, industry, compliance_type, status, google_drive_link, cr_number, notes, created_at').eq('country', dataCountry || 'Bahrain').order('company_name');
+      companyRows = (fb.data || []) as Company[];
+    }
     
     const userAuditorAccess: string[] = currentUser?.permissions?.auditor_access || [];
     const canViewCompanies = currentUser?.permissions?.can_view_companies === true;
     
-    if (!isAdminUser && currentUser && data) {
+    if (!isAdminUser && currentUser && companyRows.length > 0) {
       if (userAuditorAccess.length > 0) {
         const { data: countryTasks } = await supabase
           .from('tasks')
@@ -58,9 +65,9 @@ export default function BahrainCompanies() {
               .map(t => t.company_id)
               .filter(Boolean)
           );
-          data = data.filter(c => allowedCompanyIds.has(c.id));
+          companyRows = companyRows.filter(c => allowedCompanyIds.has(c.id));
         } else {
-          data = [];
+          companyRows = [];
         }
       } else if (!canViewCompanies) {
         const { data: userTasks } = await supabase
@@ -70,14 +77,14 @@ export default function BahrainCompanies() {
         
         if (userTasks) {
           const assignedCompanyIds = new Set(userTasks.map(t => t.company_id));
-          data = data.filter(c => assignedCompanyIds.has(c.id));
+          companyRows = companyRows.filter(c => assignedCompanyIds.has(c.id));
         } else {
-          data = [];
+          companyRows = [];
         }
       }
     }
     
-    setCompanies(data || []);
+    setCompanies(companyRows);
     setLoading(false);
   }, [dataCountry]);
 
@@ -93,7 +100,7 @@ export default function BahrainCompanies() {
     }
 
     try {
-      const { error } = await supabase.from('companies').insert({
+      let insertPayload: any = {
         company_name: form.name.trim(),
         country: companyCountry,
         tax_registration: form.tax_registration.trim(),
@@ -101,16 +108,23 @@ export default function BahrainCompanies() {
         compliance_type: form.compliance_type.trim(),
         google_drive_link: form.google_drive_link.trim() || null,
         cr_number: form.cr_number.trim() || null,
+        cr_link: form.cr_link.trim() || null,
         notes: '',
         status: 'Active',
-      });
+      };
+      let { error } = await supabase.from('companies').insert(insertPayload);
+      if (error && (error.message?.includes('cr_link') || (error as any).code === 'PGRST204' || error.message?.includes('column'))) {
+        delete insertPayload.cr_link;
+        const res = await supabase.from('companies').insert(insertPayload);
+        error = res.error;
+      }
       if (error) { throw error; }
       
       sessionStorage.removeItem('dashboard_data_time_v2');
       sessionStorage.removeItem('tasks_data_time');
       
       setShowModal(false);
-      setForm({ name: '', country: companyCountry, tax_registration: '', industry: '', compliance_type: '', google_drive_link: '', cr_number: '' });
+      setForm({ name: '', country: companyCountry, tax_registration: '', industry: '', compliance_type: '', google_drive_link: '', cr_number: '', cr_link: '' });
       loadData();
     } catch (e: any) {
       alert('Error: ' + e.message);
@@ -317,6 +331,37 @@ export default function BahrainCompanies() {
                             {c.google_drive_link && <ExternalLink size={14} color="#94a3b8" />}
                           </button>
 
+                          {/* CR Link Action */}
+                          {c.cr_link && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const url = /^https?:\/\//i.test(c.cr_link!) ? c.cr_link! : `https://${c.cr_link!}`;
+                                window.open(url, '_blank', 'noopener,noreferrer');
+                                setQuickActionsCompany(null);
+                              }}
+                              style={{
+                                display: 'flex', alignItems: 'center', gap: '12px', width: '100%',
+                                padding: '10px 14px', border: 'none', borderRadius: '10px',
+                                background: 'transparent', cursor: 'pointer',
+                                transition: 'background 0.15s ease', textAlign: 'left',
+                              }}
+                              onMouseEnter={e => { e.currentTarget.style.background = '#eff6ff'; }}
+                              onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                            >
+                              <div style={{ width: '34px', height: '34px', borderRadius: '10px', background: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, border: '1px solid #dbeafe' }}>
+                                <FileText size={16} color="#2563eb" />
+                              </div>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontSize: '13px', fontWeight: 600, color: '#0f172a' }}>Open CR Portal / Link</div>
+                                <div style={{ fontSize: '11px', color: '#2563eb', fontWeight: 500, marginTop: '1px' }}>
+                                  {c.cr_number ? `CR: ${c.cr_number}` : 'Open saved URL'}
+                                </div>
+                              </div>
+                              <ExternalLink size={14} color="#94a3b8" />
+                            </button>
+                          )}
+
                           {/* Future Actions (disabled placeholders) */}
                           {[
                             { id: 'reports', label: 'Reports', icon: <BarChart3 size={16} color="#f59e0b" />, sub: 'Coming soon', iconBg: '#fffbeb', iconBorder: '#fef3c7' },
@@ -398,6 +443,9 @@ export default function BahrainCompanies() {
                 </Field>
                 <Field label="CR Number">
                   <input value={form.cr_number} onChange={e => setForm(p => ({ ...p, cr_number: e.target.value }))} placeholder="Enter CR number" style={inpStyle} />
+                </Field>
+                <Field label="CR Link">
+                  <input value={form.cr_link} onChange={e => setForm(p => ({ ...p, cr_link: e.target.value }))} placeholder="e.g. https://sijilat.bh/..." style={inpStyle} />
                 </Field>
                 <Field label="Industry">
                   <input value={form.industry} onChange={e => setForm(p => ({ ...p, industry: e.target.value }))} placeholder="e.g., Finance, Tech" style={inpStyle} />

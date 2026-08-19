@@ -73,6 +73,7 @@ export default function CompanyDetailPage() {
   const [editStaffList, setEditStaffList] = useState<{ id: string; role: string; username: string }[]>([]);
   const [editGoogleDriveLink, setEditGoogleDriveLink] = useState('');
   const [editCrNumber, setEditCrNumber] = useState('');
+  const [editCrLink, setEditCrLink] = useState('');
   const [savingCompany, setSavingCompany] = useState(false);
 
   useEffect(() => {
@@ -85,12 +86,19 @@ export default function CompanyDetailPage() {
   async function loadData() {
     setLoading(true);
     const dataCountry = getDataCountry();
-
     let staffQuery = supabase.from('users').select('id, username, role, country, created_at').neq('role', 'admin');
     if (dataCountry) staffQuery = staffQuery.eq('country', dataCountry);
 
+    const companyPromise = (async () => {
+      const res = await supabase.from('companies').select('id, company_name, notes, job, start_date, due_date, status, country, google_drive_link, cr_number, cr_link, created_at').eq('id', id).single();
+      if (res.error) {
+        return supabase.from('companies').select('id, company_name, notes, job, start_date, due_date, status, country, google_drive_link, cr_number, created_at').eq('id', id).single();
+      }
+      return res;
+    })();
+
     const [companyRes, tasksRes, staffRes, allStaffRes] = await Promise.all([
-      supabase.from('companies').select('id, company_name, notes, job, start_date, due_date, status, country, google_drive_link, cr_number, created_at').eq('id', id).single(),
+      companyPromise,
       supabase.from('tasks')
         .select('*, assignee:users!tasks_assigned_to_fkey(username)')
         .eq('company_id', id)
@@ -175,6 +183,7 @@ export default function CompanyDetailPage() {
     })));
     setEditGoogleDriveLink(company.google_drive_link || '');
     setEditCrNumber(company.cr_number || '');
+    setEditCrLink(company.cr_link || '');
     setShowEditModal(true);
   }
 
@@ -188,7 +197,7 @@ export default function CompanyDetailPage() {
       alert('Google Drive link must start with https://'); return;
     }
 
-    await supabase.from('companies').update({
+    let updatePayload: any = {
       company_name: editName.trim(),
       job: editJob.trim() || null,
       notes: editNotes.trim(),
@@ -197,7 +206,14 @@ export default function CompanyDetailPage() {
       status: editStatus,
       google_drive_link: editGoogleDriveLink.trim() || null,
       cr_number: editCrNumber.trim() || null,
-    }).eq('id', id);
+      cr_link: editCrLink.trim() || null,
+    };
+
+    let { error } = await supabase.from('companies').update(updatePayload).eq('id', id);
+    if (error && (error.message?.includes('cr_link') || (error as any).code === 'PGRST204' || error.message?.includes('column'))) {
+      delete updatePayload.cr_link;
+      await supabase.from('companies').update(updatePayload).eq('id', id);
+    }
 
     // Delete old staff links
     await supabase.from('company_staff').delete().eq('company_id', id);
@@ -440,6 +456,19 @@ export default function CompanyDetailPage() {
                   title="Open Google Drive Folder"
                 >
                   <FolderOpen size={14} /> Drive
+                </button>
+              )}
+              {company.cr_link && (
+                <button
+                  onClick={() => {
+                    const url = /^https?:\/\//i.test(company.cr_link!) ? company.cr_link! : `https://${company.cr_link!}`;
+                    window.open(url, '_blank', 'noopener,noreferrer');
+                  }}
+                  className="btn btn-secondary"
+                  style={{ padding: '7px 12px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--primary)' }}
+                  title="Open CR Portal / Link"
+                >
+                  <ExternalLink size={14} /> CR Link
                 </button>
               )}
               <button onClick={openEditModal} className="btn btn-secondary" style={{ padding: '7px 12px', fontSize: '13px' }}>
@@ -888,6 +917,11 @@ export default function CompanyDetailPage() {
                 <label className="label">CR Number</label>
                 <input className="input" type="text" placeholder="Enter CR number"
                   value={editCrNumber} onChange={e => setEditCrNumber(e.target.value)} />
+              </div>
+              <div style={{ marginBottom: '14px' }}>
+                <label className="label">CR Link / URL</label>
+                <input className="input" type="url" placeholder="e.g. https://sijilat.bh/..."
+                  value={editCrLink} onChange={e => setEditCrLink(e.target.value)} />
               </div>
               <div style={{ marginBottom: '14px' }}>
                 <label className="label">Job</label>

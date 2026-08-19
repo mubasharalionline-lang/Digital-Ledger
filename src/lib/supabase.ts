@@ -50,6 +50,7 @@ export interface Company {
   compliance_type?: string;
   google_drive_link?: string;
   cr_number?: string;
+  cr_link?: string;
   created_at: string;
 }
 
