@@ -190,7 +190,7 @@ export default function BahrainCompanies() {
           <p style={{ fontSize: '13px', color: '#94a3b8', marginTop: '4px' }}>{searchTerm ? 'Try a different search term' : 'Add your first company to get started'}</p>
         </div>
       ) : (
-        <div style={{ overflowX: 'auto', borderRadius: '18px', boxShadow: '0 4px 20px rgba(0,0,0,0.06)', border: '1px solid #f1f5f9' }}>
+        <div style={{ width: '100%', overflowX: 'auto', borderRadius: '18px', boxShadow: '0 4px 20px rgba(0,0,0,0.06)', border: '1px solid #f1f5f9', WebkitOverflowScrolling: 'touch' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', background: '#ffffff' }}>
             <thead>
               <tr style={{ background: 'linear-gradient(135deg, #f8fafc, #f1f5f9)', borderBottom: '2px solid #e2e8f0' }}>

@@ -275,7 +275,7 @@ export default function BahrainDashboard() {
 
   if (loading) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', padding: '20px 0', maxWidth: '1200px', margin: '0 auto' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', padding: '20px 0', width: '100%' }}>
         <div style={{ height: '110px', borderRadius: '24px', background: 'linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%)', backgroundSize: '200% 100%' }} />
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
           {[1,2,3,4,5].map(i => <div key={i} style={{ height: '130px', borderRadius: '18px', background: 'linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%)', backgroundSize: '200% 100%' }} />)}
@@ -287,7 +287,7 @@ export default function BahrainDashboard() {
   const greet = (() => { const h = new Date().getHours(); return h < 12 ? 'Good Morning' : h < 17 ? 'Good Afternoon' : 'Good Evening'; })();
 
   return (
-    <div className="animate-fade-up" style={{ paddingBottom: '40px', maxWidth: '1200px', margin: '0 auto' }}>
+    <div className="animate-fade-up" style={{ paddingBottom: '40px', width: '100%' }}>
       <style dangerouslySetInnerHTML={{ __html: `
         /* custom scrollbars */
         .custom-scrollbar::-webkit-scrollbar {

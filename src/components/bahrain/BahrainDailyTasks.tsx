@@ -537,10 +537,10 @@ export default function BahrainDailyTasks() {
       </div>
 
       {/* Filters */}
-      <div className="task-filters" style={{ display: 'flex', gap: '14px', marginBottom: '28px', flexWrap: 'wrap', padding: '20px', background: 'rgba(255, 255, 255, 0.65)', backdropFilter: 'blur(10px)', borderRadius: '18px', border: '1px solid rgba(255,255,255,0.8)', boxShadow: '0 4px 20px rgba(0,0,0,0.03)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: '#ffffff', padding: '10px 16px', borderRadius: '12px', flex: '1 1 250px', border: '1px solid #cbd5e1', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
-          <Search size={18} color="#94a3b8" />
-          <input placeholder="Search title or description..." value={search} onChange={e => setSearch(e.target.value)} style={{ border: 'none', background: 'transparent', outline: 'none', width: '100%', fontSize: '14px', color: '#334155', fontWeight: 500 }} />
+      <div className="task-filters" style={{ display: 'flex', gap: '10px', marginBottom: '22px', flexWrap: 'wrap', padding: '16px 18px', background: 'rgba(255, 255, 255, 0.65)', backdropFilter: 'blur(10px)', borderRadius: '18px', border: '1px solid rgba(255,255,255,0.8)', boxShadow: '0 4px 20px rgba(0,0,0,0.03)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: '#ffffff', padding: '9px 14px', borderRadius: '12px', flex: '2 1 220px', minWidth: '180px', border: '1px solid #cbd5e1', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+          <Search size={16} color="#94a3b8" />
+          <input placeholder="Search title or description..." value={search} onChange={e => setSearch(e.target.value)} style={{ border: 'none', background: 'transparent', outline: 'none', width: '100%', fontSize: '13px', color: '#334155', fontWeight: 500 }} />
         </div>
         
         <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={filterStyle}>
@@ -564,7 +564,7 @@ export default function BahrainDailyTasks() {
       </div>
 
       {/* Tasks Table */}
-      <div className="task-table-wrap" style={{ overflowX: 'auto', borderRadius: '18px', boxShadow: '0 8px 32px rgba(0,0,0,0.05)', border: '1px solid rgba(226, 232, 240, 0.8)', background: '#ffffff' }}>
+      <div className="task-table-wrap" style={{ width: '100%', overflowX: 'auto', borderRadius: '18px', boxShadow: '0 8px 32px rgba(0,0,0,0.05)', border: '1px solid rgba(226, 232, 240, 0.8)', background: '#ffffff', WebkitOverflowScrolling: 'touch' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', background: '#ffffff' }}>
           <thead>
             <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
@@ -962,10 +962,10 @@ function FormField({ label, children }: { label: string; children: React.ReactNo
 // Inline styles
 const thStyle: React.CSSProperties = { padding: '14px 14px', textAlign: 'left', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.6px', color: '#64748b' };
 const tdStyle: React.CSSProperties = { padding: '14px 14px', fontSize: '13px', verticalAlign: 'middle', color: '#334155' };
-const filterStyle: React.CSSProperties = { padding: '10px 16px', border: '1px solid #cbd5e1', borderRadius: '12px', fontSize: '13px', background: '#ffffff', color: '#334155', outline: 'none', transition: 'all 0.2s ease', boxShadow: '0 2px 4px rgba(0,0,0,0.02)', fontWeight: 500 };
-const inputStyle: React.CSSProperties = { ...filterStyle, padding: '12px 16px', width: '100%' };
-const btnSmStyle = (bg: string): React.CSSProperties => ({ padding: '7px 10px', background: bg, color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s ease', boxShadow: `0 1px 3px ${bg}40` });
-const compactCell: React.CSSProperties = { padding: '10px 10px', fontSize: '12px', verticalAlign: 'middle', color: '#334155' };
+const filterStyle: React.CSSProperties = { padding: '8px 12px', border: '1px solid #cbd5e1', borderRadius: '12px', fontSize: '12.5px', background: '#ffffff', color: '#334155', outline: 'none', transition: 'all 0.2s ease', boxShadow: '0 2px 4px rgba(0,0,0,0.02)', fontWeight: 500, flex: '1 1 130px', minWidth: '115px' };
+const inputStyle: React.CSSProperties = { ...filterStyle, padding: '10px 14px', width: '100%' };
+const btnSmStyle = (bg: string): React.CSSProperties => ({ padding: '6px 9px', background: bg, color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s ease', boxShadow: `0 1px 3px ${bg}40` });
+const compactCell: React.CSSProperties = { padding: '8px 10px', fontSize: '12px', verticalAlign: 'middle', color: '#334155' };
 const menuItemStyle: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 14px', width: '100%', background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left', fontSize: '13px', color: '#475569', fontWeight: 500, transition: 'background 0.15s' };
 const modalOverlayStyle: React.CSSProperties = { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(15,23,42,0.6)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px', animation: 'fadeIn 0.2s ease-out' };
 const modalContentStyle: React.CSSProperties = { background: '#ffffff', borderRadius: '20px', maxWidth: '600px', width: '100%', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 25px 60px rgba(0,0,0,0.2), 0 10px 20px rgba(0,0,0,0.1)', animation: 'scaleIn 0.25s ease-out', border: '1px solid rgba(226,232,240,0.6)' };

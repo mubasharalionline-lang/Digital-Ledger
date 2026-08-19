@@ -165,7 +165,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const filteredNav = navItems.filter(item => !item.adminOnly || isAdmin(user));
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg-primary)' }}>
+    <div style={{ display: 'flex', minHeight: '100vh', width: '100%', background: 'var(--bg-primary)', overflowX: 'hidden' }}>
       {mobileOpen && (
         <div onClick={() => setMobileOpen(false)}
           style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', backdropFilter: 'blur(4px)', zIndex: 40, display: 'none' }}
@@ -456,7 +456,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       </div>
 
       {/* Main Content */}
-      <main className="main-content" style={{ flex: 1, marginLeft: collapsed ? '68px' : '236px', transition: 'margin-left 0.25s cubic-bezier(0.25,0.1,0.25,1)', padding: '28px 32px', maxWidth: '1440px', width: '100%', boxSizing: 'border-box' }}>
+      <main className="main-content" style={{ flex: 1, minWidth: 0, marginLeft: collapsed ? '68px' : '236px', transition: 'margin-left 0.25s cubic-bezier(0.25,0.1,0.25,1)', padding: '24px 28px', width: '100%', boxSizing: 'border-box' }}>
         {children}
       </main>
 
@@ -503,6 +503,15 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       )}
 
       <style jsx global>{`
+        @media (min-width: 1920px) {
+          .main-content { padding: 32px 40px !important; }
+        }
+        @media (max-width: 1440px) {
+          .main-content { padding: 20px 22px !important; }
+        }
+        @media (max-width: 1200px) {
+          .main-content { padding: 18px 16px !important; }
+        }
         @media (max-width: 768px) {
           .mobile-overlay { display: block !important; }
           .mobile-header { display: flex !important; }

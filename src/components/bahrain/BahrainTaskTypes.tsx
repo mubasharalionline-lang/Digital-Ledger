@@ -121,7 +121,7 @@ export default function BahrainTaskTypes() {
   );
 
   return (
-    <div style={{ paddingBottom: '40px', maxWidth: '1200px', margin: '0 auto' }}>
+    <div style={{ paddingBottom: '40px', width: '100%' }}>
       <style>{`
         @keyframes spin { 100% { transform: rotate(360deg); } }
         .action-btn { transition: all 0.2s ease; display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 8px; border: none; cursor: pointer; }
