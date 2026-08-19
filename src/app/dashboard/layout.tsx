@@ -12,6 +12,7 @@ import {
   ClipboardList, Edit, Plus, X, Loader2, Globe, CalendarDays
 } from 'lucide-react';
 import CountryFlag from '@/components/CountryFlag';
+import { initTheme } from '@/lib/theme';
 
 interface NavItem { label: string; href: string; icon: ReactNode; adminOnly?: boolean; }
 interface CountryRecord { id: string; code: string; name: string; flag: string; }
@@ -45,6 +46,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    initTheme();
     const { user: u, country: c } = getSession();
     if (!u) { router.push('/'); return; }
     setUser(u);
@@ -178,16 +180,16 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         style={{
           width: collapsed ? '68px' : '236px', minHeight: '100vh', position: 'fixed',
           left: 0, top: 0, bottom: 0, display: 'flex', flexDirection: 'column',
-          background: '#ffffff',
-          borderRight: '1px solid #e2e8f0',
-          boxShadow: '1px 0 12px rgba(0,0,0,0.02)',
+          background: 'var(--bg-secondary)',
+          borderRight: '1px solid var(--border)',
+          boxShadow: 'var(--card-shadow)',
           transition: 'transform 0.25s cubic-bezier(0.25,0.1,0.25,1), width 0.25s cubic-bezier(0.25,0.1,0.25,1)',
           zIndex: 50, overflow: 'hidden',
         }}>
         {/* Brand / Logo */}
         <div style={{
           padding: collapsed ? '14px 8px' : '14px 16px',
-          borderBottom: '1px solid #f1f5f9',
+          borderBottom: '1px solid var(--border-light)',
           display: 'flex', alignItems: 'center', justifyContent: collapsed ? 'center' : 'flex-start',
           gap: '10px', minHeight: '56px'
         }}>
@@ -205,27 +207,27 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
         {/* Country Switcher (Super Admin only) */}
         {isSuperAdmin(user) && (
-          <div style={{ padding: collapsed ? '8px 6px' : '8px 12px', borderBottom: '1px solid #f1f5f9', position: 'relative' }}>
+          <div style={{ padding: collapsed ? '8px 6px' : '8px 12px', borderBottom: '1px solid var(--border-light)', position: 'relative' }}>
             <button onClick={() => setShowCountryPicker(!showCountryPicker)}
               style={{
                 display: 'flex', alignItems: 'center', gap: '8px', width: '100%',
                 padding: collapsed ? '8px' : '7px 10px', borderRadius: '10px',
-                border: '1px solid #e2e8f0',
-                background: showCountryPicker ? '#eff6ff' : '#f8fafc',
+                border: '1px solid var(--border)',
+                background: showCountryPicker ? 'var(--accent-light)' : 'var(--bg-tertiary)',
                 cursor: 'pointer', transition: 'all 0.15s ease',
                 justifyContent: collapsed ? 'center' : 'flex-start', fontFamily: 'inherit',
                 boxShadow: '0 1px 2px rgba(0,0,0,0.02)'
               }}
-              onMouseEnter={e => { e.currentTarget.style.borderColor = '#cbd5e1'; e.currentTarget.style.background = '#f1f5f9'; }}
-              onMouseLeave={e => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.background = showCountryPicker ? '#eff6ff' : '#f8fafc'; }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.background = 'var(--bg-tertiary)'; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.background = showCountryPicker ? 'var(--accent-light)' : 'var(--bg-tertiary)'; }}
               title={collapsed ? `${country || 'Switch Country'}` : undefined}>
               <CountryFlag code={currentCountryData?.code || country || ''} name={currentCountryData?.name || country || ''} flagEmoji={currentCountryData?.flag} size={16} />
               {!collapsed && (
                 <>
-                  <span style={{ fontSize: '12.5px', fontWeight: 600, color: '#1e293b', flex: 1, textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <span style={{ fontSize: '12.5px', fontWeight: 600, color: 'var(--text-primary)', flex: 1, textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {currentCountryData?.name || country || 'Select Country'}
                   </span>
-                  <ChevronDown size={13} color="#94a3b8" style={{ flexShrink: 0, transition: 'transform 0.2s', transform: showCountryPicker ? 'rotate(180deg)' : 'rotate(0deg)' }} />
+                  <ChevronDown size={13} color="var(--text-tertiary)" style={{ flexShrink: 0, transition: 'transform 0.2s', transform: showCountryPicker ? 'rotate(180deg)' : 'rotate(0deg)' }} />
                 </>
               )}
             </button>
@@ -234,8 +236,8 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
               <div className="animate-fadeIn" style={{
                 position: 'absolute', top: '100%', left: collapsed ? '8px' : '12px',
                 right: collapsed ? '-120px' : '12px', minWidth: collapsed ? '220px' : undefined,
-                background: '#ffffff', border: '1px solid #e2e8f0',
-                borderRadius: '14px', boxShadow: '0 12px 32px rgba(0,0,0,0.12), 0 4px 12px rgba(0,0,0,0.05)',
+                background: 'var(--bg-secondary)', border: '1px solid var(--border)',
+                borderRadius: '14px', boxShadow: 'var(--card-shadow-hover)',
                 zIndex: 999, overflow: 'hidden', marginTop: '6px',
               }}>
                 <div onClick={() => setShowCountryPicker(false)} style={{ position: 'fixed', inset: 0, zIndex: -1 }} />
@@ -247,21 +249,21 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
                         style={{
                           display: 'flex', alignItems: 'center', gap: '10px', width: '100%',
                           padding: '9px 14px', border: 'none',
-                          background: isSelected ? '#eff6ff' : 'transparent',
+                          background: isSelected ? 'var(--accent-light)' : 'transparent',
                           cursor: 'pointer', fontSize: '13px',
                           fontWeight: isSelected ? 600 : 500,
-                          color: isSelected ? '#2563eb' : '#334155',
+                          color: isSelected ? 'var(--accent)' : 'var(--text-primary)',
                           transition: 'all 0.15s ease', textAlign: 'left', fontFamily: 'inherit',
                         }}
-                        onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = '#f8fafc'; }}
+                        onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = 'var(--bg-tertiary)'; }}
                         onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = 'transparent'; }}
                       >
                         <CountryFlag code={c.code} name={c.name} flagEmoji={c.flag} size={18} />
                         <div style={{ flex: 1 }}>
                           <div style={{ lineHeight: 1.2 }}>{c.name}</div>
-                          <div style={{ fontSize: '10.5px', color: '#94a3b8', fontWeight: 500 }}>{c.code}</div>
+                          <div style={{ fontSize: '10.5px', color: 'var(--text-tertiary)', fontWeight: 500 }}>{c.code}</div>
                         </div>
-                        {isSelected && <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#2563eb', flexShrink: 0 }} />}
+                        {isSelected && <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: 'var(--accent)', flexShrink: 0 }} />}
                       </button>
                     );
                   })}
@@ -270,12 +272,12 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
                 <button onClick={() => { setShowCountryPicker(false); setShowAddCountry(true); }}
                   style={{
                     display: 'flex', alignItems: 'center', gap: '8px', width: '100%',
-                    padding: '11px 14px', borderTop: '1px solid #f1f5f9', background: '#fafbfc',
+                    padding: '11px 14px', borderTop: '1px solid var(--border-light)', background: 'var(--bg-tertiary)',
                     cursor: 'pointer', fontSize: '12.5px', fontWeight: 600,
-                    color: '#2563eb', fontFamily: 'inherit',
+                    color: 'var(--accent)', fontFamily: 'inherit',
                   }}
-                  onMouseEnter={e => e.currentTarget.style.background = '#eff6ff'}
-                  onMouseLeave={e => e.currentTarget.style.background = '#fafbfc'}
+                  onMouseEnter={e => e.currentTarget.style.background = 'var(--accent-light)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'var(--bg-tertiary)'}
                 >
                   <Plus size={14} /> Add New Country
                 </button>
@@ -294,7 +296,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
               <React.Fragment key={item.href}>
                 {isFirstAdminItem && !collapsed && (
                   <div style={{
-                    fontSize: '10px', fontWeight: 700, color: '#94a3b8',
+                    fontSize: '10px', fontWeight: 700, color: 'var(--text-tertiary)',
                     letterSpacing: '0.08em', textTransform: 'uppercase',
                     padding: '16px 12px 6px 12px'
                   }}>
@@ -302,16 +304,16 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
                   </div>
                 )}
                 {isFirstAdminItem && collapsed && (
-                  <div style={{ height: '1px', background: '#e2e8f0', margin: '8px 4px' }} />
+                  <div style={{ height: '1px', background: 'var(--border)', margin: '8px 4px' }} />
                 )}
                 <button
                   onClick={() => { router.push(item.href); setMobileOpen(false); }}
                   style={{
                     display: 'flex', alignItems: 'center', gap: '11px',
                     padding: collapsed ? '10px' : '9px 12px', borderRadius: '10px',
-                    border: isActive ? '1px solid rgba(191, 219, 254, 0.8)' : '1px solid transparent',
-                    background: isActive ? '#eff6ff' : 'transparent',
-                    color: isActive ? '#1d4ed8' : '#475569',
+                    border: isActive ? '1px solid var(--accent-light)' : '1px solid transparent',
+                    background: isActive ? 'var(--accent-light)' : 'transparent',
+                    color: isActive ? 'var(--accent)' : 'var(--text-secondary)',
                     cursor: 'pointer', fontSize: '13.5px', fontWeight: isActive ? 600 : 500,
                     transition: 'all 0.15s cubic-bezier(0.4, 0, 0.2, 1)', textAlign: 'left',
                     justifyContent: collapsed ? 'center' : 'flex-start',
@@ -321,26 +323,26 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
                   }}
                   onMouseEnter={e => {
                     if (!isActive) {
-                      e.currentTarget.style.background = '#f8fafc';
-                      e.currentTarget.style.color = '#0f172a';
+                      e.currentTarget.style.background = 'var(--bg-tertiary)';
+                      e.currentTarget.style.color = 'var(--text-primary)';
                     }
                   }}
                   onMouseLeave={e => {
                     if (!isActive) {
                       e.currentTarget.style.background = 'transparent';
-                      e.currentTarget.style.color = '#475569';
+                      e.currentTarget.style.color = 'var(--text-secondary)';
                     }
                   }}
                   title={collapsed ? item.label : undefined}>
                   {isActive && !collapsed && (
                     <span style={{
                       position: 'absolute', left: '-2px', top: '25%', bottom: '25%',
-                      width: '3.5px', borderRadius: '0 4px 4px 0', background: '#2563eb'
+                      width: '3.5px', borderRadius: '0 4px 4px 0', background: 'var(--accent)'
                     }} />
                   )}
                   <span style={{
                     flexShrink: 0, display: 'flex',
-                    color: isActive ? '#2563eb' : '#64748b',
+                    color: isActive ? 'var(--accent)' : 'var(--text-tertiary)',
                     transition: 'color 0.15s ease'
                   }}>
                     {React.cloneElement(item.icon as React.ReactElement<any>, { size: 18, strokeWidth: isActive ? 2.2 : 1.9 })}
@@ -353,7 +355,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         </nav>
 
         {/* Bottom User & Collapse */}
-        <div style={{ padding: '10px', borderTop: '1px solid #f1f5f9', background: '#fafbfc', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        <div style={{ padding: '10px', borderTop: '1px solid var(--border-light)', background: 'var(--bg-tertiary)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
           {/* Collapse Button */}
           <button
             onClick={() => setCollapsed(!collapsed)}
@@ -361,38 +363,38 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             style={{
               display: 'flex', alignItems: 'center', justifyContent: collapsed ? 'center' : 'space-between',
               padding: collapsed ? '8px 0' : '8px 12px', borderRadius: '10px',
-              border: '1px solid #e2e8f0', background: '#ffffff', color: '#334155',
+              border: '1px solid var(--border)', background: 'var(--bg-secondary)', color: 'var(--text-primary)',
               cursor: 'pointer', fontSize: '12px', width: '100%',
               transition: 'all 0.15s ease', fontFamily: 'inherit', fontWeight: 600,
               boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
             }}
             onMouseEnter={e => {
-              e.currentTarget.style.background = '#eff6ff';
-              e.currentTarget.style.borderColor = '#bfdbfe';
-              e.currentTarget.style.color = '#1d4ed8';
+              e.currentTarget.style.background = 'var(--accent-light)';
+              e.currentTarget.style.borderColor = 'var(--accent)';
+              e.currentTarget.style.color = 'var(--accent)';
             }}
             onMouseLeave={e => {
-              e.currentTarget.style.background = '#ffffff';
-              e.currentTarget.style.borderColor = '#e2e8f0';
-              e.currentTarget.style.color = '#334155';
+              e.currentTarget.style.background = 'var(--bg-secondary)';
+              e.currentTarget.style.borderColor = 'var(--border)';
+              e.currentTarget.style.color = 'var(--text-primary)';
             }}
           >
             {!collapsed && (
               <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <ChevronLeft size={16} color="#2563eb" />
+                <ChevronLeft size={16} color="var(--accent)" />
                 <span>Collapse sidebar</span>
               </span>
             )}
-            {collapsed ? <ChevronRight size={18} color="#2563eb" /> : <span style={{ fontSize: '10px', color: '#94a3b8', background: '#f1f5f9', padding: '1px 5px', borderRadius: '4px' }}>◀</span>}
+            {collapsed ? <ChevronRight size={18} color="var(--accent)" /> : <span style={{ fontSize: '10px', color: 'var(--text-tertiary)', background: 'var(--bg-tertiary)', padding: '1px 5px', borderRadius: '4px' }}>◀</span>}
           </button>
 
           {/* User Profile Card */}
           <div style={{
             display: 'flex', alignItems: 'center', gap: '9px',
             padding: collapsed ? '8px 4px' : '8px 10px', borderRadius: '12px',
-            background: '#ffffff', border: '1px solid #e2e8f0',
+            background: 'var(--bg-secondary)', border: '1px solid var(--border)',
             justifyContent: collapsed ? 'center' : 'flex-start',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
+            boxShadow: 'var(--card-shadow)'
           }}>
             <div style={{
               width: '30px', height: '30px', borderRadius: '50%',
@@ -405,7 +407,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             </div>
             {!collapsed && (
               <div style={{ flex: 1, overflow: 'hidden' }}>
-                <div style={{ fontSize: '12.5px', fontWeight: 600, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                <div style={{ fontSize: '12.5px', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {user.username}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '1px' }}>
@@ -416,8 +418,8 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
                     letterSpacing: '0.04em',
                     padding: '1px 5px',
                     borderRadius: '4px',
-                    background: user.role === 'admin' ? '#fef3c7' : '#f1f5f9',
-                    color: user.role === 'admin' ? '#b45309' : '#64748b'
+                    background: user.role === 'admin' ? 'rgba(245, 158, 11, 0.15)' : 'var(--bg-tertiary)',
+                    color: user.role === 'admin' ? '#f59e0b' : 'var(--text-secondary)'
                   }}>
                     {user.role}
                   </span>
@@ -428,12 +430,12 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
               <button
                 onClick={handleLogout}
                 style={{
-                  background: 'transparent', border: 'none', color: '#94a3b8',
+                  background: 'transparent', border: 'none', color: 'var(--text-tertiary)',
                   cursor: 'pointer', padding: '6px', borderRadius: '8px', display: 'flex',
                   alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s ease'
                 }}
-                onMouseEnter={e => { e.currentTarget.style.background = '#fef2f2'; e.currentTarget.style.color = '#dc2626'; }}
-                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#94a3b8'; }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239, 68, 68, 0.12)'; e.currentTarget.style.color = '#ef4444'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-tertiary)'; }}
                 title="Sign out">
                 <LogOut size={15} />
               </button>
@@ -445,20 +447,20 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       {/* Mobile header */}
       <div className="mobile-header" style={{
         display: 'none', position: 'fixed', top: 0, left: 0, right: 0,
-        height: '58px', background: 'rgba(255,255,255,0.92)',
+        height: '58px', background: 'var(--bg-secondary)',
         backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
-        borderBottom: '1px solid #e2e8f0', alignItems: 'center',
+        borderBottom: '1px solid var(--border)', alignItems: 'center',
         padding: '0 16px', zIndex: 35, justifyContent: 'space-between',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
+        boxShadow: 'var(--card-shadow)'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <button onClick={() => setMobileOpen(!mobileOpen)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '6px', color: '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'center' }} aria-label="Toggle Menu">
+          <button onClick={() => setMobileOpen(!mobileOpen)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '6px', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} aria-label="Toggle Menu">
             <Menu size={22} />
           </button>
           <img src="/logo.png" alt="Logo" style={{ height: '28px', objectFit: 'contain' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
         </div>
         {isAdmin(user) && (
-          <button onClick={() => setShowCountryPicker(!showCountryPicker)} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px', borderRadius: '8px', border: '1px solid #e2e8f0', background: '#f8fafc', cursor: 'pointer', fontSize: '13px', fontWeight: 600, color: '#0f172a', fontFamily: 'inherit' }}>
+          <button onClick={() => setShowCountryPicker(!showCountryPicker)} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--bg-tertiary)', cursor: 'pointer', fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', fontFamily: 'inherit' }}>
             <CountryFlag code={currentCountryData?.code || country || ''} name={currentCountryData?.name || country || ''} flagEmoji={currentCountryData?.flag} size={16} />
             <span>{currentCountryData?.code || 'All'}</span>
             <ChevronDown size={12} />
