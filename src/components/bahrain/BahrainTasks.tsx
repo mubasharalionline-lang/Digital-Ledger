@@ -78,6 +78,11 @@ export default function BahrainTasks() {
   const [inlineEditDescValue, setInlineEditDescValue] = useState('');
   const [hoveredDescTaskId, setHoveredDescTaskId] = useState<string | null>(null);
 
+  // Inline CR Number Edit states
+  const [inlineEditCrId, setInlineEditCrId] = useState<string | null>(null);
+  const [inlineEditCrValue, setInlineEditCrValue] = useState('');
+  const [hoveredCrTaskId, setHoveredCrTaskId] = useState<string | null>(null);
+
   // Custom description tooltip states
   const [activeTooltipTaskId, setActiveTooltipTaskId] = useState<string | null>(null);
   const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number; align: 'top' | 'bottom' }>({ x: 0, y: 0, align: 'bottom' });
@@ -104,6 +109,8 @@ export default function BahrainTasks() {
   useEffect(() => {
     activeTooltipRef.current = null;
     setActiveTooltipTaskId(null);
+    setInlineEditCrId(null);
+    setInlineEditDescId(null);
   }, [search, filterStatus, filterPriority, filterCompany, filterPartner, filterTaskType, filterAuditor, filterDescUpdated]);
 
   const handleTooltipMouseEnter = () => {
@@ -632,6 +639,37 @@ export default function BahrainTasks() {
       sessionStorage.removeItem('dashboard_data_time_v2');
     }
     setInlineEditDescId(null);
+  }
+
+  // Save inline CR Number
+  async function saveInlineCrNumber(companyId: string, taskId: string) {
+    const comp = companies.find(c => c.id === companyId);
+    if (!comp) return;
+    const newCr = inlineEditCrValue.trim();
+    if (newCr === (comp.cr_number || '')) {
+      setInlineEditCrId(null);
+      return;
+    }
+
+    // Optimistic update
+    const previousCr = comp.cr_number;
+    setCompanies(prev => prev.map(c => c.id === companyId ? { ...c, cr_number: newCr || undefined } : c));
+
+    const { data, error } = await supabase.from('companies').update({ cr_number: newCr || null }).eq('id', companyId).select();
+
+    if (error) {
+      console.error('CR Number update error:', error);
+      setCompanies(prev => prev.map(c => c.id === companyId ? { ...c, cr_number: previousCr } : c));
+      alert('Error updating CR Number: ' + error.message);
+    } else if (!data || data.length === 0) {
+      setCompanies(prev => prev.map(c => c.id === companyId ? { ...c, cr_number: previousCr } : c));
+      alert('Update blocked by Supabase Row Level Security (RLS).');
+    } else {
+      sessionStorage.removeItem('tasks_data_cache');
+      sessionStorage.removeItem('tasks_data_time');
+      sessionStorage.removeItem('dashboard_data_time_v2');
+    }
+    setInlineEditCrId(null);
   }
 
   // Save new task
@@ -2116,19 +2154,102 @@ export default function BahrainTasks() {
                       {company?.company_name || 'Unknown'}
                     </span>
                   </td>
-                  <td style={compactCell}>
-                    {company?.cr_number ? (
-                      <span style={{
-                        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-                        fontSize: '10px', fontWeight: 600, color: '#475569',
-                        background: '#f1f5f9', padding: '1px 5px', borderRadius: '4px',
-                        border: '1px solid #e2e8f0', display: 'inline-block',
-                        maxWidth: '80px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
-                      }} title={company.cr_number}>
-                        {company.cr_number}
-                      </span>
+                  <td
+                    style={{ ...compactCell, position: 'relative', cursor: (canManageTask(task) && company) ? 'pointer' : 'default' }}
+                    onMouseEnter={() => setHoveredCrTaskId(task.id)}
+                    onMouseLeave={() => setHoveredCrTaskId(null)}
+                  >
+                    {inlineEditCrId === task.id ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: '140px', position: 'absolute', zIndex: 10, background: '#fff', padding: '8px', borderRadius: '8px', boxShadow: '0 8px 24px rgba(0,0,0,0.14)', border: '1px solid #bfdbfe', top: '50%', transform: 'translateY(-50%)', left: '6px' }}>
+                        <input
+                          autoFocus
+                          type="text"
+                          value={inlineEditCrValue}
+                          onChange={e => setInlineEditCrValue(e.target.value)}
+                          placeholder="e.g. 167145-1"
+                          style={{
+                            width: '100%',
+                            padding: '4px 6px',
+                            fontSize: '11px',
+                            fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+                            borderRadius: '5px',
+                            border: '1.5px solid #2563eb',
+                            outline: 'none',
+                            color: '#0f172a',
+                            boxShadow: '0 0 0 2px rgba(37,99,235,0.1)'
+                          }}
+                          onKeyDown={e => {
+                            if (e.key === 'Escape') {
+                              setInlineEditCrId(null);
+                            } else if (e.key === 'Enter') {
+                              if (company) saveInlineCrNumber(company.id, task.id);
+                            }
+                          }}
+                        />
+                        <div style={{ display: 'flex', gap: '4px', justifyContent: 'flex-end', marginTop: '2px' }}>
+                          <button
+                            onClick={() => setInlineEditCrId(null)}
+                            style={{ padding: '3px 7px', border: '1px solid #e2e8f0', background: '#f8fafc', color: '#64748b', borderRadius: '5px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px', fontSize: '10px', fontWeight: 600 }}
+                            title="Cancel (Esc)"
+                          >
+                            <X size={11} /> Cancel
+                          </button>
+                          <button
+                            onClick={() => { if (company) saveInlineCrNumber(company.id, task.id); }}
+                            style={{ padding: '3px 8px', border: 'none', background: '#2563eb', color: '#fff', borderRadius: '5px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px', fontSize: '10px', fontWeight: 600 }}
+                            title="Save (Enter)"
+                          >
+                            <Check size={11} /> Save
+                          </button>
+                        </div>
+                      </div>
                     ) : (
-                      <span style={{ fontSize: '10px', color: '#cbd5e1' }}>—</span>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '3px', minHeight: '22px' }}>
+                        {company?.cr_number ? (
+                          <span style={{
+                            fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+                            fontSize: '10px', fontWeight: 600, color: '#475569',
+                            background: '#f1f5f9', padding: '1px 5px', borderRadius: '4px',
+                            border: '1px solid #e2e8f0', display: 'inline-block',
+                            maxWidth: '80px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
+                          }} title={company.cr_number}>
+                            {company.cr_number}
+                          </span>
+                        ) : (
+                          <span style={{ fontSize: '10px', color: '#cbd5e1' }}>—</span>
+                        )}
+                        {canManageTask(task) && company && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setInlineEditCrId(task.id);
+                              setInlineEditCrValue(company.cr_number || '');
+                            }}
+                            style={{
+                              background: '#eff6ff',
+                              border: '1px solid #dbeafe',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                              padding: '2px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              color: '#2563eb',
+                              transition: 'all 0.15s ease',
+                              opacity: hoveredCrTaskId === task.id ? 1 : 0,
+                              pointerEvents: hoveredCrTaskId === task.id ? 'auto' as const : 'none' as const,
+                              width: '18px',
+                              height: '18px',
+                              flexShrink: 0,
+                            }}
+                            title="Edit CR Number"
+                            onMouseEnter={e => { e.currentTarget.style.background = '#dbeafe'; }}
+                            onMouseLeave={e => { e.currentTarget.style.background = '#eff6ff'; }}
+                          >
+                            <Edit2 size={10} />
+                          </button>
+                        )}
+                      </div>
                     )}
                   </td>
                   <td style={compactCell}>
