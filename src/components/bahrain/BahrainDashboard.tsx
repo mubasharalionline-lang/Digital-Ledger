@@ -338,7 +338,7 @@ export default function BahrainDashboard() {
         }
       `}} />
       
-      <div style={{ marginBottom: '32px', padding: '36px 40px', background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 45%, #0f172a 100%)', borderRadius: '24px', color: '#fff', position: 'relative', overflow: 'hidden', boxShadow: '0 12px 40px rgba(15,23,42,0.25)', border: '1px solid rgba(255,255,255,0.05)' }}>
+      <div className="dashboard-hero-header" style={{ marginBottom: '32px', padding: '36px 40px', background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 45%, #0f172a 100%)', borderRadius: '24px', color: '#fff', position: 'relative', overflow: 'hidden', boxShadow: '0 12px 40px rgba(15,23,42,0.25)', border: '1px solid rgba(255,255,255,0.05)' }}>
         {/* Glowing mesh background */}
         <div className="welcome-glow-1" style={{ position: 'absolute', top: '-60px', right: '-40px', width: '250px', height: '250px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(59,130,246,0.15) 0%, rgba(59,130,246,0) 70%)', filter: 'blur(20px)' }} />
         <div className="welcome-glow-2" style={{ position: 'absolute', bottom: '-80px', right: '120px', width: '200px', height: '200px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(139,92,246,0.12) 0%, rgba(139,92,246,0) 70%)', filter: 'blur(20px)' }} />

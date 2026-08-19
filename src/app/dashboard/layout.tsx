@@ -11,6 +11,7 @@ import {
   ChevronLeft, ChevronRight, Menu, ChevronDown, Settings,
   ClipboardList, Edit, Plus, X, Loader2, Globe, CalendarDays
 } from 'lucide-react';
+import CountryFlag from '@/components/CountryFlag';
 
 interface NavItem { label: string; href: string; icon: ReactNode; adminOnly?: boolean; }
 interface CountryRecord { id: string; code: string; name: string; flag: string; }
@@ -218,7 +219,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
               onMouseEnter={e => { e.currentTarget.style.borderColor = '#cbd5e1'; e.currentTarget.style.background = '#f1f5f9'; }}
               onMouseLeave={e => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.background = showCountryPicker ? '#eff6ff' : '#f8fafc'; }}
               title={collapsed ? `${country || 'Switch Country'}` : undefined}>
-              <span style={{ fontSize: '16px', flexShrink: 0, filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.1))' }}>{currentCountryData?.flag || '🌍'}</span>
+              <CountryFlag code={currentCountryData?.code || country || ''} name={currentCountryData?.name || country || ''} flagEmoji={currentCountryData?.flag} size={16} />
               {!collapsed && (
                 <>
                   <span style={{ fontSize: '12.5px', fontWeight: 600, color: '#1e293b', flex: 1, textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -255,7 +256,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
                         onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = '#f8fafc'; }}
                         onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = 'transparent'; }}
                       >
-                        <span style={{ fontSize: '18px' }}>{c.flag}</span>
+                        <CountryFlag code={c.code} name={c.name} flagEmoji={c.flag} size={18} />
                         <div style={{ flex: 1 }}>
                           <div style={{ lineHeight: 1.2 }}>{c.name}</div>
                           <div style={{ fontSize: '10.5px', color: '#94a3b8', fontWeight: 500 }}>{c.code}</div>
@@ -442,14 +443,24 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       </aside>
 
       {/* Mobile header */}
-      <div className="mobile-header" style={{ display: 'none', position: 'fixed', top: 0, left: 0, right: 0, height: '56px', background: 'rgba(255,255,255,0.9)', backdropFilter: 'blur(20px)', borderBottom: '1px solid var(--border-light)', alignItems: 'center', padding: '0 16px', zIndex: 30, justifyContent: 'space-between' }}>
-        <button onClick={() => setMobileOpen(!mobileOpen)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '8px', color: 'var(--text-primary)' }}>
-          <Menu size={22} />
-        </button>
+      <div className="mobile-header" style={{
+        display: 'none', position: 'fixed', top: 0, left: 0, right: 0,
+        height: '58px', background: 'rgba(255,255,255,0.92)',
+        backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
+        borderBottom: '1px solid #e2e8f0', alignItems: 'center',
+        padding: '0 16px', zIndex: 35, justifyContent: 'space-between',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <button onClick={() => setMobileOpen(!mobileOpen)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '6px', color: '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'center' }} aria-label="Toggle Menu">
+            <Menu size={22} />
+          </button>
+          <img src="/logo.png" alt="Logo" style={{ height: '28px', objectFit: 'contain' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+        </div>
         {isAdmin(user) && (
-          <button onClick={() => setShowCountryPicker(!showCountryPicker)} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px', borderRadius: '8px', border: '1px solid var(--border-light)', background: 'var(--bg-secondary)', cursor: 'pointer', fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)', fontFamily: 'inherit' }}>
-            <span>{currentCountryData?.flag || '🌍'}</span>
-            {currentCountryData?.code || 'All'}
+          <button onClick={() => setShowCountryPicker(!showCountryPicker)} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px', borderRadius: '8px', border: '1px solid #e2e8f0', background: '#f8fafc', cursor: 'pointer', fontSize: '13px', fontWeight: 600, color: '#0f172a', fontFamily: 'inherit' }}>
+            <CountryFlag code={currentCountryData?.code || country || ''} name={currentCountryData?.name || country || ''} flagEmoji={currentCountryData?.flag} size={16} />
+            <span>{currentCountryData?.code || 'All'}</span>
             <ChevronDown size={12} />
           </button>
         )}

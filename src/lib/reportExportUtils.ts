@@ -147,3 +147,119 @@ export function exportFullExcel(ctx: ExportCtx) {
 
   XLSX.writeFile(wb, `DigitalLedger_Full_${ctx.country}_${new Date().toISOString().split('T')[0]}.xlsx`);
 }
+
+export interface TaskMgmtExportCtx extends ExportCtx {
+  descUpdateMap?: Record<string, string>;
+}
+
+export function exportTaskManagementExcel(
+  taskList: Task[],
+  ctx: TaskMgmtExportCtx,
+  options?: { title?: string; filenamePrefix?: string }
+) {
+  const title = options?.title || 'Task Management';
+  const prefix = options?.filenamePrefix || 'Task_Management';
+
+  const rows = taskList.map(task => {
+    const company = ctx.companies.find(c => c.id === task.company_id);
+    const ttIds = task.task_type_ids?.length ? task.task_type_ids : (task.task_type_id ? task.task_type_id.split(',').map(s => s.trim()).filter(Boolean) : []);
+    const ttNames = ttIds.map(id => ctx.taskTypes.find(t => t.id === id)?.name).filter(Boolean).join(', ');
+    const activePartnerIds = task.assigned_partners && task.assigned_partners.length > 0 
+      ? task.assigned_partners 
+      : (task.assigned_to ? [task.assigned_to] : []);
+    const allNames = activePartnerIds.map(id => ctx.partners.find(p => p.id === id)?.username).filter(Boolean);
+    const assigned = allNames.length > 0 ? allNames.join(', ') : 'Unassigned';
+    const auditor = ctx.auditors.find(a => a.id === task.auditor_id)?.name || '';
+
+    const updateDate = (ctx.descUpdateMap && ctx.descUpdateMap[task.id]) || (task.description ? task.created_at : null);
+    const descUpdatedStr = updateDate ? new Date(updateDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '';
+
+    return {
+      'PL': task.pl_uploaded ? 'Yes' : 'No',
+      'Company': company?.company_name || 'Unknown',
+      'CR Number': company?.cr_number || '',
+      'Task Type': ttNames || '—',
+      'Description': task.description || '',
+      'Desc Updated': descUpdatedStr,
+      'Priority': task.priority || 'Medium',
+      'Due Date': task.deadline || '',
+      'Status': task.status || 'Pending',
+      'Auditor': auditor,
+      'Assigned To': assigned,
+      'Task ID': task.id.slice(0, 8),
+      'Created Date': task.created_at ? new Date(task.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '',
+      'Country': task.country || ctx.country || 'Bahrain',
+    };
+  });
+
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.json_to_sheet(rows);
+
+  ws['!cols'] = [
+    { wch: 8 },  // PL
+    { wch: 28 }, // Company
+    { wch: 16 }, // CR Number
+    { wch: 22 }, // Task Type
+    { wch: 40 }, // Description
+    { wch: 16 }, // Desc Updated
+    { wch: 12 }, // Priority
+    { wch: 14 }, // Due Date
+    { wch: 20 }, // Status
+    { wch: 18 }, // Auditor
+    { wch: 24 }, // Assigned To
+    { wch: 12 }, // Task ID
+    { wch: 16 }, // Created Date
+    { wch: 12 }, // Country
+  ];
+
+  if (rows.length > 0) {
+    const range = XLSX.utils.decode_range(ws['!ref'] || 'A1:N1');
+    ws['!autofilter'] = { ref: `A1:N${range.e.r + 1}` };
+  }
+
+  XLSX.utils.book_append_sheet(wb, ws, 'Task Management');
+
+  // Summary & Breakdown sheet
+  const statusCounts: Record<string, number> = {};
+  const priorityCounts: Record<string, number> = {};
+  let completedCount = 0;
+
+  taskList.forEach(t => {
+    const s = t.status || 'Unknown';
+    statusCounts[s] = (statusCounts[s] || 0) + 1;
+    const p = t.priority || 'Medium';
+    priorityCounts[p] = (priorityCounts[p] || 0) + 1;
+    if (isCompleted(s)) completedCount++;
+  });
+
+  const summaryData: Array<{ Section: string; Item: string; Count: string | number }> = [
+    { Section: 'Overview', Item: 'Total Tasks Exported', Count: taskList.length },
+    { Section: 'Overview', Item: 'Completed Tasks', Count: completedCount },
+    { Section: 'Overview', Item: 'Pending Tasks', Count: taskList.length - completedCount },
+    { Section: 'Overview', Item: 'Completion Rate', Count: taskList.length > 0 ? `${((completedCount / taskList.length) * 100).toFixed(1)}%` : '0%' },
+    { Section: 'Overview', Item: 'Export Date', Count: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) },
+    { Section: 'Overview', Item: 'Country', Count: ctx.country || 'Bahrain' },
+    { Section: '', Item: '', Count: '' },
+    { Section: '--- Status Breakdown ---', Item: '', Count: '' },
+    ...Object.entries(statusCounts).map(([status, count]) => ({
+      Section: 'Status',
+      Item: status,
+      Count: count,
+    })),
+    { Section: '', Item: '', Count: '' },
+    { Section: '--- Priority Breakdown ---', Item: '', Count: '' },
+    ...Object.entries(priorityCounts).map(([prio, count]) => ({
+      Section: 'Priority',
+      Item: prio,
+      Count: count,
+    })),
+  ];
+
+  const wsSummary = XLSX.utils.json_to_sheet(summaryData);
+  wsSummary['!cols'] = [{ wch: 26 }, { wch: 30 }, { wch: 18 }];
+  XLSX.utils.book_append_sheet(wb, wsSummary, 'Summary & Analytics');
+
+  const dateStr = new Date().toISOString().split('T')[0];
+  const safeCountry = (ctx.country || 'Bahrain').replace(/\s+/g, '_');
+  XLSX.writeFile(wb, `${prefix}_${safeCountry}_${dateStr}.xlsx`);
+}

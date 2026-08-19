@@ -7,8 +7,10 @@ import { supabase } from '@/lib/supabase';
 import type { Task, Company, User, TaskType, StatusLog } from '@/lib/supabase';
 import { getDataCountry, getSession, isAdmin } from '@/lib/auth';
 import { BAHRAIN_PRIORITIES, BAHRAIN_STATUSES } from '@/lib/bahrain';
-import { Plus, Eye, Trash2, X, Edit2, MoreHorizontal, Clock, CheckCircle2, Check, BarChart3, PieChart, Activity, ArrowRight, TrendingUp, Building2, Share2, MessageSquare, Copy, Send, Search, ListTodo } from 'lucide-react';
+import { Plus, Eye, Trash2, X, Edit2, MoreHorizontal, Clock, CheckCircle2, Check, BarChart3, PieChart, Activity, ArrowRight, TrendingUp, Building2, Share2, MessageSquare, Copy, Send, Search, ListTodo, FileSpreadsheet, CheckSquare, Square, Download, ChevronDown } from 'lucide-react';
 import { EGRESS_OPTIMIZATION_MODE } from '@/lib/optimizationConfig';
+import { exportTaskManagementExcel } from '@/lib/reportExportUtils';
+import CountryFlag from '@/components/CountryFlag';
 
 export default function BahrainTasks() {
   const { user: currentUser } = getSession();
@@ -95,6 +97,23 @@ export default function BahrainTasks() {
   const [recentEditId, setRecentEditId] = useState<string | null>(null);
   const [recentEditValue, setRecentEditValue] = useState('');
   const [recentEditSaving, setRecentEditSaving] = useState(false);
+
+  // Multiple Selection & Bulk WhatsApp states
+  const [multiSelectMode, setMultiSelectMode] = useState(false);
+  const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
+  const [showBulkWhatsAppModal, setShowBulkWhatsAppModal] = useState(false);
+  const [bulkWaGroupBy, setBulkWaGroupBy] = useState<'status' | 'partner' | 'company' | 'flat'>('status');
+  const [bulkWaIncludeCr, setBulkWaIncludeCr] = useState(true);
+  const [bulkWaIncludeDesc, setBulkWaIncludeDesc] = useState(true);
+  const [bulkWaIncludePriority, setBulkWaIncludePriority] = useState(true);
+  const [bulkWaIncludeDueDate, setBulkWaIncludeDueDate] = useState(true);
+  const [bulkWaIncludeAuditor, setBulkWaIncludeAuditor] = useState(true);
+  const [bulkWaIncludeAssigned, setBulkWaIncludeAssigned] = useState(true);
+  const [bulkWaCustomNote, setBulkWaCustomNote] = useState('');
+  const [bulkWaCopied, setBulkWaCopied] = useState(false);
+
+  // Excel Export feedback toast
+  const [exportToast, setExportToast] = useState<string | null>(null);
 
   // Clean up tooltip timeout on unmount
   useEffect(() => {
@@ -672,6 +691,181 @@ export default function BahrainTasks() {
     setInlineEditCrId(null);
   }
 
+  // ─── Multi-Select & Bulk WhatsApp Helpers ───
+  const toggleSelectTask = (taskId: string) => {
+    setSelectedTaskIds(prev =>
+      prev.includes(taskId) ? prev.filter(id => id !== taskId) : [...prev, taskId]
+    );
+  };
+
+  const selectAllFiltered = () => {
+    const visibleIds = filtered.map(t => t.id);
+    setSelectedTaskIds(visibleIds);
+  };
+
+  const deselectAll = () => {
+    setSelectedTaskIds([]);
+  };
+
+  const isAllFilteredSelected = filtered.length > 0 && filtered.every(t => selectedTaskIds.includes(t.id));
+  const isSomeFilteredSelected = filtered.some(t => selectedTaskIds.includes(t.id)) && !isAllFilteredSelected;
+
+  const buildBulkWhatsAppMessage = () => {
+    const selectedTasks = tasks.filter(t => selectedTaskIds.includes(t.id));
+    if (selectedTasks.length === 0) return '';
+
+    const getAssignedNames = (task: Task) => {
+      const activePartnerIds = task.assigned_partners && task.assigned_partners.length > 0 
+        ? task.assigned_partners 
+        : (task.assigned_to ? [task.assigned_to] : []);
+      const allNames = activePartnerIds.map((id: string) => partners.find((p: any) => p.id === id)?.username).filter(Boolean);
+      return allNames.length > 0 ? allNames.join(', ') : 'Unassigned';
+    };
+
+    const getAuditType = (task: Task) => {
+      const ttIds = task.task_type_ids && task.task_type_ids.length > 0 ? task.task_type_ids : (task.task_type_id ? task.task_type_id.split(',').map(s => s.trim()).filter(Boolean) : []);
+      return ttIds.map(id => taskTypes.find(t => t.id === id)?.name).filter(Boolean).join(', ') || 'N/A';
+    };
+
+    const formatSingleTask = (task: Task, idx: number, lines: string[]) => {
+      const comp = companies.find(c => c.id === task.company_id);
+      const aud = auditors.find(a => a.id === task.auditor_id);
+
+      if (idx > 0) {
+        lines.push('----------------------------------');
+        lines.push('');
+      }
+
+      lines.push(`*${idx + 1}. Company:* ${comp?.company_name || 'Unknown'}`);
+      if (bulkWaIncludeCr && comp?.cr_number) {
+        lines.push(`*CR Number:* ${comp.cr_number}`);
+      }
+      lines.push(`*Task Type:* ${getAuditType(task)}`);
+      if (bulkWaIncludeAssigned) {
+        lines.push(`*Assigned To:* ${getAssignedNames(task)}`);
+      }
+      if (bulkWaIncludeAuditor && aud?.name) {
+        lines.push(`*Auditor:* ${aud.name}`);
+      }
+      if (bulkWaIncludePriority) {
+        lines.push(`*Priority:* ${task.priority || 'Medium'}`);
+      }
+      if (bulkWaIncludeDueDate && task.deadline) {
+        lines.push(`*Due Date:* ${task.deadline}`);
+      }
+      lines.push(`*Status:* ${task.status || 'N/A'}`);
+      if (bulkWaIncludeDesc && task.description && task.description.trim() !== '') {
+        lines.push(`*Description:* ${task.description}`);
+      }
+      lines.push('');
+    };
+
+    const sections: string[] = [];
+
+    if (bulkWaCustomNote.trim()) {
+      sections.push(`📢 *${bulkWaCustomNote.trim()}*`);
+      sections.push('');
+    } else {
+      sections.push(`📋 *Compliance & Task Summary (${selectedTasks.length} Tasks)*`);
+      sections.push('');
+    }
+
+    if (bulkWaGroupBy === 'status') {
+      const statuses = Array.from(new Set(selectedTasks.map(t => t.status || 'Pending'))).sort((a, b) => a.localeCompare(b));
+      statuses.forEach(status => {
+        const groupTasks = selectedTasks.filter(t => (t.status || 'Pending') === status);
+        if (groupTasks.length === 0) return;
+        sections.push('━━━━━━━━━━━━━━━━━━');
+        sections.push(`*Status: ${status}* (${groupTasks.length})`);
+        sections.push('━━━━━━━━━━━━━━━━━━');
+        sections.push('');
+        groupTasks.forEach((t, i) => formatSingleTask(t, i, sections));
+      });
+    } else if (bulkWaGroupBy === 'partner') {
+      const allActivePartners = Array.from(new Set(selectedTasks.flatMap(t => {
+        const pids = t.assigned_partners && t.assigned_partners.length > 0 ? t.assigned_partners : (t.assigned_to ? [t.assigned_to] : []);
+        return pids.length > 0 ? pids : ['unassigned'];
+      })));
+      allActivePartners.forEach(pId => {
+        const partnerObj = partners.find(p => p.id === pId);
+        const pName = partnerObj ? partnerObj.username : (pId === 'unassigned' ? 'Unassigned' : 'Unknown');
+        const groupTasks = selectedTasks.filter(t => {
+          const pids = t.assigned_partners && t.assigned_partners.length > 0 ? t.assigned_partners : (t.assigned_to ? [t.assigned_to] : []);
+          return pId === 'unassigned' ? pids.length === 0 : pids.includes(pId);
+        });
+        if (groupTasks.length === 0) return;
+        sections.push('━━━━━━━━━━━━━━━━━━');
+        sections.push(`*Assignee: ${pName}* (${groupTasks.length})`);
+        sections.push('━━━━━━━━━━━━━━━━━━');
+        sections.push('');
+        groupTasks.forEach((t, i) => formatSingleTask(t, i, sections));
+      });
+    } else if (bulkWaGroupBy === 'company') {
+      const compIds = Array.from(new Set(selectedTasks.map(t => t.company_id)));
+      compIds.forEach(cId => {
+        const comp = companies.find(c => c.id === cId);
+        const groupTasks = selectedTasks.filter(t => t.company_id === cId);
+        if (groupTasks.length === 0) return;
+        sections.push('━━━━━━━━━━━━━━━━━━');
+        sections.push(`*Company: ${comp?.company_name || 'Unknown'}* (${groupTasks.length})`);
+        sections.push('━━━━━━━━━━━━━━━━━━');
+        sections.push('');
+        groupTasks.forEach((t, i) => formatSingleTask(t, i, sections));
+      });
+    } else {
+      // Flat list
+      selectedTasks.forEach((t, i) => formatSingleTask(t, i, sections));
+    }
+
+    return sections.join('\n');
+  };
+
+  // ─── Professional Excel Export Handler ───
+  const handleExportExcel = (mode: 'all' | 'filtered' | 'selected' = 'filtered') => {
+    let listToExport: Task[] = [];
+    let title = 'Task Management';
+    let prefix = 'Task_Management';
+
+    if (mode === 'selected' && selectedTaskIds.length > 0) {
+      listToExport = tasks.filter(t => selectedTaskIds.includes(t.id));
+      title = `Selected Tasks (${listToExport.length})`;
+      prefix = 'Selected_Tasks';
+    } else if (mode === 'all') {
+      listToExport = tasks;
+      title = `All Tasks (${listToExport.length})`;
+      prefix = 'All_Tasks';
+    } else {
+      listToExport = filtered;
+      title = `Filtered Tasks (${listToExport.length})`;
+      prefix = 'Filtered_Tasks';
+    }
+
+    if (listToExport.length === 0) {
+      alert('No tasks found to export.');
+      return;
+    }
+
+    try {
+      exportTaskManagementExcel(listToExport, {
+        tasks,
+        companies,
+        partners,
+        taskTypes,
+        auditors,
+        country: dataCountry || 'Bahrain',
+        descUpdateMap,
+      }, {
+        title,
+        filenamePrefix: prefix,
+      });
+      setExportToast(`Exported ${listToExport.length} task${listToExport.length === 1 ? '' : 's'} to Excel!`);
+      setTimeout(() => setExportToast(null), 4000);
+    } catch (e: any) {
+      console.error('Export error:', e);
+      alert('Error exporting tasks: ' + e.message);
+    }
+  };
+
   // Save new task
   async function saveInlineCompany() {
     if (!inlineCompanyForm.name.trim()) { alert('Company name is required'); return; }
@@ -1056,28 +1250,84 @@ export default function BahrainTasks() {
         border: '1px solid rgba(255,255,255,0.06)', position: 'relative', overflow: 'hidden'
       }}>
         <div>
-          <h2 style={{ color: '#ffffff', fontSize: '24px', fontWeight: 700, margin: 0, letterSpacing: '-0.5px' }}>
-            Task Management
-          </h2>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <h2 style={{ color: '#ffffff', fontSize: '24px', fontWeight: 700, margin: 0, letterSpacing: '-0.5px' }}>
+              Task Management
+            </h2>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: 'rgba(255,255,255,0.12)', padding: '3px 10px', borderRadius: '20px', border: '1px solid rgba(255,255,255,0.18)', backdropFilter: 'blur(8px)' }}>
+              <CountryFlag name={dataCountry || 'Bahrain'} size={14} />
+              <span style={{ color: '#e2e8f0', fontSize: '11.5px', fontWeight: 600 }}>{dataCountry || 'Bahrain'}</span>
+            </span>
+          </div>
           <p style={{ color: '#94a3b8', fontSize: '14px', margin: '6px 0 0 0' }}>
             Manage, assign, and track all compliance tasks
           </p>
         </div>
-        {(isAdminUser || userAuditorAccess.length > 0) && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          {/* Multiple Selection Toggle Button */}
           <button
-            onClick={() => { setEditingTaskId(null); setNewTask({ company_id: '', task_type_id: '', task_type_ids: [], priority: 'Medium', status: '', auditor_id: '', deadline: '', description: '', assigned_to: '', assigned_partners: [] }); setShowTaskModal(true); }}
+            onClick={() => {
+              if (multiSelectMode) {
+                setMultiSelectMode(false);
+                setSelectedTaskIds([]);
+              } else {
+                setMultiSelectMode(true);
+              }
+            }}
             style={{
               display: 'flex', alignItems: 'center', gap: '8px',
-              padding: '12px 24px', background: '#ffffff', color: '#0f172a',
-              border: 'none', borderRadius: '12px', cursor: 'pointer', fontWeight: 600, fontSize: '14px',
-              boxShadow: '0 4px 14px rgba(0,0,0,0.15)', transition: 'all 0.2s ease',
+              padding: '10px 16px',
+              background: multiSelectMode ? 'rgba(59,130,246,0.25)' : 'rgba(255,255,255,0.12)',
+              color: multiSelectMode ? '#93c5fd' : '#ffffff',
+              border: multiSelectMode ? '1px solid #60a5fa' : '1px solid rgba(255,255,255,0.18)',
+              borderRadius: '12px', cursor: 'pointer', fontWeight: 600, fontSize: '13px',
+              backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
+              transition: 'all 0.2s ease',
             }}
-            onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 6px 20px rgba(0,0,0,0.22)'; }}
-            onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 4px 14px rgba(0,0,0,0.15)'; }}
+            onMouseEnter={e => { e.currentTarget.style.background = multiSelectMode ? 'rgba(59,130,246,0.35)' : 'rgba(255,255,255,0.2)'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = multiSelectMode ? 'rgba(59,130,246,0.25)' : 'rgba(255,255,255,0.12)'; }}
+            title="Select multiple tasks for batch WhatsApp sharing or export"
           >
-            <Plus size={16} /> New Task
+            <CheckSquare size={15} />
+            {multiSelectMode ? `Selecting (${selectedTaskIds.length})` : 'Select Multiple'}
           </button>
-        )}
+
+          {/* Export to Excel Button */}
+          <button
+            onClick={() => handleExportExcel(selectedTaskIds.length > 0 ? 'selected' : 'filtered')}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '8px',
+              padding: '10px 16px',
+              background: 'rgba(255,255,255,0.12)', color: '#ffffff',
+              border: '1px solid rgba(255,255,255,0.18)',
+              borderRadius: '12px', cursor: 'pointer', fontWeight: 600, fontSize: '13px',
+              backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
+              transition: 'all 0.2s ease',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.2)'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.12)'; }}
+            title={selectedTaskIds.length > 0 ? `Export ${selectedTaskIds.length} Selected Tasks to Excel` : `Export ${filtered.length} Tasks to Excel`}
+          >
+            <FileSpreadsheet size={15} />
+            Export Excel
+          </button>
+
+          {(isAdminUser || userAuditorAccess.length > 0) && (
+            <button
+              onClick={() => { setEditingTaskId(null); setNewTask({ company_id: '', task_type_id: '', task_type_ids: [], priority: 'Medium', status: '', auditor_id: '', deadline: '', description: '', assigned_to: '', assigned_partners: [] }); setShowTaskModal(true); }}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '8px',
+                padding: '10px 20px', background: '#ffffff', color: '#0f172a',
+                border: 'none', borderRadius: '12px', cursor: 'pointer', fontWeight: 600, fontSize: '13px',
+                boxShadow: '0 4px 14px rgba(0,0,0,0.15)', transition: 'all 0.2s ease',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 6px 20px rgba(0,0,0,0.22)'; }}
+              onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 4px 14px rgba(0,0,0,0.15)'; }}
+            >
+              <Plus size={15} /> New Task
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Filters */}
@@ -2071,16 +2321,38 @@ export default function BahrainTasks() {
         </Modal>
       )}
 
-      {/* Tasks Table */}
-      <div className="task-table-wrap" style={{
-        width: '100%', overflowX: 'auto', borderRadius: '16px',
-        boxShadow: '0 1px 4px rgba(0,0,0,0.03), 0 4px 16px rgba(0,0,0,0.02)',
-        border: '1px solid #e2e8f0', background: '#ffffff',
+      {/* Tasks Table — Desktop View (>768px) */}
+      <div className="desktop-task-view">
+        <div className="task-table-wrap" style={{
+        width: '100%', overflowX: 'auto', borderRadius: '18px',
+        boxShadow: '0 4px 24px -2px rgba(15, 23, 42, 0.05), 0 2px 6px -1px rgba(15, 23, 42, 0.02)',
+        border: '1px solid rgba(226, 232, 240, 0.85)', background: '#ffffff',
         WebkitOverflowScrolling: 'touch'
       }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', background: '#ffffff' }}>
           <thead>
-            <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+            <tr style={{
+              background: 'linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%)',
+              borderBottom: '1.5px solid #e2e8f0'
+            }}>
+              {multiSelectMode && (
+                <th style={{
+                  padding: '11px 8px', textAlign: 'center', width: '38px',
+                  borderBottom: '1.5px solid #e2e8f0'
+                }}>
+                  <input
+                    type="checkbox"
+                    checked={isAllFilteredSelected}
+                    ref={el => { if (el) el.indeterminate = isSomeFilteredSelected; }}
+                    onChange={e => {
+                      if (e.target.checked) selectAllFiltered();
+                      else deselectAll();
+                    }}
+                    style={{ cursor: 'pointer', width: '16px', height: '16px', accentColor: '#2563eb' }}
+                    title={isAllFilteredSelected ? 'Deselect All' : 'Select All Filtered'}
+                  />
+                </th>
+              )}
               {[
                 { label: 'PL', align: 'center' },
                 { label: 'Company', align: 'left' },
@@ -2096,9 +2368,10 @@ export default function BahrainTasks() {
                 { label: '', align: 'right' }
               ].map((h, i) => (
                 <th key={i} style={{
-                  padding: '9px 6px', textAlign: h.align as any,
-                  fontSize: '10px', fontWeight: 700, textTransform: 'uppercase',
-                  letterSpacing: '0.04em', color: '#64748b', whiteSpace: 'nowrap'
+                  padding: '11px 8px', textAlign: h.align as any,
+                  fontSize: '10.5px', fontWeight: 700, textTransform: 'uppercase',
+                  letterSpacing: '0.05em', color: '#475569', whiteSpace: 'nowrap',
+                  borderBottom: '1.5px solid #e2e8f0'
                 }}>{h.label}</th>
               ))}
             </tr>
@@ -2106,10 +2379,12 @@ export default function BahrainTasks() {
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={12} style={{ textAlign: 'center', padding: '60px 20px', color: '#94a3b8' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
-                    <ListTodo size={36} color="#cbd5e1" />
-                    <div style={{ fontSize: '15px', fontWeight: 600, color: '#475569' }}>No matching tasks found</div>
+                <td colSpan={multiSelectMode ? 13 : 12} style={{ textAlign: 'center', padding: '64px 20px', color: '#94a3b8' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
+                    <div style={{ width: '56px', height: '56px', borderRadius: '16px', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <ListTodo size={28} color="#94a3b8" />
+                    </div>
+                    <div style={{ fontSize: '15px', fontWeight: 650, color: '#334155' }}>No matching tasks found</div>
                     <div style={{ fontSize: '13px', color: '#94a3b8' }}>Try adjusting your filters or search keywords</div>
                   </div>
                 </td>
@@ -2125,23 +2400,39 @@ export default function BahrainTasks() {
               }
               const pc = priorityColor(task.priority);
               const isMenuOpen = openMenuId === task.id;
+              const isSelected = selectedTaskIds.includes(task.id);
 
               return (
-                <tr key={task.id} style={{ borderBottom: '1px solid #f1f5f9', transition: 'background 0.12s ease' }}
-                  onMouseEnter={e => e.currentTarget.style.background = '#fafbfc'}
-                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                  <td style={{ ...compactCell, textAlign: 'center', width: '44px' }}>
+                <tr key={task.id} style={{
+                  borderBottom: '1px solid rgba(241, 245, 249, 0.9)',
+                  background: isSelected ? 'rgba(239, 246, 255, 0.85)' : 'transparent',
+                  transition: 'background 0.15s cubic-bezier(0.16, 1, 0.3, 1)'
+                }}
+                  onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = 'rgba(248, 250, 252, 0.85)'; }}
+                  onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = 'transparent'; }}>
+                  {multiSelectMode && (
+                    <td style={{ ...compactCell, textAlign: 'center', width: '38px' }} onClick={e => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleSelectTask(task.id)}
+                        style={{ cursor: 'pointer', width: '16px', height: '16px', accentColor: '#2563eb' }}
+                      />
+                    </td>
+                  )}
+                  <td style={{ ...compactCell, textAlign: 'center', width: '48px' }}>
                     <button
                       onClick={() => handlePlUploadedToggle(task.id)}
                       title={task.pl_uploaded ? 'PL Uploaded: Yes — click to change' : 'PL Uploaded: No — click to change'}
                       style={{
-                        padding: '2px 6px', borderRadius: '10px',
-                        border: task.pl_uploaded ? '1px solid #a7f3d0' : '1px solid #fecaca',
+                        padding: '3px 8px', borderRadius: '12px',
+                        border: task.pl_uploaded ? '1px solid rgba(16, 185, 129, 0.35)' : '1px solid rgba(239, 68, 68, 0.35)',
                         cursor: 'pointer', fontSize: '9.5px', fontWeight: 700,
                         letterSpacing: '0.02em', transition: 'all 0.15s ease',
-                        background: task.pl_uploaded ? '#ecfdf5' : '#fef2f2',
-                        color: task.pl_uploaded ? '#059669' : '#dc2626',
-                        display: 'inline-flex', alignItems: 'center', gap: '2px'
+                        background: task.pl_uploaded ? 'linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%)' : 'linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%)',
+                        color: task.pl_uploaded ? '#047857' : '#b91c1c',
+                        display: 'inline-flex', alignItems: 'center', gap: '3px',
+                        boxShadow: task.pl_uploaded ? '0 1px 2px rgba(16, 185, 129, 0.1)' : '0 1px 2px rgba(239, 68, 68, 0.1)'
                       }}
                       onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.05)'; }}
                       onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; }}
@@ -2150,7 +2441,7 @@ export default function BahrainTasks() {
                     </button>
                   </td>
                   <td style={compactCell}>
-                    <span style={{ fontWeight: 600, fontSize: '12px', color: '#0f172a', maxWidth: '120px', display: 'inline-block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={company?.company_name || 'Unknown'}>
+                    <span style={{ fontWeight: 650, fontSize: '12.5px', color: '#0f172a', maxWidth: '125px', display: 'inline-block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', letterSpacing: '-0.01em' }} title={company?.company_name || 'Unknown'}>
                       {company?.company_name || 'Unknown'}
                     </span>
                   </td>
@@ -2160,7 +2451,7 @@ export default function BahrainTasks() {
                     onMouseLeave={() => setHoveredCrTaskId(null)}
                   >
                     {inlineEditCrId === task.id ? (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: '140px', position: 'absolute', zIndex: 10, background: '#fff', padding: '8px', borderRadius: '8px', boxShadow: '0 8px 24px rgba(0,0,0,0.14)', border: '1px solid #bfdbfe', top: '50%', transform: 'translateY(-50%)', left: '6px' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', minWidth: '150px', position: 'absolute', zIndex: 20, background: '#fff', padding: '10px', borderRadius: '10px', boxShadow: '0 12px 30px rgba(0,0,0,0.15)', border: '1px solid #93c5fd', top: '50%', transform: 'translateY(-50%)', left: '4px' }}>
                         <input
                           autoFocus
                           type="text"
@@ -2169,14 +2460,14 @@ export default function BahrainTasks() {
                           placeholder="e.g. 167145-1"
                           style={{
                             width: '100%',
-                            padding: '4px 6px',
-                            fontSize: '11px',
+                            padding: '5px 8px',
+                            fontSize: '11.5px',
                             fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-                            borderRadius: '5px',
+                            borderRadius: '6px',
                             border: '1.5px solid #2563eb',
                             outline: 'none',
                             color: '#0f172a',
-                            boxShadow: '0 0 0 2px rgba(37,99,235,0.1)'
+                            boxShadow: '0 0 0 3px rgba(37,99,235,0.1)'
                           }}
                           onKeyDown={e => {
                             if (e.key === 'Escape') {
@@ -2186,17 +2477,17 @@ export default function BahrainTasks() {
                             }
                           }}
                         />
-                        <div style={{ display: 'flex', gap: '4px', justifyContent: 'flex-end', marginTop: '2px' }}>
+                        <div style={{ display: 'flex', gap: '5px', justifyContent: 'flex-end', marginTop: '2px' }}>
                           <button
                             onClick={() => setInlineEditCrId(null)}
-                            style={{ padding: '3px 7px', border: '1px solid #e2e8f0', background: '#f8fafc', color: '#64748b', borderRadius: '5px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px', fontSize: '10px', fontWeight: 600 }}
+                            style={{ padding: '4px 8px', border: '1px solid #e2e8f0', background: '#f8fafc', color: '#64748b', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px', fontSize: '10.5px', fontWeight: 600 }}
                             title="Cancel (Esc)"
                           >
                             <X size={11} /> Cancel
                           </button>
                           <button
                             onClick={() => { if (company) saveInlineCrNumber(company.id, task.id); }}
-                            style={{ padding: '3px 8px', border: 'none', background: '#2563eb', color: '#fff', borderRadius: '5px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px', fontSize: '10px', fontWeight: 600 }}
+                            style={{ padding: '4px 9px', border: 'none', background: '#2563eb', color: '#fff', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px', fontSize: '10.5px', fontWeight: 600 }}
                             title="Save (Enter)"
                           >
                             <Check size={11} /> Save
@@ -2208,15 +2499,16 @@ export default function BahrainTasks() {
                         {company?.cr_number ? (
                           <span style={{
                             fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-                            fontSize: '10px', fontWeight: 600, color: '#475569',
-                            background: '#f1f5f9', padding: '1px 5px', borderRadius: '4px',
-                            border: '1px solid #e2e8f0', display: 'inline-block',
-                            maxWidth: '80px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
+                            fontSize: '10px', fontWeight: 600, color: '#334155',
+                            background: 'linear-gradient(135deg, #f8fafc, #f1f5f9)', padding: '2px 6px', borderRadius: '5px',
+                            border: '1px solid #cbd5e1', display: 'inline-block',
+                            maxWidth: '85px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                            letterSpacing: '0.02em',
                           }} title={company.cr_number}>
                             {company.cr_number}
                           </span>
                         ) : (
-                          <span style={{ fontSize: '10px', color: '#cbd5e1' }}>—</span>
+                          <span style={{ fontSize: '11px', color: '#cbd5e1' }}>—</span>
                         )}
                         {canManageTask(task) && company && (
                           <button
@@ -2228,7 +2520,7 @@ export default function BahrainTasks() {
                             style={{
                               background: '#eff6ff',
                               border: '1px solid #dbeafe',
-                              borderRadius: '4px',
+                              borderRadius: '5px',
                               cursor: 'pointer',
                               padding: '2px',
                               display: 'flex',
@@ -2238,8 +2530,8 @@ export default function BahrainTasks() {
                               transition: 'all 0.15s ease',
                               opacity: hoveredCrTaskId === task.id ? 1 : 0,
                               pointerEvents: hoveredCrTaskId === task.id ? 'auto' as const : 'none' as const,
-                              width: '18px',
-                              height: '18px',
+                              width: '19px',
+                              height: '19px',
                               flexShrink: 0,
                             }}
                             title="Edit CR Number"
@@ -2257,13 +2549,14 @@ export default function BahrainTasks() {
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px' }}>
                         {ttNames.map((name, i) => (
                           <span key={i} style={{
-                            padding: '1px 5px', borderRadius: '4px', fontSize: '10px',
-                            fontWeight: 600, background: '#eff6ff', color: '#1d4ed8',
-                            border: '1px solid #dbeafe', whiteSpace: 'nowrap'
+                            padding: '2px 6px', borderRadius: '5px', fontSize: '10px',
+                            fontWeight: 650, background: 'linear-gradient(135deg, #eff6ff, #dbeafe)',
+                            color: '#1d4ed8', border: '1px solid #bfdbfe', whiteSpace: 'nowrap',
+                            letterSpacing: '0.01em',
                           }}>{name}</span>
                         ))}
                       </div>
-                    ) : <span style={{ fontSize: '10px', color: '#cbd5e1' }}>—</span>}
+                    ) : <span style={{ fontSize: '11px', color: '#cbd5e1' }}>—</span>}
                   </td>
                   <td
                     style={{ ...compactCell, position: 'relative', cursor: (task.description && inlineEditDescId !== task.id) ? 'pointer' : 'default' }}
@@ -2304,14 +2597,14 @@ export default function BahrainTasks() {
                     }}
                   >
                     {inlineEditDescId === task.id ? (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: '190px', position: 'absolute', zIndex: 10, background: '#fff', padding: '10px', borderRadius: '10px', boxShadow: '0 8px 24px rgba(0,0,0,0.14)', border: '1px solid #bfdbfe', top: '50%', transform: 'translateY(-50%)', left: '10px' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', minWidth: '200px', position: 'absolute', zIndex: 20, background: '#fff', padding: '10px', borderRadius: '10px', boxShadow: '0 12px 30px rgba(0,0,0,0.15)', border: '1px solid #93c5fd', top: '50%', transform: 'translateY(-50%)', left: '10px' }}>
                         <textarea
                           autoFocus
                           value={inlineEditDescValue}
                           onChange={e => setInlineEditDescValue(e.target.value)}
                           style={{
                             width: '100%',
-                            minHeight: '65px',
+                            minHeight: '68px',
                             padding: '8px',
                             fontSize: '11.5px',
                             borderRadius: '6px',
@@ -2349,7 +2642,7 @@ export default function BahrainTasks() {
                       </div>
                     ) : (
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '3px', minHeight: '22px' }}>
-                        <span style={{ fontSize: '11px', color: '#475569', maxWidth: '120px', display: 'inline-block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={task.description || ''}>
+                        <span style={{ fontSize: '11.5px', color: '#475569', maxWidth: '120px', display: 'inline-block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={task.description || ''}>
                           {task.description || '—'}
                         </span>
                         {canManageTask(task) && (
@@ -2363,7 +2656,7 @@ export default function BahrainTasks() {
                             style={{
                               background: '#eff6ff',
                               border: '1px solid #dbeafe',
-                              borderRadius: '4px',
+                              borderRadius: '5px',
                               cursor: 'pointer',
                               padding: '2px',
                               display: 'flex',
@@ -2373,8 +2666,8 @@ export default function BahrainTasks() {
                               transition: 'all 0.15s ease',
                               opacity: hoveredDescTaskId === task.id ? 1 : 0,
                               pointerEvents: hoveredDescTaskId === task.id ? 'auto' as const : 'none' as const,
-                              width: '18px',
-                              height: '18px',
+                              width: '19px',
+                              height: '19px',
                               flexShrink: 0,
                             }}
                             title="Edit Description"
@@ -2391,7 +2684,7 @@ export default function BahrainTasks() {
                     {(() => {
                       const updateDate = descUpdateMap[task.id] || (task.description ? task.created_at : null);
                       if (!updateDate || !task.description || task.description.trim() === '') {
-                        return <span style={{ fontSize: '10px', color: '#cbd5e1' }}>—</span>;
+                        return <span style={{ fontSize: '10.5px', color: '#cbd5e1' }}>—</span>;
                       }
                       const updateTime = new Date(updateDate).getTime();
                       const isRecent = !isNaN(updateTime) && (Date.now() - updateTime < 24 * 60 * 60 * 1000) && (Date.now() >= updateTime - 60000);
@@ -2401,18 +2694,18 @@ export default function BahrainTasks() {
                           style={{
                             fontSize: '10px',
                             color: isRecent ? '#0284c7' : '#64748b',
-                            fontWeight: isRecent ? 600 : 500,
+                            fontWeight: isRecent ? 650 : 500,
                             whiteSpace: 'nowrap',
                             display: 'inline-flex',
                             alignItems: 'center',
                             gap: '3px',
-                            background: isRecent ? '#f0f9ff' : 'transparent',
-                            padding: isRecent ? '1px 4px' : '0',
-                            borderRadius: isRecent ? '4px' : '0',
+                            background: isRecent ? 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)' : 'transparent',
+                            padding: isRecent ? '2px 5px' : '0',
+                            borderRadius: isRecent ? '5px' : '0',
                             border: isRecent ? '1px solid #bae6fd' : 'none',
                           }}
                         >
-                          {isRecent && <span style={{ width: '4px', height: '4px', borderRadius: '50%', background: '#0284c7' }} />}
+                          {isRecent && <span style={{ width: '4.5px', height: '4.5px', borderRadius: '50%', background: '#0284c7', boxShadow: '0 0 0 1.5px #bae6fd' }} />}
                           {formatDescDate(updateDate)}
                         </span>
                       );
@@ -2422,20 +2715,21 @@ export default function BahrainTasks() {
                     {canUpdateStatus ? (
                       <select value={task.priority} onChange={e => handlePriorityChange(task.id, e.target.value)}
                         style={{
-                          padding: '2px 5px', borderRadius: '6px', border: '1px solid transparent',
+                          padding: '3px 6px', borderRadius: '7px', border: '1px solid rgba(0,0,0,0.06)',
                           background: pc.bg, color: pc.color, fontWeight: 700,
-                          fontSize: '10px', cursor: 'pointer', outline: 'none'
+                          fontSize: '10.5px', cursor: 'pointer', outline: 'none',
+                          boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
                         }}>
                         {BAHRAIN_PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
                       </select>
                     ) : (
-                      <span style={{ padding: '2px 5px', borderRadius: '6px', fontSize: '9.5px', fontWeight: 700, background: pc.bg, color: pc.color, whiteSpace: 'nowrap' }}>
+                      <span style={{ padding: '3px 6px', borderRadius: '7px', fontSize: '10px', fontWeight: 700, background: pc.bg, color: pc.color, whiteSpace: 'nowrap' }}>
                         {task.priority}
                       </span>
                     )}
                   </td>
                   <td style={compactCell}>
-                    <span style={{ fontSize: '11px', color: '#475569', fontWeight: 500, whiteSpace: 'nowrap' }}>
+                    <span style={{ fontSize: '11px', color: '#475569', fontWeight: 500, whiteSpace: 'nowrap', fontFamily: 'ui-monospace, monospace' }}>
                       {task.deadline || '—'}
                     </span>
                   </td>
@@ -2445,10 +2739,11 @@ export default function BahrainTasks() {
                       return (
                         <select value={task.status} onChange={e => handleStatusChange(task.id, e.target.value)}
                           style={{
-                            padding: '3px 5px', borderRadius: '6px',
+                            padding: '3.5px 6px', borderRadius: '7px',
                             border: `1px solid ${sc.border}`, background: sc.bg,
-                            color: sc.color, fontWeight: 600, fontSize: '10.5px',
-                            cursor: 'pointer', outline: 'none', minWidth: '95px', maxWidth: '125px'
+                            color: sc.color, fontWeight: 650, fontSize: '10.5px',
+                            cursor: 'pointer', outline: 'none', minWidth: '95px', maxWidth: '125px',
+                            boxShadow: '0 1px 2px rgba(0,0,0,0.02)'
                           }}>
                           {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
                         </select>
@@ -2457,8 +2752,8 @@ export default function BahrainTasks() {
                       const sc = statusColor(task.status);
                       return (
                         <span style={{
-                          padding: '2px 6px', borderRadius: '6px', fontSize: '10.5px',
-                          fontWeight: 600, background: sc.bg, color: sc.color,
+                          padding: '2.5px 6px', borderRadius: '6px', fontSize: '10.5px',
+                          fontWeight: 650, background: sc.bg, color: sc.color,
                           border: `1px solid ${sc.border}`, whiteSpace: 'nowrap'
                         }}>
                           {task.status}
@@ -2470,9 +2765,10 @@ export default function BahrainTasks() {
                     {isAdminUser ? (
                       <select value={task.auditor_id || ''} onChange={e => handleAssignAuditor(task.id, e.target.value)}
                         style={{
-                          padding: '3px 5px', borderRadius: '6px', border: '1px solid #e2e8f0',
+                          padding: '3.5px 6px', borderRadius: '7px', border: '1px solid #e2e8f0',
                           background: '#f8fafc', fontSize: '10.5px', color: '#1e293b',
-                          minWidth: '85px', maxWidth: '115px', cursor: 'pointer', outline: 'none', fontWeight: 500
+                          minWidth: '85px', maxWidth: '115px', cursor: 'pointer', outline: 'none', fontWeight: 500,
+                          boxShadow: '0 1px 2px rgba(0,0,0,0.02)'
                         }}>
                         <option value="">No Auditor</option>
                         {auditors.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
@@ -2487,9 +2783,10 @@ export default function BahrainTasks() {
                     {isAdminUser ? (
                       <select value={task.assigned_to || ''} onChange={e => handleAssign(task.id, e.target.value)}
                         style={{
-                          padding: '3px 5px', borderRadius: '6px', border: '1px solid #e2e8f0',
+                          padding: '3.5px 6px', borderRadius: '7px', border: '1px solid #e2e8f0',
                           background: '#f8fafc', fontSize: '10.5px', color: '#1e293b',
-                          minWidth: '85px', maxWidth: '115px', cursor: 'pointer', outline: 'none', fontWeight: 500
+                          minWidth: '85px', maxWidth: '115px', cursor: 'pointer', outline: 'none', fontWeight: 500,
+                          boxShadow: '0 1px 2px rgba(0,0,0,0.02)'
                         }}>
                         <option value="">Unassigned</option>
                         {partners.map(p => <option key={p.id} value={p.id}>{p.username}</option>)}
@@ -2603,6 +2900,444 @@ export default function BahrainTasks() {
             })}
           </tbody>
         </table>
+      </div>
+      </div>
+
+      {/* Mobile Task Cards View (<= 768px) */}
+      <div className="mobile-task-view">
+        {filtered.length === 0 ? (
+          <div style={{
+            background: '#ffffff', borderRadius: '16px', padding: '40px 20px',
+            textAlign: 'center', border: '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(0,0,0,0.03)'
+          }}>
+            <div style={{ width: '48px', height: '48px', borderRadius: '14px', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 10px' }}>
+              <ListTodo size={24} color="#94a3b8" />
+            </div>
+            <div style={{ fontSize: '15px', fontWeight: 650, color: '#334155' }}>No matching tasks found</div>
+            <div style={{ fontSize: '12.5px', color: '#94a3b8', marginTop: '4px' }}>Try adjusting your filters or keywords</div>
+          </div>
+        ) : (
+          filtered.map(task => {
+            const company = companies.find(c => c.id === task.company_id);
+            const ttIds = task.task_type_ids && task.task_type_ids.length > 0 ? task.task_type_ids : (task.task_type_id ? task.task_type_id.split(',').map(s => s.trim()).filter(Boolean) : []);
+            const ttNames = ttIds.map(id => taskTypes.find(t => t.id === id)?.name).filter(Boolean);
+            const statusOptions = getStatusesForTask(ttIds, statusObjects, dynamicStatuses);
+            if (task.status && !statusOptions.includes(task.status)) {
+              statusOptions.push(task.status);
+              statusOptions.sort((a, b) => a.localeCompare(b));
+            }
+            const pc = priorityColor(task.priority);
+            const isMenuOpen = openMenuId === task.id;
+            const isSelected = selectedTaskIds.includes(task.id);
+
+            return (
+              <div
+                key={`mobile-card-${task.id}`}
+                style={{
+                  background: isSelected ? '#eff6ff' : '#ffffff',
+                  border: isSelected ? '1.5px solid #3b82f6' : '1px solid #e2e8f0',
+                  borderRadius: '14px',
+                  padding: '12px 14px',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.02)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px',
+                  position: 'relative',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                {/* Row 1: Left (Checkbox + Company Name + Task Type Chips) | Right (Status Pill + Actions Menu) */}
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', flex: 1, minWidth: 0 }}>
+                    {multiSelectMode && (
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleSelectTask(task.id)}
+                        style={{ cursor: 'pointer', width: '17px', height: '17px', accentColor: '#2563eb', flexShrink: 0, marginTop: '2px' }}
+                      />
+                    )}
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                        <span style={{ fontWeight: 700, fontSize: '15px', color: '#0f172a', letterSpacing: '-0.2px' }}>
+                          {company?.company_name || 'Unknown Company'}
+                        </span>
+                        {ttNames.map((name, i) => (
+                          <span key={i} style={{
+                            padding: '1px 6px', borderRadius: '5px', fontSize: '10px',
+                            fontWeight: 600, background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe'
+                          }}>
+                            {name}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Right side: Status Dropdown/Pill + 3-dots Menu */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                    {canUpdateStatus ? (() => {
+                      const sc = statusColor(task.status);
+                      return (
+                        <div style={{ position: 'relative', display: 'inline-block' }}>
+                          <select
+                            value={task.status}
+                            onChange={e => handleStatusChange(task.id, e.target.value)}
+                            style={{
+                              padding: '3px 8px', borderRadius: '12px',
+                              border: `1px solid ${sc.border}`, background: sc.bg,
+                              color: sc.color, fontWeight: 700, fontSize: '11px',
+                              cursor: 'pointer', outline: 'none', appearance: 'none',
+                              WebkitAppearance: 'none', paddingRight: '18px',
+                              textAlign: 'left', maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
+                            }}
+                          >
+                            {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
+                          </select>
+                          <ChevronDown size={10} style={{ position: 'absolute', right: '6px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: sc.color }} />
+                        </div>
+                      );
+                    })() : (() => {
+                      const sc = statusColor(task.status);
+                      return (
+                        <span style={{
+                          padding: '3px 8px', borderRadius: '12px', fontSize: '11px',
+                          fontWeight: 700, background: sc.bg, color: sc.color,
+                          border: `1px solid ${sc.border}`, maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
+                        }}>
+                          {task.status}
+                        </span>
+                      );
+                    })()}
+
+                    <button
+                      onClick={e => {
+                        e.stopPropagation();
+                        if (isMenuOpen) {
+                          setOpenMenuId(null);
+                        } else {
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          let top: number | undefined = rect.bottom + 4;
+                          let bottom: number | undefined = undefined;
+                          let maxHeight = `calc(100vh - ${top}px - 10px)`;
+                          if (rect.bottom + 200 > window.innerHeight) {
+                            top = undefined;
+                            bottom = window.innerHeight - rect.top + 4;
+                            maxHeight = `calc(${rect.top}px - 10px)`;
+                          }
+                          setMenuPos({ top, bottom, right: 14, maxHeight });
+                          setOpenMenuId(task.id);
+                        }
+                      }}
+                      style={{
+                        width: '26px', height: '26px', borderRadius: '6px', border: '1px solid #e2e8f0',
+                        background: '#f8fafc', color: '#64748b', display: 'flex', alignItems: 'center',
+                        justifyContent: 'center', cursor: 'pointer'
+                      }}
+                    >
+                      <MoreHorizontal size={14} />
+                    </button>
+                    {isMenuOpen && typeof window !== 'undefined' && createPortal(
+                      <div style={{ position: 'fixed', top: menuPos.top, bottom: menuPos.bottom, right: menuPos.right, maxHeight: menuPos.maxHeight || 'none', overflowY: 'auto', background: '#fff', borderRadius: '12px', boxShadow: '0 8px 30px rgba(0,0,0,0.18)', border: '1px solid #e2e8f0', zIndex: 9999, minWidth: '175px' }}
+                        onClick={e => e.stopPropagation()}>
+                        <button onClick={() => { viewDetail(task.id); setOpenMenuId(null); }} style={menuItemStyle}>
+                          <Eye size={14} color="#3b82f6" /> View Details
+                        </button>
+                        {canManageTask(task) && (
+                          <button onClick={() => { openEditTask(task); setOpenMenuId(null); }} style={menuItemStyle}>
+                            <Edit2 size={14} color="#f59e0b" /> Edit Task
+                          </button>
+                        )}
+                        <div style={{ height: '1px', background: '#f1f5f9', margin: '2px 0' }} />
+                        <button
+                          onClick={() => {
+                            const comp = companies.find(c => c.id === task.company_id);
+                            const ttIds = task.task_type_ids && task.task_type_ids.length > 0 ? task.task_type_ids : (task.task_type_id ? task.task_type_id.split(',').map(s => s.trim()).filter(Boolean) : []);
+                            const ttNames = ttIds.map(id => taskTypes.find(t => t.id === id)?.name).filter(Boolean).join(', ') || 'N/A';
+                            const activePartnerIds = task.assigned_partners && task.assigned_partners.length > 0 
+                              ? task.assigned_partners 
+                              : (task.assigned_to ? [task.assigned_to] : []);
+                            const allNames = activePartnerIds.map((id: string) => partners.find((p: any) => p.id === id)?.username).filter(Boolean);
+                            const assignedNames = allNames.length > 0 ? allNames.join(', ') : 'Unassigned';
+                            const msg = [
+                              '━━━━━━━━━━━━━━━━━━',
+                              '*Task Update*',
+                              '━━━━━━━━━━━━━━━━━━',
+                              '',
+                              `*Company:* ${comp?.company_name || 'Unknown'}`,
+                              `*CR Number:* ${comp?.cr_number || 'N/A'}`,
+                              `*Audit Type:* ${ttNames}`,
+                              `*Priority:* ${task.priority}`,
+                              `*Status:* ${task.status}`,
+                              `*Due Date:* ${task.deadline || 'N/A'}`,
+                              `*Description:* ${task.description || 'N/A'}`,
+                              `*Assigned To:* ${assignedNames}`,
+                              '',
+                              `_Sent via The Digital Ledger_`,
+                            ].join('\n');
+                            window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
+                            setOpenMenuId(null);
+                          }}
+                          style={menuItemStyle}
+                        >
+                          <Share2 size={14} color="#25D366" /> Share via WhatsApp
+                        </button>
+                        {isAdminUser && (
+                          <>
+                            <div style={{ height: '1px', background: '#f1f5f9', margin: '2px 0' }} />
+                            <button onClick={() => { deleteTask(task.id); setOpenMenuId(null); }} style={{ ...menuItemStyle, color: '#ef4444' }}>
+                              <Trash2 size={14} color="#ef4444" /> Delete
+                            </button>
+                          </>
+                        )}
+                      </div>,
+                      document.body
+                    )}
+                  </div>
+                </div>
+
+                {/* Row 2: Badges Bar: Priority (soft dot badge), PL Toggle, CR Chip */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                  {/* Priority */}
+                  {canUpdateStatus ? (
+                    <div style={{ position: 'relative', display: 'inline-block' }}>
+                      <select
+                        value={task.priority}
+                        onChange={e => handlePriorityChange(task.id, e.target.value)}
+                        style={{
+                          padding: '2px 7px', borderRadius: '6px', border: '1px solid #e2e8f0',
+                          background: pc.bg, color: pc.color, fontWeight: 700,
+                          fontSize: '10.5px', cursor: 'pointer', outline: 'none',
+                          appearance: 'none', WebkitAppearance: 'none', paddingRight: '16px'
+                        }}
+                      >
+                        {BAHRAIN_PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
+                      </select>
+                      <ChevronDown size={9} style={{ position: 'absolute', right: '5px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: pc.color }} />
+                    </div>
+                  ) : (
+                    <span style={{ padding: '2px 7px', borderRadius: '6px', fontSize: '10.5px', fontWeight: 700, background: pc.bg, color: pc.color }}>
+                      {task.priority}
+                    </span>
+                  )}
+
+                  {/* PL Uploaded Pill */}
+                  <button
+                    onClick={() => handlePlUploadedToggle(task.id)}
+                    style={{
+                      padding: '2px 8px', borderRadius: '6px',
+                      border: task.pl_uploaded ? '1px solid #a7f3d0' : '1px solid #fecaca',
+                      cursor: 'pointer', fontSize: '10.5px', fontWeight: 650,
+                      background: task.pl_uploaded ? '#ecfdf5' : '#fef2f2',
+                      color: task.pl_uploaded ? '#059669' : '#dc2626',
+                      display: 'inline-flex', alignItems: 'center', gap: '3px'
+                    }}
+                  >
+                    PL: {task.pl_uploaded ? '✓ Yes' : '✗ No'}
+                  </button>
+
+                  {/* CR Number Monospace Chip */}
+                  {company?.cr_number ? (
+                    <span
+                      onClick={() => {
+                        if (canManageTask(task) && company) {
+                          setInlineEditCrId(task.id);
+                          setInlineEditCrValue(company.cr_number || '');
+                        }
+                      }}
+                      style={{
+                        fontFamily: 'ui-monospace, monospace',
+                        fontSize: '10.5px', fontWeight: 600, color: '#475569',
+                        background: '#f1f5f9', padding: '2px 6px', borderRadius: '5px',
+                        border: '1px solid #cbd5e1', cursor: canManageTask(task) ? 'pointer' : 'default',
+                        display: 'inline-flex', alignItems: 'center', gap: '3px'
+                      }}
+                      title="Tap to edit CR Number"
+                    >
+                      CR: {company.cr_number}
+                      {canManageTask(task) && <Edit2 size={9} color="#64748b" />}
+                    </span>
+                  ) : (
+                    canManageTask(task) && company && (
+                      <button
+                        onClick={() => {
+                          setInlineEditCrId(task.id);
+                          setInlineEditCrValue('');
+                        }}
+                        style={{
+                          background: '#f8fafc', border: '1px dashed #cbd5e1', borderRadius: '5px',
+                          padding: '2px 6px', fontSize: '10px', color: '#64748b', fontWeight: 600,
+                          display: 'inline-flex', alignItems: 'center', gap: '3px', cursor: 'pointer'
+                        }}
+                      >
+                        <Plus size={9} /> CR
+                      </button>
+                    )
+                  )}
+                </div>
+
+                {/* Inline CR edit mini input if activated */}
+                {inlineEditCrId === task.id && (
+                  <div style={{ background: '#eff6ff', padding: '8px 10px', borderRadius: '8px', border: '1px solid #bfdbfe', display: 'flex', gap: '6px', alignItems: 'center' }}>
+                    <input
+                      autoFocus
+                      type="text"
+                      value={inlineEditCrValue}
+                      onChange={e => setInlineEditCrValue(e.target.value)}
+                      placeholder="Enter CR..."
+                      style={{ flex: 1, padding: '4px 8px', fontSize: '12px', borderRadius: '6px', border: '1px solid #2563eb', background: '#fff' }}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter' && company) saveInlineCrNumber(company.id, task.id);
+                        if (e.key === 'Escape') setInlineEditCrId(null);
+                      }}
+                    />
+                    <button onClick={() => setInlineEditCrId(null)} style={{ padding: '4px 8px', border: '1px solid #cbd5e1', background: '#fff', borderRadius: '6px', fontSize: '11px', fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
+                    <button onClick={() => { if (company) saveInlineCrNumber(company.id, task.id); }} style={{ padding: '4px 10px', border: 'none', background: '#2563eb', color: '#fff', borderRadius: '6px', fontSize: '11px', fontWeight: 600, cursor: 'pointer' }}>Save</button>
+                  </div>
+                )}
+
+                {/* Row 3: Description (Compact & only shown if present or on edit) */}
+                {task.description ? (
+                  <div
+                    onClick={() => {
+                      if (canManageTask(task) && inlineEditDescId !== task.id) {
+                        setInlineEditDescId(task.id);
+                        setInlineEditDescValue(task.description || '');
+                      }
+                    }}
+                    style={{
+                      background: '#f8fafc', padding: '6px 10px', borderRadius: '8px',
+                      border: '1px solid #f1f5f9', fontSize: '12px', color: '#334155',
+                      lineHeight: 1.4, cursor: canManageTask(task) ? 'pointer' : 'default',
+                      position: 'relative'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+                      <span style={{ wordBreak: 'break-word', flex: 1 }}>
+                        {task.description}
+                      </span>
+                      {canManageTask(task) && (
+                        <Edit2 size={10} color="#94a3b8" style={{ flexShrink: 0 }} />
+                      )}
+                    </div>
+                    {/* Date badge */}
+                    {(() => {
+                      const updateDate = descUpdateMap[task.id] || task.created_at;
+                      if (!updateDate) return null;
+                      const updateTime = new Date(updateDate).getTime();
+                      const isRecent = !isNaN(updateTime) && (Date.now() - updateTime < 24 * 60 * 60 * 1000) && (Date.now() >= updateTime - 60000);
+                      return (
+                        <div style={{ fontSize: '10px', color: isRecent ? '#0284c7' : '#94a3b8', fontWeight: isRecent ? 650 : 500, marginTop: '3px', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                          {isRecent && <span style={{ width: '4px', height: '4px', borderRadius: '50%', background: '#0284c7' }} />}
+                          Updated: {formatDescDate(updateDate)}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                ) : (
+                  canManageTask(task) && inlineEditDescId !== task.id && (
+                    <div style={{ display: 'flex' }}>
+                      <button
+                        onClick={() => {
+                          setInlineEditDescId(task.id);
+                          setInlineEditDescValue('');
+                        }}
+                        style={{
+                          background: 'transparent', border: 'none', padding: '0',
+                          fontSize: '11px', color: '#94a3b8', cursor: 'pointer',
+                          display: 'inline-flex', alignItems: 'center', gap: '4px'
+                        }}
+                      >
+                        <Plus size={11} /> Add description
+                      </button>
+                    </div>
+                  )
+                )}
+
+                {/* Inline description editor */}
+                {inlineEditDescId === task.id && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', background: '#f8fafc', padding: '8px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                    <textarea
+                      autoFocus
+                      value={inlineEditDescValue}
+                      onChange={e => setInlineEditDescValue(e.target.value)}
+                      placeholder="Enter task description..."
+                      style={{ width: '100%', minHeight: '52px', padding: '6px 8px', fontSize: '12px', borderRadius: '6px', border: '1.5px solid #2563eb', background: '#fff', outline: 'none', fontFamily: 'inherit' }}
+                    />
+                    <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
+                      <button onClick={() => setInlineEditDescId(null)} style={{ padding: '3px 8px', border: '1px solid #cbd5e1', background: '#fff', borderRadius: '5px', fontSize: '11px', fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
+                      <button onClick={() => saveInlineDescription(task.id)} style={{ padding: '3px 10px', border: 'none', background: '#2563eb', color: '#fff', borderRadius: '5px', fontSize: '11px', fontWeight: 600, cursor: 'pointer' }}>Save</button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Row 4: Single-Line Meta Strip: Assignee, Auditor, Due Date */}
+                <div style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  paddingTop: '6px', borderTop: '1px solid #f1f5f9', fontSize: '11.5px', color: '#64748b', gap: '8px'
+                }}>
+                  {/* Left: Assignee + Auditor */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: 0, overflow: 'hidden' }}>
+                    {/* Assignee */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', minWidth: 0 }}>
+                      {isAdminUser ? (
+                        <select
+                          value={task.assigned_to || ''}
+                          onChange={e => handleAssign(task.id, e.target.value)}
+                          style={{
+                            fontSize: '11px', color: '#0f172a', fontWeight: 600,
+                            background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '6px',
+                            padding: '2px 5px', outline: 'none', cursor: 'pointer', maxWidth: '105px'
+                          }}
+                        >
+                          <option value="">👤 Unassigned</option>
+                          {partners.map(p => <option key={p.id} value={p.id}>{p.username}</option>)}
+                        </select>
+                      ) : (
+                        <span style={{ fontWeight: 600, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          👤 {(() => {
+                            const activePartnerIds = task.assigned_partners && task.assigned_partners.length > 0 
+                              ? task.assigned_partners 
+                              : (task.assigned_to ? [task.assigned_to] : []);
+                            const allNames = activePartnerIds.map((id: string) => partners.find((p: any) => p.id === id)?.username).filter(Boolean);
+                            return allNames.length > 0 ? allNames.join(', ') : 'Unassigned';
+                          })()}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Auditor */}
+                    {isAdminUser ? (
+                      <select
+                        value={task.auditor_id || ''}
+                        onChange={e => handleAssignAuditor(task.id, e.target.value)}
+                        style={{
+                          fontSize: '11px', color: '#475569', fontWeight: 500,
+                          background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '6px',
+                          padding: '2px 5px', outline: 'none', cursor: 'pointer', maxWidth: '95px'
+                        }}
+                      >
+                        <option value="">🏛️ No Auditor</option>
+                        {auditors.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                      </select>
+                    ) : (
+                      task.auditor_id && (
+                        <span style={{ color: '#475569', fontSize: '11px' }}>
+                          🏛️ {auditors.find(a => a.id === task.auditor_id)?.name}
+                        </span>
+                      )
+                    )}
+                  </div>
+
+                  {/* Right: Due Date */}
+                  <div style={{ flexShrink: 0, fontWeight: 600, fontSize: '11px', color: task.deadline ? '#334155' : '#94a3b8', fontFamily: 'ui-monospace, monospace' }}>
+                    📅 {task.deadline || 'No date'}
+                  </div>
+                </div>
+              </div>
+            );
+          })
+        )}
       </div>
 
 
@@ -2885,6 +3620,415 @@ export default function BahrainTasks() {
         </div>,
         document.body
       )}
+
+      {/* ─── Floating Bottom Batch Action Dock (Expert UI) ─── */}
+      {selectedTaskIds.length > 0 && (
+        <div style={{
+          position: 'fixed',
+          bottom: '20px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 900,
+          background: 'rgba(15, 23, 42, 0.95)',
+          backdropFilter: 'blur(16px)',
+          WebkitBackdropFilter: 'blur(16px)',
+          color: '#ffffff',
+          borderRadius: '18px',
+          padding: '10px 16px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px',
+          boxShadow: '0 16px 40px rgba(0,0,0,0.35), 0 0 0 1px rgba(255,255,255,0.12)',
+          animation: 'fadeIn 0.2s ease-out',
+          width: 'max-content',
+          maxWidth: 'calc(100vw - 24px)',
+          flexWrap: 'wrap',
+          justifyContent: 'center'
+        }}>
+          {/* Selected count badge */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingRight: '12px', borderRight: '1px solid rgba(255,255,255,0.15)' }}>
+            <span style={{
+              background: 'linear-gradient(135deg, #3b82f6, #2563eb)',
+              color: '#ffffff',
+              padding: '3px 9px',
+              borderRadius: '20px',
+              fontSize: '12px',
+              fontWeight: 700,
+            }}>
+              {selectedTaskIds.length}
+            </span>
+            <span style={{ fontSize: '13px', fontWeight: 600, color: '#f8fafc', whiteSpace: 'nowrap' }}>
+              Tasks Selected
+            </span>
+          </div>
+
+          {/* Quick Select All / Deselect buttons */}
+          <div style={{ display: 'flex', gap: '6px' }}>
+            {!isAllFilteredSelected ? (
+              <button
+                onClick={selectAllFiltered}
+                style={{
+                  background: 'rgba(255,255,255,0.1)',
+                  color: '#e2e8f0',
+                  border: 'none',
+                  borderRadius: '8px',
+                  padding: '6px 11px',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                  whiteSpace: 'nowrap',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.2)'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; }}
+              >
+                Select All ({filtered.length})
+              </button>
+            ) : (
+              <button
+                onClick={deselectAll}
+                style={{
+                  background: 'rgba(255,255,255,0.1)',
+                  color: '#e2e8f0',
+                  border: 'none',
+                  borderRadius: '8px',
+                  padding: '6px 11px',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                  whiteSpace: 'nowrap',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.2)'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; }}
+              >
+                Deselect All
+              </button>
+            )}
+          </div>
+
+          {/* Primary WhatsApp Share Button */}
+          <button
+            onClick={() => { setShowBulkWhatsAppModal(true); setBulkWaCopied(false); }}
+            style={{
+              background: 'linear-gradient(135deg, #25D366 0%, #128C7E 100%)',
+              color: '#ffffff',
+              border: 'none',
+              borderRadius: '10px',
+              padding: '8px 16px',
+              fontSize: '13px',
+              fontWeight: 700,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              boxShadow: '0 4px 14px rgba(37,211,102,0.35)',
+              transition: 'all 0.15s ease',
+              whiteSpace: 'nowrap',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.03)'; }}
+            onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; }}
+          >
+            <Send size={14} /> Share via WhatsApp
+          </button>
+
+          {/* Export Selected to Excel Button */}
+          <button
+            onClick={() => handleExportExcel('selected')}
+            style={{
+              background: 'rgba(59, 130, 246, 0.25)',
+              color: '#93c5fd',
+              border: '1px solid rgba(96, 165, 250, 0.35)',
+              borderRadius: '10px',
+              padding: '8px 14px',
+              fontSize: '12.5px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              transition: 'all 0.15s ease',
+              whiteSpace: 'nowrap',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(59, 130, 246, 0.4)'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(59, 130, 246, 0.25)'; }}
+          >
+            <FileSpreadsheet size={14} /> Export Selected ({selectedTaskIds.length})
+          </button>
+
+          {/* Close Selection */}
+          <button
+            onClick={() => { setMultiSelectMode(false); setSelectedTaskIds([]); }}
+            style={{
+              background: 'transparent',
+              color: '#94a3b8',
+              border: 'none',
+              borderRadius: '8px',
+              padding: '6px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'color 0.15s ease',
+            }}
+            title="Exit Selection Mode"
+            onMouseEnter={e => { e.currentTarget.style.color = '#ffffff'; }}
+            onMouseLeave={e => { e.currentTarget.style.color = '#94a3b8'; }}
+          >
+            <X size={16} />
+          </button>
+        </div>
+      )}
+
+      {/* ─── Multiple Selection Bulk WhatsApp Share Modal (Expert UI) ─── */}
+      {showBulkWhatsAppModal && (
+        <Modal
+          title=""
+          onClose={() => setShowBulkWhatsAppModal(false)}
+        >
+          {(() => {
+            const selectedTasks = tasks.filter(t => selectedTaskIds.includes(t.id));
+            const message = buildBulkWhatsAppMessage();
+
+            return (
+              <div style={{ padding: '4px 0' }}>
+                {/* Modal Header */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px', paddingBottom: '16px', borderBottom: '1px solid #f1f5f9' }}>
+                  <div style={{ width: '44px', height: '44px', borderRadius: '12px', background: 'linear-gradient(135deg, #dcfce7, #bbf7d0)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="#25D366">
+                      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+                    </svg>
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#0f172a', margin: 0, letterSpacing: '-0.3px' }}>
+                        Share Selected Tasks via WhatsApp
+                      </h3>
+                      <span style={{ background: '#dbeafe', color: '#1d4ed8', fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '12px' }}>
+                        {selectedTasks.length} Selected
+                      </span>
+                    </div>
+                    <p style={{ fontSize: '13px', color: '#64748b', margin: '3px 0 0' }}>
+                      Configure layout, grouping, and format directly for WhatsApp
+                    </p>
+                  </div>
+                </div>
+
+                {/* Configuration Options */}
+                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '14px', padding: '16px', marginBottom: '18px' }}>
+                  {/* Group By selector */}
+                  <div style={{ marginBottom: '14px' }}>
+                    <label style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', color: '#475569', letterSpacing: '0.5px', display: 'block', marginBottom: '8px' }}>
+                      Group Tasks By
+                    </label>
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                      {[
+                        { id: 'status', label: 'Status' },
+                        { id: 'partner', label: 'Assignee' },
+                        { id: 'company', label: 'Company' },
+                        { id: 'flat', label: 'Flat List' },
+                      ].map(g => (
+                        <button
+                          key={g.id}
+                          onClick={() => setBulkWaGroupBy(g.id as any)}
+                          style={{
+                            padding: '7px 14px',
+                            borderRadius: '8px',
+                            border: bulkWaGroupBy === g.id ? '1.5px solid #2563eb' : '1px solid #cbd5e1',
+                            background: bulkWaGroupBy === g.id ? '#eff6ff' : '#ffffff',
+                            color: bulkWaGroupBy === g.id ? '#1d4ed8' : '#475569',
+                            fontWeight: bulkWaGroupBy === g.id ? 700 : 500,
+                            fontSize: '12px',
+                            cursor: 'pointer',
+                            transition: 'all 0.15s ease',
+                          }}
+                        >
+                          {g.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Include Fields Toggles */}
+                  <div style={{ marginBottom: '14px' }}>
+                    <label style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', color: '#475569', letterSpacing: '0.5px', display: 'block', marginBottom: '8px' }}>
+                      Include Fields
+                    </label>
+                    <div style={{ display: 'flex', gap: '14px', flexWrap: 'wrap' }}>
+                      {[
+                        { label: 'CR Number', state: bulkWaIncludeCr, setter: setBulkWaIncludeCr },
+                        { label: 'Description', state: bulkWaIncludeDesc, setter: setBulkWaIncludeDesc },
+                        { label: 'Priority', state: bulkWaIncludePriority, setter: setBulkWaIncludePriority },
+                        { label: 'Due Date', state: bulkWaIncludeDueDate, setter: setBulkWaIncludeDueDate },
+                        { label: 'Auditor', state: bulkWaIncludeAuditor, setter: setBulkWaIncludeAuditor },
+                        { label: 'Assigned To', state: bulkWaIncludeAssigned, setter: setBulkWaIncludeAssigned },
+                      ].map(f => (
+                        <label key={f.label} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#334155', cursor: 'pointer', fontWeight: 500 }}>
+                          <input
+                            type="checkbox"
+                            checked={f.state}
+                            onChange={e => f.setter(e.target.checked)}
+                            style={{ cursor: 'pointer', accentColor: '#2563eb' }}
+                          />
+                          {f.label}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Custom Header Note */}
+                  <div>
+                    <label style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', color: '#475569', letterSpacing: '0.5px', display: 'block', marginBottom: '6px' }}>
+                      Custom Announcement / Header (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      value={bulkWaCustomNote}
+                      onChange={e => setBulkWaCustomNote(e.target.value)}
+                      placeholder="e.g. Action Required: Weekly Compliance Update"
+                      style={{
+                        width: '100%',
+                        padding: '8px 12px',
+                        borderRadius: '8px',
+                        border: '1px solid #cbd5e1',
+                        fontSize: '12.5px',
+                        outline: 'none',
+                        background: '#ffffff',
+                        color: '#0f172a',
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {/* Message Preview Box */}
+                <div style={{ marginBottom: '20px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', color: '#64748b', letterSpacing: '0.5px' }}>
+                      WhatsApp Message Preview
+                    </span>
+                    <span style={{ fontSize: '11px', color: '#94a3b8', fontFamily: 'monospace' }}>
+                      {message.length} chars · {message.split('\n').length} lines
+                    </span>
+                  </div>
+                  <pre style={{
+                    background: '#0f172a',
+                    color: '#e2e8f0',
+                    padding: '16px',
+                    borderRadius: '12px',
+                    fontSize: '12px',
+                    lineHeight: '1.6',
+                    maxHeight: '260px',
+                    overflowY: 'auto',
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                    border: '1px solid #334155',
+                    boxShadow: 'inset 0 2px 6px rgba(0,0,0,0.3)',
+                    margin: 0,
+                  }}>
+                    {message}
+                  </pre>
+                </div>
+
+                {/* Action Buttons */}
+                <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', paddingTop: '16px', borderTop: '1px solid #f1f5f9' }}>
+                  <button
+                    onClick={() => setShowBulkWhatsAppModal(false)}
+                    style={{
+                      padding: '10px 18px',
+                      background: '#f1f5f9',
+                      color: '#475569',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: '10px',
+                      cursor: 'pointer',
+                      fontWeight: 600,
+                      fontSize: '13px',
+                      transition: 'all 0.15s ease',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.background = '#e2e8f0'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = '#f1f5f9'; }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(message);
+                      setBulkWaCopied(true);
+                      setTimeout(() => setBulkWaCopied(false), 2500);
+                    }}
+                    style={{
+                      padding: '10px 18px',
+                      background: bulkWaCopied ? '#ecfdf5' : '#ffffff',
+                      color: bulkWaCopied ? '#059669' : '#0f172a',
+                      border: bulkWaCopied ? '1px solid #a7f3d0' : '1px solid #cbd5e1',
+                      borderRadius: '10px',
+                      cursor: 'pointer',
+                      fontWeight: 600,
+                      fontSize: '13px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    {bulkWaCopied ? <><Check size={15} /> Copied!</> : <><Copy size={15} /> Copy Message</>}
+                  </button>
+                  <button
+                    onClick={() => {
+                      window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, '_blank');
+                    }}
+                    style={{
+                      padding: '10px 22px',
+                      background: 'linear-gradient(135deg, #25D366, #128C7E)',
+                      color: '#ffffff',
+                      border: 'none',
+                      borderRadius: '10px',
+                      cursor: 'pointer',
+                      fontWeight: 700,
+                      fontSize: '13px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      boxShadow: '0 4px 14px rgba(37,211,102,0.35)',
+                      transition: 'all 0.2s ease',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 6px 20px rgba(37,211,102,0.45)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 4px 14px rgba(37,211,102,0.35)'; }}
+                  >
+                    <Send size={15} /> Share via WhatsApp
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
+        </Modal>
+      )}
+
+      {/* ─── Export Success Toast ─── */}
+      {exportToast && (
+        <div style={{
+          position: 'fixed',
+          top: '24px',
+          right: '24px',
+          zIndex: 9999,
+          background: 'linear-gradient(135deg, #0f172a, #1e293b)',
+          color: '#ffffff',
+          padding: '12px 20px',
+          borderRadius: '14px',
+          boxShadow: '0 10px 30px rgba(0,0,0,0.25), 0 0 0 1px rgba(255,255,255,0.1)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px',
+          fontSize: '13.5px',
+          fontWeight: 600,
+          animation: 'fadeIn 0.2s ease-out',
+        }}>
+          <div style={{ width: '24px', height: '24px', borderRadius: '50%', background: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Check size={14} color="#ffffff" />
+          </div>
+          {exportToast}
+        </div>
+      )}
     </div>
   );
 }
@@ -3037,27 +4181,27 @@ function FormField({ label, children }: { label: string; children: React.ReactNo
 }
 
 const filterStyle: React.CSSProperties = {
-  padding: '7px 10px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '12px',
+  padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '12px',
   background: '#ffffff', color: '#1e293b', outline: 'none', transition: 'all 0.15s ease',
   boxShadow: '0 1px 2px rgba(0,0,0,0.02)', fontWeight: 500, flex: '1 1 120px', minWidth: '115px'
 };
 
 const compactCell: React.CSSProperties = {
-  padding: '8px 8px', fontSize: '12px', verticalAlign: 'middle', color: '#334155',
+  padding: '9px 7px', fontSize: '12px', verticalAlign: 'middle', color: '#334155',
 };
 
 const cellStyle: React.CSSProperties = {
-  padding: '8px 8px', fontSize: '12px', verticalAlign: 'middle', color: '#334155',
+  padding: '9px 7px', fontSize: '12px', verticalAlign: 'middle', color: '#334155',
 };
 
 const dropdownStyle: React.CSSProperties = {
-  padding: '4px 6px', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '11px',
+  padding: '4px 7px', border: '1px solid #e2e8f0', borderRadius: '7px', fontSize: '11px',
   width: '100%', minWidth: '100px', cursor: 'pointer', background: '#f8fafc', color: '#1e293b', outline: 'none',
   transition: 'all 0.15s ease', fontWeight: 500,
 };
 
 const inputStyle: React.CSSProperties = {
-  padding: '10px 14px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '13.5px',
+  padding: '10px 14px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '13px',
   width: '100%', background: '#ffffff', color: '#0f172a', outline: 'none',
   transition: 'border-color 0.15s ease, box-shadow 0.15s ease', fontWeight: 500,
 };

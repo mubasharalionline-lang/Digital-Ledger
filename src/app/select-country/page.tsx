@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { getSession, setSession } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
 import { Globe, Plus, X, Loader2 } from 'lucide-react';
+import CountryFlag from '@/components/CountryFlag';
 
 interface CountryRecord { id: string; code: string; name: string; flag: string; }
 
@@ -85,7 +86,7 @@ export default function SelectCountryPage() {
               }}
               onMouseEnter={e => { e.currentTarget.style.borderColor = '#0071e3'; e.currentTarget.style.background = '#f0f6ff'; }}
               onMouseLeave={e => { e.currentTarget.style.borderColor = '#e8e8ed'; e.currentTarget.style.background = '#fff'; }}>
-                <span style={{ fontSize: '28px' }}>{c.flag}</span>
+                <CountryFlag code={c.code} name={c.name} flagEmoji={c.flag} size={28} />
                 <div style={{ textAlign: 'left' }}>
                   <div style={{ fontWeight: 600 }}>{c.name}</div>
                   <div style={{ fontSize: '12px', color: '#86868b', fontWeight: 400 }}>{c.code}</div>
