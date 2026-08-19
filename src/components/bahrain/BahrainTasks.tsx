@@ -2272,7 +2272,7 @@ export default function BahrainTasks() {
                       if (!updateDate || !task.description || task.description.trim() === '') {
                         return <span style={{ fontSize: '10px', color: '#cbd5e1' }}>—</span>;
                       }
-                      const isRecent = descUpdateMap[task.id] && (Date.now() - new Date(descUpdateMap[task.id]).getTime() < 7 * 24 * 60 * 60 * 1000);
+                      const isRecent = descUpdateMap[task.id] && (Date.now() - new Date(descUpdateMap[task.id]).getTime() < 24 * 60 * 60 * 1000);
                       return (
                         <span
                           title={`Last updated: ${new Date(updateDate).toLocaleString()}`}
