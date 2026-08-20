@@ -25,12 +25,12 @@ export interface TaskColumnConfig {
 export const DEFAULT_TASK_COLUMNS: TaskColumnConfig[] = [
   {
     id: 'pl',
-    label: 'PL Status',
-    shortLabel: 'PL',
-    description: 'Uploaded PL status badge (Yes / No)',
-    align: 'center',
+    label: 'PL Date',
+    shortLabel: 'PL Date',
+    description: 'Proposal / Engagement Letter Date',
+    align: 'left',
     visible: true,
-    minWidth: '48px'
+    minWidth: '95px'
   },
   {
     id: 'company',

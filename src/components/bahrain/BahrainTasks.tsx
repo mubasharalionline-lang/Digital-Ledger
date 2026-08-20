@@ -20,7 +20,8 @@ import {
   BarChart3, PieChart, Activity, ArrowRight, TrendingUp, Building2, Share2,
   MessageSquare, Copy, Send, Search, ListTodo, FileSpreadsheet, CheckSquare,
   Square, Download, ChevronDown, ChevronLeft, ChevronRight, ExternalLink, Link2,
-  SlidersHorizontal, Columns3, RotateCcw, XCircle, Sparkles, Filter, FileCheck2, FileX2, CheckCheck
+  SlidersHorizontal, Columns3, RotateCcw, XCircle, Sparkles, Filter, FileCheck2, FileX2, CheckCheck,
+  Calendar
 } from 'lucide-react';
 import { EGRESS_OPTIMIZATION_MODE } from '@/lib/optimizationConfig';
 import { exportTaskManagementExcel } from '@/lib/reportExportUtils';
@@ -138,11 +139,16 @@ export default function BahrainTasks() {
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [newTask, setNewTask] = useState({
-    company_id: '', task_type_id: '', task_type_ids: [] as string[], priority: 'Medium', status: '', auditor_id: '', deadline: '', description: '', assigned_to: '', assigned_partners: [] as string[]
+    company_id: '', task_type_id: '', task_type_ids: [] as string[], priority: 'Medium', status: '', auditor_id: '', deadline: '', pl_date: '', description: '', assigned_to: '', assigned_partners: [] as string[]
   });
 
   // Task Detail modal
   const [detailTask, setDetailTask] = useState<Task | null>(null);
+
+  // Inline PL Date Edit states
+  const [inlineEditPlTaskId, setInlineEditPlTaskId] = useState<string | null>(null);
+  const [inlineEditPlValue, setInlineEditPlValue] = useState('');
+  const [hoveredPlTaskId, setHoveredPlTaskId] = useState<string | null>(null);
 
   // Inline Description Edit states
   const [inlineEditDescId, setInlineEditDescId] = useState<string | null>(null);
@@ -389,8 +395,14 @@ export default function BahrainTasks() {
       const companyIds = companyList.map(c => c.id);
       let taskList: Task[] = [];
       if (companyIds.length > 0) {
-        const { data: t } = await supabase.from('tasks').select('id, title, company_id, assigned_to, assigned_partners, status, priority, deadline, admin_note, task_type_id, task_type_ids, auditor_id, description, is_daily, country, pl_uploaded, created_at').in('company_id', companyIds).neq('is_daily', true);
-        taskList = t || [];
+        const { data: t, error: tErr } = await supabase.from('tasks').select('id, title, company_id, assigned_to, assigned_partners, status, priority, deadline, admin_note, task_type_id, task_type_ids, auditor_id, description, is_daily, country, pl_uploaded, pl_date, created_at').in('company_id', companyIds).neq('is_daily', true);
+        if (tErr) {
+          console.warn('pl_date column query fallback:', tErr.message);
+          const { data: fallbackTasks } = await supabase.from('tasks').select('id, title, company_id, assigned_to, assigned_partners, status, priority, deadline, admin_note, task_type_id, task_type_ids, auditor_id, description, is_daily, country, pl_uploaded, created_at').in('company_id', companyIds).neq('is_daily', true);
+          taskList = fallbackTasks || [];
+        } else {
+          taskList = t || [];
+        }
       }
 
       let filteredTaskList = taskList;
@@ -644,6 +656,7 @@ export default function BahrainTasks() {
       status: task.status || '',
       auditor_id: task.auditor_id || '',
       deadline: task.deadline || '',
+      pl_date: task.pl_date || '',
       description: task.description || '',
       assigned_to: task.assigned_to || '',
       assigned_partners: task.assigned_partners || (task.assigned_to ? [task.assigned_to] : [])
@@ -736,6 +749,48 @@ export default function BahrainTasks() {
       }
       sessionStorage.removeItem('tasks_data_time');
     });
+  }
+
+  // Update PL Date
+  function handlePlDateChange(taskId: string, newDate: string | null) {
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return;
+    const formattedDate = newDate && newDate.trim() !== '' ? newDate.trim() : null;
+    const previousDate = task.pl_date || null;
+    const previousUploaded = task.pl_uploaded;
+    if (formattedDate === previousDate && inlineEditPlTaskId !== taskId) {
+      setInlineEditPlTaskId(null);
+      return;
+    }
+
+    const newUploaded = !!formattedDate;
+
+    // Optimistic update
+    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, pl_date: formattedDate, pl_uploaded: newUploaded } : t));
+    setInlineEditPlTaskId(null);
+
+    // Update in Supabase
+    supabase.from('tasks')
+      .update({ pl_date: formattedDate, pl_uploaded: newUploaded })
+      .eq('id', taskId)
+      .select('id')
+      .then(({ data, error }) => {
+        if (error) {
+          console.warn('Failed to update pl_date, attempting pl_uploaded fallback:', error.message);
+          supabase.from('tasks').update({ pl_uploaded: newUploaded }).eq('id', taskId).select('id').then(({ error: fbErr }) => {
+            if (fbErr) console.error('pl_uploaded fallback error:', fbErr);
+          });
+          return;
+        }
+        if (!data || data.length === 0) {
+          console.warn('Update blocked by RLS, attempting pl_uploaded fallback');
+          supabase.from('tasks').update({ pl_uploaded: newUploaded }).eq('id', taskId).select('id').then(({ error: fbErr }) => {
+            if (fbErr) console.error('pl_uploaded fallback error:', fbErr);
+          });
+          return;
+        }
+        sessionStorage.removeItem('tasks_data_time');
+      });
   }
 
   // Save inline description
@@ -1065,6 +1120,8 @@ export default function BahrainTasks() {
         status: firstStatus,
         auditor_id: newTask.auditor_id || null,
         deadline: newTask.deadline,
+        pl_date: newTask.pl_date && newTask.pl_date.trim() !== '' ? newTask.pl_date.trim() : null,
+        pl_uploaded: !!(newTask.pl_date && newTask.pl_date.trim() !== ''),
         description: desc,
         assigned_to: assignTo,
         assigned_partners: assignArray,
@@ -1079,6 +1136,8 @@ export default function BahrainTasks() {
         task_type_ids: typeIds,
         priority: newTask.priority,
         deadline: newTask.deadline,
+        pl_date: newTask.pl_date && newTask.pl_date.trim() !== '' ? newTask.pl_date.trim() : null,
+        pl_uploaded: !!(newTask.pl_date && newTask.pl_date.trim() !== ''),
         description: desc,
         assigned_to: assignTo,
         assigned_partners: assignArray,
@@ -1146,7 +1205,7 @@ export default function BahrainTasks() {
 
     setShowTaskModal(false);
     setEditingTaskId(null);
-    setNewTask({ company_id: '', task_type_id: '', task_type_ids: [], priority: 'Medium', status: '', auditor_id: '', deadline: '', description: '', assigned_to: '', assigned_partners: [] });
+    setNewTask({ company_id: '', task_type_id: '', task_type_ids: [], priority: 'Medium', status: '', auditor_id: '', deadline: '', pl_date: '', description: '', assigned_to: '', assigned_partners: [] });
 
     sessionStorage.removeItem('tasks_data_cache');
     sessionStorage.removeItem('tasks_data_time');
@@ -1453,7 +1512,7 @@ export default function BahrainTasks() {
 
           {(isAdminUser || userAuditorAccess.length > 0) && (
             <button
-              onClick={() => { setEditingTaskId(null); setNewTask({ company_id: '', task_type_id: '', task_type_ids: [], priority: 'Medium', status: '', auditor_id: '', deadline: '', description: '', assigned_to: '', assigned_partners: [] }); setShowTaskModal(true); }}
+              onClick={() => { setEditingTaskId(null); setNewTask({ company_id: '', task_type_id: '', task_type_ids: [], priority: 'Medium', status: '', auditor_id: '', deadline: '', pl_date: '', description: '', assigned_to: '', assigned_partners: [] }); setShowTaskModal(true); }}
               style={{
                 display: 'flex', alignItems: 'center', gap: '8px',
                 padding: '10px 20px', background: '#ffffff', color: '#0f172a',
@@ -2971,8 +3030,8 @@ export default function BahrainTasks() {
                         fontSize: '10.5px', fontWeight: 700, textTransform: 'uppercase',
                         letterSpacing: '0.05em', color: '#475569', whiteSpace: 'nowrap',
                         borderBottom: '1.5px solid #e2e8f0',
-                        width: isActions ? '32px' : (isPl ? '56px' : undefined),
-                        minWidth: isActions ? '32px' : (col.minWidth || 'auto'),
+                        width: isActions ? '32px' : (isPl ? '110px' : undefined),
+                        minWidth: isActions ? '32px' : (isPl ? '100px' : (col.minWidth || 'auto')),
                         maxWidth: isActions ? '36px' : undefined
                       }}>
                         {isActions ? '' : (col.shortLabel !== undefined && col.shortLabel !== '' ? col.shortLabel : col.label)}
@@ -3031,50 +3090,139 @@ export default function BahrainTasks() {
                     {visibleColumns.map((col) => {
                       switch (col.id) {
                         case 'pl':
+                          const isEditingPl = inlineEditPlTaskId === task.id;
                           return (
-                            <td key={`pl-${task.id}`} style={{ ...compactCell, textAlign: 'center', width: '56px', padding: '6px 4px' }}>
-                              <button
-                                onClick={() => handlePlUploadedToggle(task.id)}
-                                title={task.pl_uploaded ? 'Engagement Letter (PL): Signed & Uploaded (Click to toggle)' : 'Engagement Letter (PL): Pending / Not Signed (Click to toggle)'}
-                                style={{
-                                  padding: '3.5px 7.5px',
-                                  borderRadius: '8px',
-                                  border: task.pl_uploaded ? '1px solid #10b981' : '1px solid #fda4af',
-                                  cursor: 'pointer',
-                                  fontSize: '11px',
-                                  fontWeight: 700,
-                                  letterSpacing: '0.01em',
-                                  transition: 'all 0.15s ease',
-                                  background: task.pl_uploaded ? 'linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%)' : 'linear-gradient(135deg, #fff1f2 0%, #ffe4e6 100%)',
-                                  color: task.pl_uploaded ? '#047857' : '#e11d48',
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  gap: '4px',
-                                  whiteSpace: 'nowrap',
-                                  boxShadow: task.pl_uploaded ? '0 1px 3px rgba(16, 185, 129, 0.18)' : '0 1px 2px rgba(225, 29, 72, 0.08)'
-                                }}
-                                onMouseEnter={e => {
-                                  e.currentTarget.style.transform = 'translateY(-1px)';
-                                  e.currentTarget.style.boxShadow = task.pl_uploaded ? '0 3px 8px rgba(16, 185, 129, 0.28)' : '0 3px 8px rgba(225, 29, 72, 0.18)';
-                                }}
-                                onMouseLeave={e => {
-                                  e.currentTarget.style.transform = 'none';
-                                  e.currentTarget.style.boxShadow = task.pl_uploaded ? '0 1px 3px rgba(16, 185, 129, 0.18)' : '0 1px 2px rgba(225, 29, 72, 0.08)';
-                                }}
-                              >
-                                {task.pl_uploaded ? (
-                                  <>
-                                    <CheckCircle2 size={12} strokeWidth={2.6} color="#059669" />
-                                    <span>Yes</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <XCircle size={12} strokeWidth={2.2} color="#e11d48" />
-                                    <span>No</span>
-                                  </>
-                                )}
-                              </button>
+                            <td
+                              key={`pl-${task.id}`}
+                              style={{ ...compactCell, width: '110px', minWidth: '100px', padding: '5px 8px' }}
+                              onMouseEnter={() => setHoveredPlTaskId(task.id)}
+                              onMouseLeave={() => setHoveredPlTaskId(null)}
+                            >
+                              {isEditingPl ? (
+                                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }} onClick={e => e.stopPropagation()}>
+                                  <input
+                                    type="date"
+                                    autoFocus
+                                    value={inlineEditPlValue}
+                                    onChange={e => setInlineEditPlValue(e.target.value)}
+                                    onBlur={() => handlePlDateChange(task.id, inlineEditPlValue)}
+                                    onKeyDown={e => {
+                                      if (e.key === 'Enter') handlePlDateChange(task.id, inlineEditPlValue);
+                                      if (e.key === 'Escape') setInlineEditPlTaskId(null);
+                                    }}
+                                    style={{
+                                      padding: '2px 4px',
+                                      borderRadius: '6px',
+                                      border: '1.5px solid #2563eb',
+                                      fontSize: '11px',
+                                      fontWeight: 600,
+                                      outline: 'none',
+                                      background: '#ffffff',
+                                      color: '#0f172a',
+                                      fontFamily: 'ui-monospace, monospace',
+                                      boxShadow: '0 2px 8px rgba(37,99,235,0.2)',
+                                      maxWidth: '115px'
+                                    }}
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={e => {
+                                      e.stopPropagation();
+                                      handlePlDateChange(task.id, null);
+                                    }}
+                                    title="Clear PL Date"
+                                    style={{
+                                      background: '#fee2e2',
+                                      border: 'none',
+                                      borderRadius: '4px',
+                                      color: '#dc2626',
+                                      cursor: 'pointer',
+                                      padding: '3px 4px',
+                                      display: 'flex',
+                                      alignItems: 'center'
+                                    }}
+                                  >
+                                    <X size={10} />
+                                  </button>
+                                </div>
+                              ) : task.pl_date ? (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setInlineEditPlTaskId(task.id);
+                                    setInlineEditPlValue(task.pl_date || '');
+                                  }}
+                                  title={`PL Date: ${task.pl_date} (Click to edit)`}
+                                  style={{
+                                    padding: '3px 7px',
+                                    borderRadius: '7px',
+                                    border: '1px solid #bfdbfe',
+                                    cursor: 'pointer',
+                                    fontSize: '11px',
+                                    fontWeight: 600,
+                                    transition: 'all 0.15s ease',
+                                    background: '#eff6ff',
+                                    color: '#1d4ed8',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px',
+                                    whiteSpace: 'nowrap',
+                                    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+                                    boxShadow: '0 1px 2px rgba(37,99,235,0.05)'
+                                  }}
+                                  onMouseEnter={e => {
+                                    e.currentTarget.style.transform = 'translateY(-1px)';
+                                    e.currentTarget.style.borderColor = '#3b82f6';
+                                    e.currentTarget.style.boxShadow = '0 3px 8px rgba(37,99,235,0.15)';
+                                  }}
+                                  onMouseLeave={e => {
+                                    e.currentTarget.style.transform = 'none';
+                                    e.currentTarget.style.borderColor = '#bfdbfe';
+                                    e.currentTarget.style.boxShadow = '0 1px 2px rgba(37,99,235,0.05)';
+                                  }}
+                                >
+                                  <Calendar size={11} color="#2563eb" />
+                                  <span>{task.pl_date}</span>
+                                  {hoveredPlTaskId === task.id && <Edit2 size={9} color="#3b82f6" style={{ marginLeft: '1px' }} />}
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setInlineEditPlTaskId(task.id);
+                                    setInlineEditPlValue(new Date().toISOString().split('T')[0]);
+                                  }}
+                                  title="Set Proposal / Engagement Letter Date"
+                                  style={{
+                                    padding: '2.5px 6px',
+                                    borderRadius: '6px',
+                                    border: '1px dashed #cbd5e1',
+                                    cursor: 'pointer',
+                                    fontSize: '10.5px',
+                                    fontWeight: 550,
+                                    transition: 'all 0.15s ease',
+                                    background: 'transparent',
+                                    color: '#94a3b8',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px',
+                                    whiteSpace: 'nowrap'
+                                  }}
+                                  onMouseEnter={e => {
+                                    e.currentTarget.style.borderColor = '#3b82f6';
+                                    e.currentTarget.style.color = '#2563eb';
+                                    e.currentTarget.style.background = '#f0f7ff';
+                                  }}
+                                  onMouseLeave={e => {
+                                    e.currentTarget.style.borderColor = '#cbd5e1';
+                                    e.currentTarget.style.color = '#94a3b8';
+                                    e.currentTarget.style.background = 'transparent';
+                                  }}
+                                >
+                                  <Calendar size={10} />
+                                  <span>Set Date</span>
+                                </button>
+                              )}
                             </td>
                           );
 
@@ -4009,28 +4157,57 @@ export default function BahrainTasks() {
                     </span>
                   )}
 
-                  {/* PL Uploaded Pill */}
-                  <button
-                    onClick={() => handlePlUploadedToggle(task.id)}
-                    title={task.pl_uploaded ? 'Engagement Letter (PL): Signed (Click to toggle)' : 'Engagement Letter (PL): Pending (Click to toggle)'}
-                    style={{
-                      padding: '3px 8px',
-                      borderRadius: '8px',
-                      border: task.pl_uploaded ? '1px solid #10b981' : '1px solid #fda4af',
-                      cursor: 'pointer',
-                      fontSize: '11px',
-                      fontWeight: 700,
-                      background: task.pl_uploaded ? '#ecfdf5' : '#fff1f2',
-                      color: task.pl_uploaded ? '#047857' : '#e11d48',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                      boxShadow: task.pl_uploaded ? '0 1px 2px rgba(16, 185, 129, 0.15)' : '0 1px 2px rgba(225, 29, 72, 0.08)'
-                    }}
-                  >
-                    {task.pl_uploaded ? <CheckCircle2 size={12} strokeWidth={2.6} color="#059669" /> : <XCircle size={12} strokeWidth={2.2} color="#e11d48" />}
-                    <span>PL: {task.pl_uploaded ? 'Yes' : 'No'}</span>
-                  </button>
+                  {/* PL Date Pill */}
+                  {task.pl_date ? (
+                    <button
+                      onClick={() => {
+                        setInlineEditPlTaskId(task.id);
+                        setInlineEditPlValue(task.pl_date || '');
+                      }}
+                      title="PL Date (Click to change)"
+                      style={{
+                        padding: '2.5px 7px',
+                        borderRadius: '7px',
+                        border: '1px solid #bfdbfe',
+                        cursor: 'pointer',
+                        fontSize: '10.5px',
+                        fontWeight: 650,
+                        background: '#eff6ff',
+                        color: '#1d4ed8',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        fontFamily: 'ui-monospace, monospace'
+                      }}
+                    >
+                      <Calendar size={11} color="#2563eb" />
+                      <span>PL: {task.pl_date}</span>
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        setInlineEditPlTaskId(task.id);
+                        setInlineEditPlValue(new Date().toISOString().split('T')[0]);
+                      }}
+                      title="Set PL Date"
+                      style={{
+                        padding: '2.5px 7px',
+                        borderRadius: '7px',
+                        border: '1px dashed #cbd5e1',
+                        cursor: 'pointer',
+                        fontSize: '10.5px',
+                        fontWeight: 600,
+                        background: 'transparent',
+                        color: '#94a3b8',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px'
+                      }}
+                    >
+                      <Calendar size={11} />
+                      <span>PL: Set Date</span>
+                    </button>
+                  )}
 
                   {/* CR Number Monospace Chip */}
                   {company?.cr_number ? (
@@ -4546,6 +4723,9 @@ export default function BahrainTasks() {
             <FormField label="Due Date *">
               <input type="date" value={newTask.deadline} onChange={e => setNewTask(p => ({ ...p, deadline: e.target.value }))} style={inputStyle} />
             </FormField>
+            <FormField label="PL Date (Proposal Letter)">
+              <input type="date" value={newTask.pl_date} onChange={e => setNewTask(p => ({ ...p, pl_date: e.target.value }))} style={inputStyle} />
+            </FormField>
           </div>
           <div style={{ background: '#f8fafc', borderRadius: '14px', padding: '18px', marginBottom: '18px', border: '1px solid #f1f5f9' }}>
             <FormField label="📝 Description">
@@ -4612,6 +4792,15 @@ export default function BahrainTasks() {
             <div><strong>Priority:</strong> <span style={{ padding: '3px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: 600, background: priorityColor(detailTask.priority).bg, color: '#fff' }}>{detailTask.priority}</span></div>
             <div><strong>Status:</strong> <span style={{ padding: '3px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: 600, background: '#D6EAF8', color: '#3498DB' }}>{detailTask.status}</span></div>
             <div><strong>Due Date:</strong> {detailTask.deadline}</div>
+            <div>
+              <strong>PL Date:</strong> {detailTask.pl_date ? (
+                <span style={{ fontFamily: 'ui-monospace, monospace', fontWeight: 600, color: '#1d4ed8', background: '#eff6ff', padding: '2px 8px', borderRadius: '6px', border: '1px solid #bfdbfe', marginLeft: '6px' }}>
+                  📅 {detailTask.pl_date}
+                </span>
+              ) : (
+                <span style={{ color: '#94a3b8', marginLeft: '6px' }}>Not set</span>
+              )}
+            </div>
             <div><strong>Created:</strong> {detailTask.created_at?.slice(0, 10)}</div>
             <div><strong>Description Updated:</strong> {formatDescDate(descUpdateMap[detailTask.id] || (detailTask.description ? detailTask.created_at : null))}</div>
             <div style={{ gridColumn: '1 / -1' }}><strong>Description:</strong><br />{detailTask.description || 'No description'}</div>

@@ -175,7 +175,7 @@ export function exportTaskManagementExcel(
     const descUpdatedStr = updateDate ? new Date(updateDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '';
 
     return {
-      'PL': task.pl_uploaded ? 'Yes' : 'No',
+      'PL Date': task.pl_date || (task.pl_uploaded ? 'Yes' : ''),
       'Company': company?.company_name || 'Unknown',
       'CR Number': company?.cr_number || '',
       'CR Link': company?.cr_link || '',
