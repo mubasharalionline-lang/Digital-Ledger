@@ -1,8 +1,13 @@
--- Add pl_date column to tasks table
-ALTER TABLE tasks ADD COLUMN IF NOT EXISTS pl_date DATE;
+-- ==========================================================
+-- Add PL Date (Proposal Letter Date) column to tasks table
+-- Run this in your Supabase Project -> SQL Editor -> Run
+-- ==========================================================
 
--- Populate existing tasks pl_date from created_at where pl_uploaded is true (optional best effort)
--- UPDATE tasks SET pl_date = created_at::date WHERE pl_uploaded = true AND pl_date IS NULL;
+-- 1. Add pl_date column if it doesn't already exist
+ALTER TABLE public.tasks ADD COLUMN IF NOT EXISTS pl_date DATE;
 
--- Ensure explicit permissions according to Supabase policy rules
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.tasks TO anon, authenticated;
+-- 2. Force PostgREST to reload its schema cache immediately
+NOTIFY pgrst, 'reload schema';
+
+-- 3. Explicitly grant permissions according to Supabase Data API rules
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.tasks TO anon, authenticated, service_role;

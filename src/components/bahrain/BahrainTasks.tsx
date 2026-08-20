@@ -21,10 +21,10 @@ import {
   MessageSquare, Copy, Send, Search, ListTodo, FileSpreadsheet, CheckSquare,
   Square, Download, ChevronDown, ChevronLeft, ChevronRight, ExternalLink, Link2,
   SlidersHorizontal, Columns3, RotateCcw, XCircle, Sparkles, Filter, FileCheck2, FileX2, CheckCheck,
-  Calendar
+  Calendar, FolderOpen
 } from 'lucide-react';
 import { EGRESS_OPTIMIZATION_MODE } from '@/lib/optimizationConfig';
-import { exportTaskManagementExcel } from '@/lib/reportExportUtils';
+import { exportTaskManagementExcel, formatPlDateDisplay } from '@/lib/reportExportUtils';
 import CountryFlag from '@/components/CountryFlag';
 
 export default function BahrainTasks() {
@@ -161,6 +161,9 @@ export default function BahrainTasks() {
   const [inlineEditCrLinkValue, setInlineEditCrLinkValue] = useState('');
   const [savingCrTaskId, setSavingCrTaskId] = useState<string | null>(null);
   const [hoveredCrTaskId, setHoveredCrTaskId] = useState<string | null>(null);
+
+  // Hover state for Company Name & Drive Link
+  const [hoveredCompanyTaskId, setHoveredCompanyTaskId] = useState<string | null>(null);
 
   // Helper to safely format external URL
   const formatExternalUrl = (url?: string | null) => {
@@ -346,10 +349,14 @@ export default function BahrainTasks() {
       }
 
       const compsPromise = (async () => {
-        const res = await supabase.from('companies').select('id, company_name, notes, country, cr_number, cr_link, created_at').eq('country', dataCountry || 'Bahrain');
+        const res = await supabase.from('companies').select('id, company_name, notes, country, cr_number, cr_link, google_drive_link, created_at').eq('country', dataCountry || 'Bahrain');
         if (res.error) {
-          console.warn('Companies select with cr_link failed (column may not exist yet in DB), falling back...', res.error);
-          return supabase.from('companies').select('id, company_name, notes, country, cr_number, created_at').eq('country', dataCountry || 'Bahrain');
+          console.warn('Companies select with google_drive_link failed, falling back...', res.error);
+          const fb1 = await supabase.from('companies').select('id, company_name, notes, country, cr_number, cr_link, created_at').eq('country', dataCountry || 'Bahrain');
+          if (fb1.error) {
+            return supabase.from('companies').select('id, company_name, notes, country, cr_number, created_at').eq('country', dataCountry || 'Bahrain');
+          }
+          return fb1;
         }
         return res;
       })();
@@ -1035,7 +1042,7 @@ export default function BahrainTasks() {
     }
 
     if (listToExport.length === 0) {
-      alert('No tasks found to export.');
+      alert('No tasks to export.');
       return;
     }
 
@@ -1060,7 +1067,35 @@ export default function BahrainTasks() {
     }
   };
 
-  // Save new task
+  const handleExportTasks = () => {
+    const listToExport = selectedTaskIds.length > 0
+      ? tasks.filter(t => selectedTaskIds.includes(t.id))
+      : filtered;
+
+    if (listToExport.length === 0) {
+      alert('No tasks found to export.');
+      return;
+    }
+
+    try {
+      exportTaskManagementExcel(listToExport, {
+        tasks,
+        country: dataCountry || 'Bahrain',
+        companies,
+        taskTypes,
+        partners,
+        auditors,
+        descUpdateMap,
+      });
+      setExportToast(`Exported ${listToExport.length} task${listToExport.length === 1 ? '' : 's'} to Excel!`);
+      setTimeout(() => setExportToast(null), 4000);
+    } catch (e: any) {
+      console.error('Export error:', e);
+      alert('Error exporting tasks: ' + e.message);
+    }
+  };
+
+  // Save inline company in modal
   async function saveInlineCompany() {
     if (!inlineCompanyForm.name.trim()) { alert('Company name is required'); return; }
     setInlineCompanySaving(true);
@@ -1076,12 +1111,10 @@ export default function BahrainTasks() {
         status: 'Active',
       }).select().single();
       if (error) { alert('Error creating company: ' + error.message); setInlineCompanySaving(false); return; }
-      // Add the new company to the local list and auto-select it
       setCompanies(prev => [...prev, data].sort((a, b) => a.company_name.localeCompare(b.company_name)));
       setNewTask(p => ({ ...p, company_id: data.id }));
       setShowInlineCompanyForm(false);
       setInlineCompanyForm({ name: '', tax_registration: '', industry: '', compliance_type: '' });
-      // Invalidate caches
       sessionStorage.removeItem('tasks_data_time');
       sessionStorage.removeItem('dashboard_data_time_v2');
     } catch (err) {
@@ -1098,20 +1131,18 @@ export default function BahrainTasks() {
       return;
     }
 
-    // Use the first selected task type for backward-compatible fields
     const firstTt = taskTypes.find(t => t.id === typeIds[0]);
     const firstStatus = newTask.status || (firstTt?.status_options ? firstTt.status_options.split(',')[0].trim() : 'Not Started');
     const assignArray = newTask.assigned_partners || [];
     const assignTo = assignArray.length > 0 ? assignArray[0] : null;
     const desc = newTask.description && newTask.description.length > 0 ? newTask.description : null;
     const primaryTtId = typeIds.length > 0 ? typeIds[0] : null;
-    // Build a combined title from all selected types
     const combinedTitle = typeIds.map(id => taskTypes.find(t => t.id === id)?.name).filter(Boolean).join(', ') || 'Untitled';
 
     let resultError, resultData;
 
     if (editingTaskId) {
-      const { data, error } = await supabase.from('tasks').update({
+      let { data, error } = await supabase.from('tasks').update({
         title: combinedTitle,
         company_id: newTask.company_id,
         task_type_id: primaryTtId,
@@ -1126,10 +1157,31 @@ export default function BahrainTasks() {
         assigned_to: assignTo,
         assigned_partners: assignArray,
       }).eq('id', editingTaskId).select().single();
+
+      if (error && (error.message?.includes('pl_date') || error.message?.includes('schema cache'))) {
+        console.warn('pl_date column not in schema, retrying update without pl_date:', error.message);
+        const fallback = await supabase.from('tasks').update({
+          title: combinedTitle,
+          company_id: newTask.company_id,
+          task_type_id: primaryTtId,
+          task_type_ids: typeIds,
+          priority: newTask.priority,
+          status: firstStatus,
+          auditor_id: newTask.auditor_id || null,
+          deadline: newTask.deadline,
+          pl_uploaded: !!(newTask.pl_date && newTask.pl_date.trim() !== ''),
+          description: desc,
+          assigned_to: assignTo,
+          assigned_partners: assignArray,
+        }).eq('id', editingTaskId).select().single();
+        data = fallback.data;
+        error = fallback.error;
+      }
+
       resultError = error;
       resultData = data;
     } else {
-      const { data, error } = await supabase.from('tasks').insert({
+      let { data, error } = await supabase.from('tasks').insert({
         title: combinedTitle,
         company_id: newTask.company_id,
         task_type_id: primaryTtId,
@@ -1145,6 +1197,28 @@ export default function BahrainTasks() {
         auditor_id: newTask.auditor_id || null,
         country: dataCountry || 'Bahrain',
       }).select().single();
+
+      if (error && (error.message?.includes('pl_date') || error.message?.includes('schema cache'))) {
+        console.warn('pl_date column not in schema, retrying insert without pl_date:', error.message);
+        const fallback = await supabase.from('tasks').insert({
+          title: combinedTitle,
+          company_id: newTask.company_id,
+          task_type_id: primaryTtId,
+          task_type_ids: typeIds,
+          priority: newTask.priority,
+          deadline: newTask.deadline,
+          pl_uploaded: !!(newTask.pl_date && newTask.pl_date.trim() !== ''),
+          description: desc,
+          assigned_to: assignTo,
+          assigned_partners: assignArray,
+          status: firstStatus,
+          auditor_id: newTask.auditor_id || null,
+          country: dataCountry || 'Bahrain',
+        }).select().single();
+        data = fallback.data;
+        error = fallback.error;
+      }
+
       resultError = error;
       resultData = data;
     }
@@ -3152,7 +3226,7 @@ export default function BahrainTasks() {
                                     setInlineEditPlTaskId(task.id);
                                     setInlineEditPlValue(task.pl_date || '');
                                   }}
-                                  title={`PL Date: ${task.pl_date} (Click to edit)`}
+                                  title={`PL Date: ${formatPlDateDisplay(task.pl_date)} (Click to edit)`}
                                   style={{
                                     padding: '3px 7px',
                                     borderRadius: '7px',
@@ -3182,7 +3256,7 @@ export default function BahrainTasks() {
                                   }}
                                 >
                                   <Calendar size={11} color="#2563eb" />
-                                  <span>{task.pl_date}</span>
+                                  <span>{formatPlDateDisplay(task.pl_date)}</span>
                                   {hoveredPlTaskId === task.id && <Edit2 size={9} color="#3b82f6" style={{ marginLeft: '1px' }} />}
                                 </button>
                               ) : (
@@ -3227,11 +3301,95 @@ export default function BahrainTasks() {
                           );
 
                         case 'company':
+                          const hasDrive = !!(company?.google_drive_link && company.google_drive_link.trim() !== '');
+                          const isCompHovered = hoveredCompanyTaskId === task.id;
+                          const driveUrl = hasDrive ? formatExternalUrl(company.google_drive_link) : '';
+
                           return (
-                            <td key={`comp-${task.id}`} style={compactCell}>
-                              <span style={{ fontWeight: 650, fontSize: '12.5px', color: '#0f172a', maxWidth: '125px', display: 'inline-block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', letterSpacing: '-0.01em' }} title={company?.company_name || 'Unknown'}>
-                                {company?.company_name || 'Unknown'}
-                              </span>
+                            <td
+                              key={`comp-${task.id}`}
+                              style={{ ...compactCell, minWidth: '130px', maxWidth: '200px' }}
+                              onMouseEnter={() => setHoveredCompanyTaskId(task.id)}
+                              onMouseLeave={() => setHoveredCompanyTaskId(null)}
+                            >
+                              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', maxWidth: '100%' }}>
+                                {hasDrive ? (
+                                  <a
+                                    href={driveUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    onClick={e => e.stopPropagation()}
+                                    title={`Open Google Drive for ${company?.company_name || 'Company'}`}
+                                    style={{
+                                      fontWeight: 650,
+                                      fontSize: '12.5px',
+                                      color: isCompHovered ? '#16a34a' : '#0f172a',
+                                      textDecoration: isCompHovered ? 'underline' : 'none',
+                                      textUnderlineOffset: '2px',
+                                      cursor: 'pointer',
+                                      display: 'inline-block',
+                                      overflow: 'hidden',
+                                      textOverflow: 'ellipsis',
+                                      whiteSpace: 'nowrap',
+                                      letterSpacing: '-0.01em',
+                                      transition: 'all 0.15s ease'
+                                    }}
+                                  >
+                                    {company?.company_name || 'Unknown'}
+                                  </a>
+                                ) : (
+                                  <span
+                                    style={{
+                                      fontWeight: 650,
+                                      fontSize: '12.5px',
+                                      color: '#0f172a',
+                                      display: 'inline-block',
+                                      overflow: 'hidden',
+                                      textOverflow: 'ellipsis',
+                                      whiteSpace: 'nowrap',
+                                      letterSpacing: '-0.01em'
+                                    }}
+                                    title={company?.company_name || 'Unknown'}
+                                  >
+                                    {company?.company_name || 'Unknown'}
+                                  </span>
+                                )}
+
+                                {hasDrive && isCompHovered && (
+                                  <a
+                                    href={driveUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    onClick={e => e.stopPropagation()}
+                                    title={`Open Google Drive: ${company?.google_drive_link}`}
+                                    style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      width: '18px',
+                                      height: '18px',
+                                      borderRadius: '4px',
+                                      background: '#f0fdf4',
+                                      border: '1px solid #bbf7d0',
+                                      color: '#16a34a',
+                                      flexShrink: 0,
+                                      textDecoration: 'none',
+                                      transition: 'all 0.15s ease',
+                                      boxShadow: '0 1px 3px rgba(22, 163, 74, 0.15)'
+                                    }}
+                                    onMouseEnter={e => {
+                                      e.currentTarget.style.background = '#dcfce7';
+                                      e.currentTarget.style.transform = 'scale(1.1)';
+                                    }}
+                                    onMouseLeave={e => {
+                                      e.currentTarget.style.background = '#f0fdf4';
+                                      e.currentTarget.style.transform = 'scale(1)';
+                                    }}
+                                  >
+                                    <FolderOpen size={10} color="#16a34a" />
+                                  </a>
+                                )}
+                              </div>
                             </td>
                           );
 
@@ -3995,9 +4153,32 @@ export default function BahrainTasks() {
                     )}
                     <div style={{ minWidth: 0, flex: 1 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                        <span style={{ fontWeight: 700, fontSize: '15px', color: '#0f172a', letterSpacing: '-0.2px' }}>
-                          {company?.company_name || 'Unknown Company'}
-                        </span>
+                        {company?.google_drive_link ? (
+                          <a
+                            href={formatExternalUrl(company.google_drive_link)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={e => e.stopPropagation()}
+                            style={{
+                              fontWeight: 700,
+                              fontSize: '15px',
+                              color: '#0f172a',
+                              letterSpacing: '-0.2px',
+                              textDecoration: 'none',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px'
+                            }}
+                            title={`Open Google Drive: ${company.google_drive_link}`}
+                          >
+                            <span>{company?.company_name || 'Unknown Company'}</span>
+                            <FolderOpen size={13} color="#16a34a" />
+                          </a>
+                        ) : (
+                          <span style={{ fontWeight: 700, fontSize: '15px', color: '#0f172a', letterSpacing: '-0.2px' }}>
+                            {company?.company_name || 'Unknown Company'}
+                          </span>
+                        )}
                         {ttNames.map((name, i) => (
                           <span key={i} style={{
                             padding: '1px 6px', borderRadius: '5px', fontSize: '10px',
@@ -4181,7 +4362,7 @@ export default function BahrainTasks() {
                       }}
                     >
                       <Calendar size={11} color="#2563eb" />
-                      <span>PL: {task.pl_date}</span>
+                      <span>PL: {formatPlDateDisplay(task.pl_date)}</span>
                     </button>
                   ) : (
                     <button
@@ -4755,7 +4936,33 @@ export default function BahrainTasks() {
             display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px',
             padding: '20px', background: 'var(--bg-secondary, #ECF0F1)', borderRadius: '8px', marginBottom: '24px',
           }}>
-            <div><strong>Company:</strong> {detailCompany?.company_name || 'Unknown'}</div>
+            <div>
+              <strong>Company:</strong> {detailCompany?.company_name || 'Unknown'}
+              {detailCompany?.google_drive_link && (
+                <a
+                  href={formatExternalUrl(detailCompany.google_drive_link)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    marginLeft: '8px',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    color: '#16a34a',
+                    fontSize: '12px',
+                    textDecoration: 'none',
+                    fontWeight: 600,
+                    background: '#f0fdf4',
+                    padding: '2px 8px',
+                    borderRadius: '5px',
+                    border: '1px solid #bbf7d0'
+                  }}
+                  title={`Open Google Drive: ${detailCompany.google_drive_link}`}
+                >
+                  <FolderOpen size={12} /> Open Drive
+                </a>
+              )}
+            </div>
             <div>
               <strong>CR Number:</strong> {detailCompany?.cr_number || '—'}
               {detailCompany?.cr_link && (
@@ -4795,7 +5002,7 @@ export default function BahrainTasks() {
             <div>
               <strong>PL Date:</strong> {detailTask.pl_date ? (
                 <span style={{ fontFamily: 'ui-monospace, monospace', fontWeight: 600, color: '#1d4ed8', background: '#eff6ff', padding: '2px 8px', borderRadius: '6px', border: '1px solid #bfdbfe', marginLeft: '6px' }}>
-                  📅 {detailTask.pl_date}
+                  📅 {formatPlDateDisplay(detailTask.pl_date)}
                 </span>
               ) : (
                 <span style={{ color: '#94a3b8', marginLeft: '6px' }}>Not set</span>

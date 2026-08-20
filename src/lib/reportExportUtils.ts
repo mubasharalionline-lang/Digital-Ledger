@@ -35,6 +35,29 @@ const COL_WIDTHS = [
   { wch: 18 }, { wch: 12 }, { wch: 22 }, { wch: 16 }, { wch: 12 }, { wch: 8 },
 ];
 
+export function formatPlDateDisplay(dateStr?: string | null): string {
+  if (!dateStr) return '';
+  const trimmed = dateStr.trim();
+  const match = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (match) {
+    const [, yyyy, mm, dd] = match;
+    return `${dd}-${mm}-${yyyy}`;
+  }
+  if (/^\d{2}-\d{2}-\d{4}$/.test(trimmed)) {
+    return trimmed;
+  }
+  try {
+    const d = new Date(trimmed);
+    if (!isNaN(d.getTime())) {
+      const dd = String(d.getDate()).padStart(2, '0');
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const yyyy = d.getFullYear();
+      return `${dd}-${mm}-${yyyy}`;
+    }
+  } catch (e) {}
+  return trimmed;
+}
+
 function isCompleted(s: string) {
   const sl = s.toLowerCase();
   return sl.includes('complete') || sl.includes('closed') || sl.includes('filed') || sl.includes('done');
@@ -175,7 +198,7 @@ export function exportTaskManagementExcel(
     const descUpdatedStr = updateDate ? new Date(updateDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '';
 
     return {
-      'PL Date': task.pl_date || (task.pl_uploaded ? 'Yes' : ''),
+      'PL Date': formatPlDateDisplay(task.pl_date) || (task.pl_uploaded ? 'Yes' : ''),
       'Company': company?.company_name || 'Unknown',
       'CR Number': company?.cr_number || '',
       'CR Link': company?.cr_link || '',
