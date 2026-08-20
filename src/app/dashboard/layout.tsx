@@ -7,9 +7,10 @@ import { getTerminology } from '@/lib/terminology';
 import { supabase } from '@/lib/supabase';
 import type { User } from '@/lib/supabase';
 import {
-  LayoutDashboard, Building2, ListTodo, Users, LogOut,
-  ChevronLeft, ChevronRight, Menu, ChevronDown, Settings,
-  ClipboardList, Edit, Plus, X, Loader2, Globe, CalendarDays
+  LayoutGrid, Landmark, CheckCircle2, CalendarCheck2, Boxes,
+  Contact2, History, SlidersHorizontal, LogOut,
+  ChevronLeft, ChevronRight, Menu, ChevronDown,
+  Plus, X, Loader2, Globe
 } from 'lucide-react';
 import CountryFlag from '@/components/CountryFlag';
 import { initTheme } from '@/lib/theme';
@@ -20,7 +21,13 @@ interface CountryRecord { id: string; code: string; name: string; flag: string; 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [country, setCountry] = useState<string | null>(null);
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('dl_sidebar_collapsed');
+      if (saved !== null) return saved === 'true';
+    }
+    return true; // Default to closed (collapsed)
+  });
   const [mobileOpen, setMobileOpen] = useState(false);
   const [showCountryPicker, setShowCountryPicker] = useState(false);
   const [countries, setCountries] = useState<CountryRecord[]>([]);
@@ -153,14 +160,14 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const navItems: NavItem[] = useMemo(() => {
     const canViewCompanies = user?.permissions?.can_view_companies === true;
     return [
-      { label: 'Dashboard', href: '/dashboard', icon: <LayoutDashboard size={20} /> },
-      { label: 'Companies', href: '/dashboard/companies', icon: <Building2 size={20} />, adminOnly: !canViewCompanies },
-      { label: 'Tasks', href: '/dashboard/tasks', icon: <ListTodo size={20} /> },
-      { label: 'Daily Tasks', href: '/dashboard/daily-tasks', icon: <CalendarDays size={20} /> },
-      { label: 'Task Types', href: '/dashboard/task-types', icon: <ClipboardList size={20} />, adminOnly: true },
-      { label: terms.staffSingular + 's', href: '/dashboard/staff', icon: <Users size={20} />, adminOnly: true },
-      { label: 'Edits', href: '/dashboard/edits', icon: <Edit size={20} />, adminOnly: true },
-      { label: 'Settings', href: '/dashboard/settings', icon: <Settings size={20} />, adminOnly: true },
+      { label: 'Dashboard', href: '/dashboard', icon: <LayoutGrid size={20} /> },
+      { label: 'Companies', href: '/dashboard/companies', icon: <Landmark size={20} />, adminOnly: !canViewCompanies },
+      { label: 'Tasks', href: '/dashboard/tasks', icon: <CheckCircle2 size={20} /> },
+      { label: 'Daily Tasks', href: '/dashboard/daily-tasks', icon: <CalendarCheck2 size={20} /> },
+      { label: 'Task Types', href: '/dashboard/task-types', icon: <Boxes size={20} />, adminOnly: true },
+      { label: terms.staffSingular + 's', href: '/dashboard/staff', icon: <Contact2 size={20} />, adminOnly: true },
+      { label: 'Edits', href: '/dashboard/edits', icon: <History size={20} />, adminOnly: true },
+      { label: 'Settings', href: '/dashboard/settings', icon: <SlidersHorizontal size={20} />, adminOnly: true },
     ];
   }, [terms, user]);
 
@@ -184,7 +191,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           borderRight: '1px solid var(--border)',
           boxShadow: 'var(--card-shadow)',
           transition: 'transform 0.25s cubic-bezier(0.25,0.1,0.25,1), width 0.25s cubic-bezier(0.25,0.1,0.25,1)',
-          zIndex: 50, overflow: 'hidden',
+          zIndex: 50, overflow: 'visible',
         }}>
         {/* Brand / Logo */}
         <div style={{
@@ -234,11 +241,18 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
             {showCountryPicker && (
               <div className="animate-fadeIn" style={{
-                position: 'absolute', top: '100%', left: collapsed ? '8px' : '12px',
-                right: collapsed ? '-120px' : '12px', minWidth: collapsed ? '220px' : undefined,
-                background: 'var(--bg-secondary)', border: '1px solid var(--border)',
-                borderRadius: '14px', boxShadow: 'var(--card-shadow-hover)',
-                zIndex: 999, overflow: 'hidden', marginTop: '6px',
+                position: 'absolute',
+                top: collapsed ? '6px' : 'calc(100% + 6px)',
+                left: collapsed ? '72px' : '12px',
+                width: collapsed ? '230px' : 'calc(100% - 24px)',
+                minWidth: '220px',
+                maxHeight: '380px',
+                overflowY: 'auto',
+                background: 'var(--bg-secondary)',
+                border: '1px solid var(--border)',
+                borderRadius: '14px',
+                boxShadow: '0 14px 36px rgba(15, 23, 42, 0.22), 0 2px 8px rgba(0,0,0,0.08)',
+                zIndex: 9999,
               }}>
                 <div onClick={() => setShowCountryPicker(false)} style={{ position: 'fixed', inset: 0, zIndex: -1 }} />
                 <div style={{ padding: '6px 0' }}>
@@ -309,28 +323,39 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
                 <button
                   onClick={() => { router.push(item.href); setMobileOpen(false); }}
                   style={{
-                    display: 'flex', alignItems: 'center', gap: '11px',
-                    padding: collapsed ? '10px' : '9px 12px', borderRadius: '10px',
-                    border: isActive ? '1px solid var(--accent-light)' : '1px solid transparent',
-                    background: isActive ? 'var(--accent-light)' : 'transparent',
-                    color: isActive ? 'var(--accent)' : 'var(--text-secondary)',
-                    cursor: 'pointer', fontSize: '13.5px', fontWeight: isActive ? 600 : 500,
-                    transition: 'all 0.15s cubic-bezier(0.4, 0, 0.2, 1)', textAlign: 'left',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: collapsed ? 0 : '11px',
+                    padding: collapsed ? 0 : '9px 12px',
+                    borderRadius: collapsed ? '12px' : '10px',
+                    border: isActive ? (collapsed ? 'none' : '1px solid var(--accent-light)') : '1px solid transparent',
+                    background: isActive ? (collapsed ? 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)' : 'var(--accent-light)') : 'transparent',
+                    color: isActive ? (collapsed ? '#ffffff' : 'var(--accent)') : 'var(--text-secondary)',
+                    cursor: 'pointer',
+                    fontSize: '13.5px',
+                    fontWeight: isActive ? 650 : 500,
+                    transition: 'all 0.18s cubic-bezier(0.4, 0, 0.2, 1)',
+                    textAlign: 'left',
                     justifyContent: collapsed ? 'center' : 'flex-start',
-                    width: '100%', fontFamily: 'inherit',
+                    width: collapsed ? '44px' : '100%',
+                    height: collapsed ? '44px' : 'auto',
+                    margin: collapsed ? '2px auto' : '0',
+                    fontFamily: 'inherit',
                     position: 'relative',
-                    boxShadow: isActive ? '0 1px 3px rgba(37, 99, 235, 0.08)' : 'none'
+                    boxShadow: isActive ? (collapsed ? '0 4px 14px rgba(37, 99, 235, 0.32)' : '0 1px 3px rgba(37, 99, 235, 0.08)') : 'none'
                   }}
                   onMouseEnter={e => {
                     if (!isActive) {
                       e.currentTarget.style.background = 'var(--bg-tertiary)';
                       e.currentTarget.style.color = 'var(--text-primary)';
+                      if (collapsed) e.currentTarget.style.transform = 'translateY(-1px)';
                     }
                   }}
                   onMouseLeave={e => {
                     if (!isActive) {
                       e.currentTarget.style.background = 'transparent';
                       e.currentTarget.style.color = 'var(--text-secondary)';
+                      if (collapsed) e.currentTarget.style.transform = 'none';
                     }
                   }}
                   title={collapsed ? item.label : undefined}>
@@ -341,11 +366,17 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
                     }} />
                   )}
                   <span style={{
-                    flexShrink: 0, display: 'flex',
-                    color: isActive ? 'var(--accent)' : 'var(--text-tertiary)',
+                    flexShrink: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: isActive ? (collapsed ? '#ffffff' : 'var(--accent)') : 'var(--text-tertiary)',
                     transition: 'color 0.15s ease'
                   }}>
-                    {React.cloneElement(item.icon as React.ReactElement<any>, { size: 18, strokeWidth: isActive ? 2.2 : 1.9 })}
+                    {React.cloneElement(item.icon as React.ReactElement<any>, {
+                      size: collapsed ? 20 : 18,
+                      strokeWidth: isActive ? 2.2 : 1.85
+                    })}
                   </span>
                   {!collapsed && <span style={{ letterSpacing: '-0.01em' }}>{item.label}</span>}
                 </button>
@@ -358,7 +389,15 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         <div style={{ padding: '10px', borderTop: '1px solid var(--border-light)', background: 'var(--bg-tertiary)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
           {/* Collapse Button */}
           <button
-            onClick={() => setCollapsed(!collapsed)}
+            onClick={() => {
+              setCollapsed(prev => {
+                const next = !prev;
+                if (typeof window !== 'undefined') {
+                  localStorage.setItem('dl_sidebar_collapsed', String(next));
+                }
+                return next;
+              });
+            }}
             title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             style={{
               display: 'flex', alignItems: 'center', justifyContent: collapsed ? 'center' : 'space-between',

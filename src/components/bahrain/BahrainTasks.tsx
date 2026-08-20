@@ -3,11 +3,25 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import type { Task, Company, User, TaskType, StatusLog } from '@/lib/supabase';
 import { getDataCountry, getSession, isAdmin } from '@/lib/auth';
 import { BAHRAIN_PRIORITIES, BAHRAIN_STATUSES } from '@/lib/bahrain';
-import { Plus, Eye, Trash2, X, Edit2, MoreHorizontal, Clock, CheckCircle2, Check, BarChart3, PieChart, Activity, ArrowRight, TrendingUp, Building2, Share2, MessageSquare, Copy, Send, Search, ListTodo, FileSpreadsheet, CheckSquare, Square, Download, ChevronDown, ExternalLink, Link2 } from 'lucide-react';
+import {
+  getTaskColumns,
+  saveTaskColumns,
+  normalizeCountryKey,
+  TaskColumnConfig,
+  TaskColumnId
+} from '@/lib/taskColumns';
+import {
+  Plus, Eye, Trash2, X, Edit2, MoreHorizontal, Clock, CheckCircle2, Check,
+  BarChart3, PieChart, Activity, ArrowRight, TrendingUp, Building2, Share2,
+  MessageSquare, Copy, Send, Search, ListTodo, FileSpreadsheet, CheckSquare,
+  Square, Download, ChevronDown, ChevronLeft, ChevronRight, ExternalLink, Link2,
+  SlidersHorizontal, Columns3, RotateCcw, XCircle, Sparkles, Filter, FileCheck2, FileX2, CheckCheck
+} from 'lucide-react';
 import { EGRESS_OPTIMIZATION_MODE } from '@/lib/optimizationConfig';
 import { exportTaskManagementExcel } from '@/lib/reportExportUtils';
 import CountryFlag from '@/components/CountryFlag';
@@ -31,6 +45,8 @@ export default function BahrainTasks() {
   const canManageTask = (task: Task) => isAdminUser || userAuditorAccess.includes(task.auditor_id || '');
   const canUpdateStatus = isAdminUser || userAuditorAccess.length > 0 || (currentUser?.permissions?.can_update_status ?? true);
 
+  const dataCountry = getDataCountry();
+
   const [tasks, setTasks] = useState<Task[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [taskTypes, setTaskTypes] = useState<TaskType[]>([]);
@@ -40,6 +56,23 @@ export default function BahrainTasks() {
   const [statusObjects, setStatusObjects] = useState<{ name: string; task_type_ids: string[] | null }[]>([]);
   const [loading, setLoading] = useState(true);
   const [notifications, setNotifications] = useState<{ id: string, message: string, taskId: string }[]>([]);
+
+  // Country-specific Column Preferences
+  const [columnsConfig, setColumnsConfig] = useState<TaskColumnConfig[]>(() => getTaskColumns(dataCountry));
+  const [showColumnPicker, setShowColumnPicker] = useState(false);
+  const columnPickerRef = useRef<HTMLDivElement>(null);
+
+  // Task Pagination States (Default: 50 rows per page)
+  const [pageSize, setPageSize] = useState<number | 'all'>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('dl_tasks_page_size');
+      if (saved === 'all') return 'all';
+      if (saved && ['25', '50', '100'].includes(saved)) return parseInt(saved, 10);
+    }
+    return 50;
+  });
+  const [currentPage, setCurrentPage] = useState(1);
+  const [currentTime, setCurrentTime] = useState(() => Date.now());
 
   const searchParams = useSearchParams();
 
@@ -63,6 +96,42 @@ export default function BahrainTasks() {
     } catch {
       return '—';
     }
+  };
+
+  // Sync column configurations across components & country switches
+  useEffect(() => {
+    setColumnsConfig(getTaskColumns(dataCountry));
+    const handleColChange = (e: any) => {
+      const targetCountry = e.detail?.country;
+      if (!targetCountry || targetCountry === 'ALL' || targetCountry === normalizeCountryKey(dataCountry)) {
+        setColumnsConfig(getTaskColumns(dataCountry));
+      }
+    };
+    window.addEventListener('task-columns-changed', handleColChange);
+    return () => window.removeEventListener('task-columns-changed', handleColChange);
+  }, [dataCountry]);
+
+  // Keep a stable time reference for recent update badge calculation
+  useEffect(() => {
+    setCurrentTime(Date.now());
+  }, [tasks]);
+
+  const toggleColumnVisibility = (colId: TaskColumnId) => {
+    const updated = columnsConfig.map(col => col.id === colId ? { ...col, visible: !col.visible } : col);
+    setColumnsConfig(updated);
+    saveTaskColumns(dataCountry, updated);
+  };
+
+  const handlePageSizeChange = (newSize: number | 'all') => {
+    setPageSize(newSize);
+    setCurrentPage(1);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('dl_tasks_page_size', String(newSize));
+    }
+  };
+
+  const handlePageChange = (newPage: number) => {
+    setCurrentPage(newPage);
   };
 
   // New Task modal
@@ -136,12 +205,13 @@ export default function BahrainTasks() {
     };
   }, []);
 
-  // Reset tooltip if filters or search changes to prevent orphaned tooltips
+  // Reset tooltip & page number if filters or search changes
   useEffect(() => {
     activeTooltipRef.current = null;
     setActiveTooltipTaskId(null);
     setInlineEditCrId(null);
     setInlineEditDescId(null);
+    setCurrentPage(1);
   }, [search, filterStatus, filterPriority, filterCompany, filterPartner, filterTaskType, filterAuditor, filterDescUpdated]);
 
   const handleTooltipMouseEnter = () => {
@@ -208,6 +278,13 @@ export default function BahrainTasks() {
   const [waGenStatuses, setWaGenStatuses] = useState<string[]>([]);
   const [waGenPartners, setWaGenPartners] = useState<string[]>([]);
   const [waGenCopied, setWaGenCopied] = useState(false);
+  const [waGenIncludeDesc, setWaGenIncludeDesc] = useState(true);
+  const [waGenIncludeCr, setWaGenIncludeCr] = useState(true);
+  const [waGenIncludeAuditor, setWaGenIncludeAuditor] = useState(false);
+  const [waGenIncludePriority, setWaGenIncludePriority] = useState(false);
+  const [waGenGroupBy, setWaGenGroupBy] = useState<'status' | 'partner' | 'compact'>('status');
+  const [waGenStatusSearch, setWaGenStatusSearch] = useState('');
+  const [waGenPartnerSearch, setWaGenPartnerSearch] = useState('');
   const [recentActivityLogs, setRecentActivityLogs] = useState<any[]>([]);
   const [recentLoading, setRecentLoading] = useState(false);
   const [detailCompany, setDetailCompany] = useState<Company | null>(null);
@@ -224,8 +301,6 @@ export default function BahrainTasks() {
   const [showInlineCompanyForm, setShowInlineCompanyForm] = useState(false);
   const [inlineCompanyForm, setInlineCompanyForm] = useState({ name: '', tax_registration: '', industry: '', compliance_type: '' });
   const [inlineCompanySaving, setInlineCompanySaving] = useState(false);
-
-  const dataCountry = getDataCountry();
 
   const loadData = useCallback(async () => {
     const cacheKey = 'tasks_data_cache';
@@ -370,6 +445,18 @@ export default function BahrainTasks() {
     };
   }, [openMenuId]);
 
+  // Close column picker when clicking outside
+  useEffect(() => {
+    if (!showColumnPicker) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (columnPickerRef.current && !columnPickerRef.current.contains(e.target as Node)) {
+        setShowColumnPicker(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showColumnPicker]);
+
   // Filter tasks
   // Determine if the user is actively looking for completed tasks via filter or search
   const isCompletedFilterActive = filterStatus && (() => {
@@ -425,7 +512,7 @@ export default function BahrainTasks() {
           if (!updateDateStr) return false;
           const updateTime = new Date(updateDateStr).getTime();
           if (isNaN(updateTime)) return false;
-          const now = Date.now();
+          const now = currentTime;
           let maxAgeMs = 0;
           if (filterDescUpdated === '24h') maxAgeMs = 24 * 60 * 60 * 1000;
           else if (filterDescUpdated === '7d') maxAgeMs = 7 * 24 * 60 * 60 * 1000;
@@ -459,6 +546,15 @@ export default function BahrainTasks() {
     }
     return (a.status || '').localeCompare(b.status || '');
   });
+
+  // Active visible columns and pagination calculation
+  const visibleColumns = columnsConfig.filter(c => c.visible);
+  const totalCount = filtered.length;
+  const totalPages = pageSize === 'all' ? 1 : Math.max(1, Math.ceil(totalCount / (pageSize as number)));
+  const safeCurrentPage = Math.min(Math.max(1, currentPage), totalPages);
+  const startIndex = pageSize === 'all' ? 0 : (safeCurrentPage - 1) * (pageSize as number);
+  const endIndex = pageSize === 'all' ? totalCount : Math.min(totalCount, startIndex + (pageSize as number));
+  const paginatedTasks = pageSize === 'all' ? filtered : filtered.slice(startIndex, endIndex);
 
   // Check for openDesc URL param
   useEffect(() => {
@@ -1373,84 +1469,9 @@ export default function BahrainTasks() {
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="task-filters" style={{
-        display: 'flex', gap: '10px', marginBottom: '22px', flexWrap: 'wrap',
-        padding: '16px 18px', background: 'rgba(255, 255, 255, 0.75)',
-        backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
-        borderRadius: '18px', border: '1px solid rgba(255,255,255,0.9)',
-        boxShadow: '0 4px 20px rgba(0,0,0,0.03)', alignItems: 'center'
-      }}>
-        <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={filterStyle}>
-          <option value="">All Status</option>
-          {(() => {
-            const allStatuses = new Set<string>(dynamicStatuses);
-            if (!dataCountry || dataCountry === 'Bahrain') {
-              tasks.forEach(t => { if (t.status) allStatuses.add(t.status); });
-            }
-            return Array.from(allStatuses).sort((a, b) => a.localeCompare(b)).map(s => <option key={s} value={s}>{s}</option>);
-          })()}
-        </select>
-        <select value={filterPriority} onChange={e => setFilterPriority(e.target.value)} style={filterStyle}>
-          <option value="">All Priority</option>
-          {BAHRAIN_PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
-        </select>
-        <select value={filterCompany} onChange={e => setFilterCompany(e.target.value)} style={filterStyle}>
-          <option value="">All Companies</option>
-          {companies.map(c => <option key={c.id} value={c.id}>{c.company_name}</option>)}
-        </select>
-        {isAdminUser && (
-          <select value={filterPartner} onChange={e => setFilterPartner(e.target.value)} style={filterStyle}>
-            <option value="">All Partners</option>
-            {partners.map(p => <option key={p.id} value={p.id}>{p.username}</option>)}
-          </select>
-        )}
-        <select value={filterAuditor} onChange={e => setFilterAuditor(e.target.value)} style={filterStyle}>
-          <option value="">All Auditors</option>
-          {auditors.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-        </select>
-        <select value={filterTaskType} onChange={e => setFilterTaskType(e.target.value)} style={filterStyle}>
-          <option value="">All Task Types</option>
-          {taskTypes.filter(t => t.active).map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-        </select>
-        <select value={filterDescUpdated} onChange={e => setFilterDescUpdated(e.target.value)} style={filterStyle}>
-          <option value="">All Descriptions</option>
-          <option value="24h">Desc Updated: Last 24 Hours</option>
-          <option value="7d">Desc Updated: Last 7 Days</option>
-          <option value="30d">Desc Updated: Last 30 Days</option>
-          <option value="updated">Desc Updated: Any Update</option>
-          <option value="has_desc">Has Description</option>
-          <option value="no_desc">No Description</option>
-        </select>
-        <div style={{ position: 'relative', flex: '2 1 180px', minWidth: '160px' }}>
-          <input
-            type="text"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Search tasks..."
-            style={{ ...filterStyle, width: '100%', paddingRight: search ? '28px' : '12px' }}
-          />
-          {search && (
-            <button onClick={() => setSearch('')} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '2px', display: 'flex' }}>
-              <X size={13} />
-            </button>
-          )}
-        </div>
-        {(filterStatus || filterPriority || filterCompany || filterPartner || filterAuditor || filterTaskType || filterDescUpdated || search) && (
-          <button
-            onClick={() => { setFilterStatus(''); setFilterPriority(''); setFilterCompany(''); setFilterPartner(''); setFilterAuditor(''); setFilterTaskType(''); setFilterDescUpdated(''); setSearch(''); }}
-            style={{ padding: '8px 16px', background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: '10px', cursor: 'pointer', fontWeight: 600, fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap', transition: 'all 0.15s ease' }}
-            onMouseEnter={e => { e.currentTarget.style.background = '#fee2e2'; }}
-            onMouseLeave={e => { e.currentTarget.style.background = '#fef2f2'; }}
-          >
-            <X size={14} /> Clear Filters
-          </button>
-        )}
-      </div>
-
-      {/* ─── 4 Compact Stat Cards ─── */}
+      {/* ─── 4 Compact Stat Cards (Placed on top) ─── */}
       {(isAdminUser || !isAdminUser) && (
-        <div className="task-stat-cards" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px', marginBottom: '22px' }}>
+        <div className="task-stat-cards" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px', marginBottom: '20px' }}>
           {/* Card 1: Recently Modified Tasks */}
           <div
             onClick={async () => {
@@ -1595,31 +1616,263 @@ export default function BahrainTasks() {
           <div
             onClick={() => { setShowStatusModal(true); setWaGenStatuses([]); setWaGenPartners([]); setWaGenCopied(false); }}
             style={{
-              background: 'linear-gradient(135deg, #ffffff 0%, #f0fdf4 100%)', borderRadius: '14px', padding: '16px 18px',
-              border: '1px solid #bbf7d0', cursor: 'pointer',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.03)', transition: 'all 0.2s ease',
-              display: 'flex', alignItems: 'center', gap: '14px',
+              background: 'linear-gradient(135deg, #ffffff 0%, #f0fdf4 100%)',
+              borderRadius: '16px',
+              padding: '16px 18px',
+              border: '1px solid #bbf7d0',
+              cursor: 'pointer',
+              boxShadow: '0 2px 10px rgba(34, 197, 94, 0.06), 0 1px 3px rgba(0,0,0,0.03)',
+              transition: 'all 0.22s cubic-bezier(0.4, 0, 0.2, 1)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '14px',
+              position: 'relative',
+              overflow: 'hidden'
             }}
-            onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 6px 18px rgba(37,211,102,0.18)'; e.currentTarget.style.borderColor = '#86efac'; }}
-            onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.03)'; e.currentTarget.style.borderColor = '#bbf7d0'; }}
+            onMouseEnter={e => {
+              e.currentTarget.style.transform = 'translateY(-2px)';
+              e.currentTarget.style.boxShadow = '0 8px 24px rgba(34, 197, 94, 0.2), 0 2px 6px rgba(0,0,0,0.04)';
+              e.currentTarget.style.borderColor = '#4ade80';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.transform = 'none';
+              e.currentTarget.style.boxShadow = '0 2px 10px rgba(34, 197, 94, 0.06), 0 1px 3px rgba(0,0,0,0.03)';
+              e.currentTarget.style.borderColor = '#bbf7d0';
+            }}
           >
-            <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: 'linear-gradient(135deg, #dcfce7, #bbf7d0)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="#25D366">
+            <div style={{
+              width: '42px',
+              height: '42px',
+              borderRadius: '12px',
+              background: 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+              boxShadow: '0 4px 12px rgba(34, 197, 94, 0.3)'
+            }}>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="#ffffff">
                 <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
               </svg>
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: '11px', color: '#16a34a', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.3px' }}>WhatsApp Generator</div>
-              <div style={{ fontSize: '22px', fontWeight: 800, color: '#0f172a', lineHeight: 1.2 }}>
-                <MessageSquare size={19} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '4px' }} />
-                Share
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px' }}>
+                <span style={{ fontSize: '10.5px', color: '#16a34a', fontWeight: 750, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                  WhatsApp Dispatch
+                </span>
+                <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#22c55e', display: 'inline-block' }} />
               </div>
-              <div style={{ fontSize: '10.5px', color: '#15803d', marginTop: '1px' }}>Generate by status · Click</div>
+              <div style={{ fontSize: '17px', fontWeight: 800, color: '#0f172a', letterSpacing: '-0.02em', lineHeight: 1.25 }}>
+                Share Tasks
+              </div>
+              <div style={{ fontSize: '11px', color: '#15803d', fontWeight: 550, marginTop: '2px' }}>
+                Filter by status & partner
+              </div>
             </div>
-            <ArrowRight size={16} color="#22c55e" />
+            <div style={{
+              width: '28px',
+              height: '28px',
+              borderRadius: '8px',
+              background: '#dcfce7',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#16a34a',
+              flexShrink: 0
+            }}>
+              <ArrowRight size={15} strokeWidth={2.5} />
+            </div>
           </div>
         </div>
       )}
+
+      {/* Filters (Placed below cards) */}
+      <div className="task-filters" style={{
+        display: 'flex', gap: '10px', marginBottom: '22px', flexWrap: 'wrap',
+        padding: '16px 18px', background: 'rgba(255, 255, 255, 0.75)',
+        backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
+        borderRadius: '18px', border: '1px solid rgba(255,255,255,0.9)',
+        boxShadow: '0 4px 20px rgba(0,0,0,0.03)', alignItems: 'center'
+      }}>
+        <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={filterStyle}>
+          <option value="">All Status</option>
+          {(() => {
+            const allStatuses = new Set<string>(dynamicStatuses);
+            if (!dataCountry || dataCountry === 'Bahrain') {
+              tasks.forEach(t => { if (t.status) allStatuses.add(t.status); });
+            }
+            return Array.from(allStatuses).sort((a, b) => a.localeCompare(b)).map(s => <option key={s} value={s}>{s}</option>);
+          })()}
+        </select>
+        <select value={filterPriority} onChange={e => setFilterPriority(e.target.value)} style={filterStyle}>
+          <option value="">All Priority</option>
+          {BAHRAIN_PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
+        </select>
+        <select value={filterCompany} onChange={e => setFilterCompany(e.target.value)} style={filterStyle}>
+          <option value="">All Companies</option>
+          {companies.map(c => <option key={c.id} value={c.id}>{c.company_name}</option>)}
+        </select>
+        {isAdminUser && (
+          <select value={filterPartner} onChange={e => setFilterPartner(e.target.value)} style={filterStyle}>
+            <option value="">All Partners</option>
+            {partners.map(p => <option key={p.id} value={p.id}>{p.username}</option>)}
+          </select>
+        )}
+        <select value={filterAuditor} onChange={e => setFilterAuditor(e.target.value)} style={filterStyle}>
+          <option value="">All Auditors</option>
+          {auditors.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+        </select>
+        <select value={filterTaskType} onChange={e => setFilterTaskType(e.target.value)} style={filterStyle}>
+          <option value="">All Task Types</option>
+          {taskTypes.filter(t => t.active).map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+        </select>
+        <select value={filterDescUpdated} onChange={e => setFilterDescUpdated(e.target.value)} style={filterStyle}>
+          <option value="">All Descriptions</option>
+          <option value="24h">Desc Updated: Last 24 Hours</option>
+          <option value="7d">Desc Updated: Last 7 Days</option>
+          <option value="30d">Desc Updated: Last 30 Days</option>
+          <option value="updated">Desc Updated: Any Update</option>
+          <option value="has_desc">Has Description</option>
+          <option value="no_desc">No Description</option>
+        </select>
+        <div style={{ position: 'relative', flex: '2 1 180px', minWidth: '160px' }}>
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search tasks..."
+            style={{ ...filterStyle, width: '100%', paddingRight: search ? '28px' : '12px' }}
+          />
+          {search && (
+            <button onClick={() => setSearch('')} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '2px', display: 'flex' }}>
+              <X size={13} />
+            </button>
+          )}
+        </div>
+
+        {/* Columns Quick Toggle Popover */}
+        <div style={{ position: 'relative' }} ref={columnPickerRef}>
+          <button
+            type="button"
+            onClick={() => setShowColumnPicker(!showColumnPicker)}
+            style={{
+              padding: '8px 14px',
+              background: showColumnPicker ? '#eff6ff' : '#ffffff',
+              color: showColumnPicker ? '#1d4ed8' : '#334155',
+              border: showColumnPicker ? '1.5px solid #3b82f6' : '1px solid #cbd5e1',
+              borderRadius: '10px',
+              cursor: 'pointer',
+              fontWeight: 650,
+              fontSize: '12px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              whiteSpace: 'nowrap',
+              transition: 'all 0.15s ease',
+              boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
+            }}
+            title="Choose which columns to show or hide in this table"
+          >
+            <Columns3 size={14} color="#2563eb" />
+            <span>Columns ({visibleColumns.length})</span>
+            <ChevronDown size={12} style={{ transform: showColumnPicker ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s ease' }} />
+          </button>
+
+          {showColumnPicker && (
+            <div
+              onClick={e => e.stopPropagation()}
+              style={{
+                position: 'absolute',
+                top: 'calc(100% + 6px)',
+                left: 0,
+                zIndex: 1000,
+                background: '#ffffff',
+                borderRadius: '14px',
+                border: '1px solid #cbd5e1',
+                boxShadow: '0 14px 34px rgba(15,23,42,0.18), 0 2px 8px rgba(0,0,0,0.06)',
+                padding: '12px',
+                minWidth: '240px',
+                maxHeight: '360px',
+                overflowY: 'auto'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', paddingBottom: '6px', borderBottom: '1px solid #f1f5f9' }}>
+                <span style={{ fontSize: '11px', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  Columns ({visibleColumns.length}/{columnsConfig.length})
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowColumnPicker(false)}
+                  style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '2px' }}
+                >
+                  <X size={13} />
+                </button>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', marginBottom: '10px' }}>
+                {columnsConfig.map(col => (
+                  <label
+                    key={`picker-${col.id}`}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '5px 7px',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      fontSize: '12px',
+                      color: col.visible ? '#0f172a' : '#64748b',
+                      fontWeight: col.visible ? 600 : 400,
+                      background: col.visible ? '#f8fafc' : 'transparent'
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={col.visible}
+                      onChange={() => toggleColumnVisibility(col.id)}
+                      style={{ accentColor: '#2563eb', cursor: 'pointer' }}
+                    />
+                    <span>{col.label}</span>
+                  </label>
+                ))}
+              </div>
+
+              <div style={{ paddingTop: '8px', borderTop: '1px solid #f1f5f9' }}>
+                <Link
+                  href="/dashboard/settings"
+                  onClick={() => setShowColumnPicker(false)}
+                  style={{
+                    fontSize: '11.5px',
+                    color: '#2563eb',
+                    fontWeight: 700,
+                    textDecoration: 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '4px',
+                    padding: '6px',
+                    borderRadius: '6px',
+                    background: '#eff6ff'
+                  }}
+                >
+                  <SlidersHorizontal size={12} /> Custom Order in Settings →
+                </Link>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {(filterStatus || filterPriority || filterCompany || filterPartner || filterAuditor || filterTaskType || filterDescUpdated || search) && (
+          <button
+            onClick={() => { setFilterStatus(''); setFilterPriority(''); setFilterCompany(''); setFilterPartner(''); setFilterAuditor(''); setFilterTaskType(''); setFilterDescUpdated(''); setSearch(''); }}
+            style={{ padding: '8px 16px', background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: '10px', cursor: 'pointer', fontWeight: 600, fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap', transition: 'all 0.15s ease' }}
+            onMouseEnter={e => { e.currentTarget.style.background = '#fee2e2'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = '#fef2f2'; }}
+          >
+            <X size={14} /> Clear Filters
+          </button>
+        )}
+      </div>
 
       {/* ─── Recently Modified Modal ─── */}
       {showRecentModal && (
@@ -1912,7 +2165,7 @@ export default function BahrainTasks() {
 
       {/* ─── WhatsApp Message Generator Modal ─── */}
       {showStatusModal && (
-        <Modal title="" onClose={() => setShowStatusModal(false)}>
+        <Modal title="WhatsApp Task Dispatcher" onClose={() => setShowStatusModal(false)}>
           {(() => {
             // Collect all unique statuses and partners from tasks
             const allStatuses = [...new Set(tasks.map(t => t.status).filter(Boolean))] as string[];
@@ -1927,6 +2180,10 @@ export default function BahrainTasks() {
             const allPartnerIds = [...taskPartnerIds];
             const allPartners = allPartnerIds.map(id => partners.find(p => p.id === id)).filter(Boolean) as User[];
             allPartners.sort((a, b) => a.username.localeCompare(b.username));
+
+            // Filtered lists by search
+            const filteredStatuses = allStatuses.filter(s => s.toLowerCase().includes(waGenStatusSearch.toLowerCase()));
+            const filteredPartners = allPartners.filter(p => p.username.toLowerCase().includes(waGenPartnerSearch.toLowerCase()));
 
             // Toggle a status in the multi-select array
             const toggleStatus = (status: string) => {
@@ -1963,6 +2220,25 @@ export default function BahrainTasks() {
               setWaGenCopied(false);
             };
 
+            // Quick preset: Select urgent tasks only
+            const selectUrgentTasks = () => {
+              const urgentStatuses = [...new Set(tasks.filter(t => t.priority === 'Urgent' && t.status).map(t => t.status!))];
+              setWaGenStatuses(urgentStatuses);
+              setWaGenPartners([]);
+              setWaGenCopied(false);
+            };
+
+            // Quick preset: Select pending tasks
+            const selectPendingTasks = () => {
+              const pendingStatuses = allStatuses.filter(s => {
+                const sl = s.toLowerCase();
+                return !sl.includes('complete') && !sl.includes('closed') && !sl.includes('filed') && !sl.includes('done');
+              });
+              setWaGenStatuses(pendingStatuses);
+              setWaGenPartners([]);
+              setWaGenCopied(false);
+            };
+
             // Tasks matching any of the selected statuses AND selected partners
             const matchingTasks = (waGenStatuses.length > 0 || waGenPartners.length > 0)
               ? tasks.filter(t => {
@@ -1972,7 +2248,7 @@ export default function BahrainTasks() {
                 })
               : [];
 
-            // Build the WhatsApp message — grouped by status or partner
+            // Build the WhatsApp message — grouped by status or partner or compact list
             const buildMessage = () => {
               if ((waGenStatuses.length === 0 && waGenPartners.length === 0) || matchingTasks.length === 0) return '';
 
@@ -1995,45 +2271,43 @@ export default function BahrainTasks() {
                 const comp = companies.find(c => c.id === task.company_id);
                 
                 if (idx > 0) {
-                  lines.push('----------------------------------');
+                  lines.push('──────────────────────────────────');
                   lines.push('');
                 }
                 
                 lines.push(`*${idx + 1}. Company:* ${comp?.company_name || 'Unknown'}`);
-                lines.push(`*CR Number:* ${comp?.cr_number || 'N/A'}`);
+                if (waGenIncludeCr && comp?.cr_number) {
+                  lines.push(`*CR Number:* ${comp.cr_number}`);
+                }
                 lines.push(`*Audit Type:* ${getAuditType(task)}`);
                 lines.push(`*Assigned To:* ${getAssignedNames(task)}`);
                 lines.push(`*Status:* ${task.status || 'N/A'}`);
-                if (task.description && task.description.trim() !== '') {
+                if (waGenIncludePriority && task.priority) {
+                  lines.push(`*Priority:* ${task.priority}`);
+                }
+                if (waGenIncludeAuditor && task.auditor_id) {
+                  const aud = auditors.find(a => a.id === task.auditor_id);
+                  if (aud) lines.push(`*Auditor:* ${aud.name}`);
+                }
+                if (waGenIncludeDesc && task.description && task.description.trim() !== '') {
                   lines.push(`*Description:* ${task.description}`);
                 }
                 lines.push('');
               };
 
               const sections: string[] = [];
+              const countryTitle = dataCountry ? ` • ${dataCountry}` : '';
+              sections.push(`📋 *COMPLIANCE & TASK SUMMARY${countryTitle.toUpperCase()}*`);
+              sections.push(`Generated on: ${new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })} • Total: ${matchingTasks.length} task${matchingTasks.length !== 1 ? 's' : ''}`);
+              sections.push('');
 
-              // If grouping by status makes sense (multiple statuses, or status is selected and partner is single/none)
-              if (waGenStatuses.length > 1 || (waGenStatuses.length === 1 && waGenPartners.length <= 1) || (waGenStatuses.length > 0 && waGenPartners.length > 0)) {
-                waGenStatuses.sort((a, b) => a.localeCompare(b)).forEach(status => {
-                  const statusTasks = matchingTasks.filter(t => t.status === status);
-                  if (statusTasks.length === 0) return;
-                  if (waGenStatuses.length > 1 || waGenPartners.length > 1) {
-                    sections.push('━━━━━━━━━━━━━━━━━━');
-                    sections.push(`*Status: ${status}* (${statusTasks.length})`);
-                    sections.push('━━━━━━━━━━━━━━━━━━');
-                    sections.push('');
-                  } else {
-                    sections.push('━━━━━━━━━━━━━━━━━━');
-                    sections.push(`*Status: ${status}* (${statusTasks.length})`);
-                    sections.push('━━━━━━━━━━━━━━━━━━');
-                    sections.push('');
-                  }
-                  statusTasks.forEach((task, idx) => formatTask(task, idx, sections));
-                });
-              } 
-              // Otherwise, group by partner
-              else if (waGenPartners.length > 0) {
-                waGenPartners.forEach(partnerId => {
+              if (waGenGroupBy === 'compact') {
+                sections.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+                matchingTasks.forEach((task, idx) => formatTask(task, idx, sections));
+              } else if (waGenGroupBy === 'partner' || (waGenPartners.length > 0 && waGenStatuses.length === 0)) {
+                // Group by partner
+                const partnerIdsToGroup = waGenPartners.length > 0 ? waGenPartners : allPartnerIds;
+                partnerIdsToGroup.forEach(partnerId => {
                   const partner = partners.find(p => p.id === partnerId);
                   const partnerTasks = matchingTasks.filter(t => {
                     const activeIds = t.assigned_partners && t.assigned_partners.length > 0
@@ -2042,20 +2316,28 @@ export default function BahrainTasks() {
                     return activeIds.includes(partnerId);
                   });
                   if (partnerTasks.length === 0) return;
-                  if (waGenPartners.length > 1) {
-                    sections.push('━━━━━━━━━━━━━━━━━━');
-                    sections.push(`*Partner: ${partner?.username || 'Unknown'}* (${partnerTasks.length})`);
-                    sections.push('━━━━━━━━━━━━━━━━━━');
-                    sections.push('');
-                  } else {
-                    sections.push('━━━━━━━━━━━━━━━━━━');
-                    sections.push(`*Partner: ${partner?.username || 'Unknown'}* (${partnerTasks.length})`);
-                    sections.push('━━━━━━━━━━━━━━━━━━');
-                    sections.push('');
-                  }
+                  sections.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+                  sections.push(`👤 *Staff: ${partner?.username || 'Unknown'}* (${partnerTasks.length} task${partnerTasks.length !== 1 ? 's' : ''})`);
+                  sections.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+                  sections.push('');
                   partnerTasks.forEach((task, idx) => formatTask(task, idx, sections));
                 });
+              } else {
+                // Group by status (default)
+                const statusesToGroup = waGenStatuses.length > 0 ? waGenStatuses : allStatuses;
+                statusesToGroup.forEach(status => {
+                  const statusTasks = matchingTasks.filter(t => t.status === status);
+                  if (statusTasks.length === 0) return;
+                  sections.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+                  sections.push(`📌 *Status: ${status}* (${statusTasks.length} task${statusTasks.length !== 1 ? 's' : ''})`);
+                  sections.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+                  sections.push('');
+                  statusTasks.forEach((task, idx) => formatTask(task, idx, sections));
+                });
               }
+
+              sections.push('──────────────────────────────────');
+              sections.push('_Generated via The Digital Ledger_');
 
               return sections.join('\n').trim();
             };
@@ -2063,141 +2345,292 @@ export default function BahrainTasks() {
             const message = buildMessage();
             const allStatusesSelected = waGenStatuses.length === allStatuses.length && allStatuses.length > 0;
             const allPartnersSelected = waGenPartners.length === allPartners.length && allPartners.length > 0;
+            const urgentCount = tasks.filter(t => t.priority === 'Urgent').length;
+            const completedCount = tasks.filter(t => {
+              const sl = (t.status || '').toLowerCase();
+              return sl.includes('complete') || sl.includes('closed') || sl.includes('filed') || sl.includes('done');
+            }).length;
 
             return (
-              <div>
-                {/* Premium header */}
-                <div style={{ textAlign: 'center', marginBottom: '24px' }}>
-                  <div style={{ width: '56px', height: '56px', borderRadius: '16px', background: 'linear-gradient(135deg, #25D366, #128C7E)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px', boxShadow: '0 6px 20px rgba(37,211,102,0.3)' }}>
-                    <svg width="28" height="28" viewBox="0 0 24 24" fill="#ffffff">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+                {/* Hero Header Banner */}
+                <div style={{
+                  background: 'linear-gradient(135deg, #064e3b 0%, #065f46 50%, #047857 100%)',
+                  borderRadius: '16px',
+                  padding: '20px 22px',
+                  color: '#ffffff',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '16px',
+                  boxShadow: '0 8px 24px rgba(4, 120, 87, 0.22)',
+                  position: 'relative',
+                  overflow: 'hidden'
+                }}>
+                  <div style={{
+                    width: '52px',
+                    height: '52px',
+                    borderRadius: '14px',
+                    background: 'rgba(255, 255, 255, 0.16)',
+                    backdropFilter: 'blur(8px)',
+                    border: '1px solid rgba(255, 255, 255, 0.25)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                    boxShadow: '0 4px 14px rgba(0,0,0,0.15)'
+                  }}>
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="#25D366">
                       <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
                     </svg>
                   </div>
-                  <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#0f172a', margin: '0 0 4px', letterSpacing: '-0.3px' }}>WhatsApp Message Generator</h3>
-                  <div style={{ fontSize: '13px', color: '#64748b', textAlign: 'center', margin: 0 }}>
-                    Select statuses and/or partners to generate a shareable message
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '3px' }}>
+                      <span style={{ fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', background: 'rgba(255,255,255,0.2)', padding: '2px 8px', borderRadius: '12px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                        <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#4ade80' }} />
+                        Dispatch Engine
+                      </span>
+                      <span style={{ fontSize: '11px', color: '#a7f3d0', fontWeight: 600 }}>
+                        {matchingTasks.length} task{matchingTasks.length !== 1 ? 's' : ''} targeted
+                      </span>
+                    </div>
+                    <h3 style={{ fontSize: '18px', fontWeight: 800, margin: '0 0 2px', letterSpacing: '-0.02em', color: '#ffffff' }}>
+                      WhatsApp Compliance Summary
+                    </h3>
+                    <p style={{ fontSize: '12.5px', color: '#d1fae5', margin: 0, opacity: 0.9 }}>
+                      Select statuses and team members below to instantly compile formatted updates.
+                    </p>
                   </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px', marginTop: '20px' }}>
-                  {/* Left Column: Status multi-select */}
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-                      <label style={{ fontSize: '12px', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Select Statuses</label>
+                {/* Quick Presets Toolbar */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: '11.5px', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    Quick Presets:
+                  </span>
+                  <button
+                    type="button"
+                    onClick={selectPendingTasks}
+                    style={{
+                      padding: '5px 11px', borderRadius: '8px', border: '1px solid #cbd5e1',
+                      background: '#ffffff', color: '#334155', fontSize: '12px', fontWeight: 600,
+                      cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '5px',
+                      transition: 'all 0.15s ease'
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.borderColor = '#3b82f6'; e.currentTarget.style.background = '#eff6ff'; }}
+                    onMouseLeave={e => { e.currentTarget.style.borderColor = '#cbd5e1'; e.currentTarget.style.background = '#ffffff'; }}
+                  >
+                    <Clock size={12} color="#2563eb" /> Active / Pending
+                  </button>
+                  <button
+                    type="button"
+                    onClick={selectUrgentTasks}
+                    style={{
+                      padding: '5px 11px', borderRadius: '8px', border: '1px solid #cbd5e1',
+                      background: '#ffffff', color: '#334155', fontSize: '12px', fontWeight: 600,
+                      cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '5px',
+                      transition: 'all 0.15s ease'
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.borderColor = '#ef4444'; e.currentTarget.style.background = '#fef2f2'; }}
+                    onMouseLeave={e => { e.currentTarget.style.borderColor = '#cbd5e1'; e.currentTarget.style.background = '#ffffff'; }}
+                  >
+                    <span style={{ color: '#dc2626' }}>●</span> Urgent ({urgentCount})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={toggleAllStatuses}
+                    style={{
+                      padding: '5px 11px', borderRadius: '8px', border: '1px solid #cbd5e1',
+                      background: '#ffffff', color: '#334155', fontSize: '12px', fontWeight: 600,
+                      cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '5px',
+                      transition: 'all 0.15s ease'
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.borderColor = '#10b981'; e.currentTarget.style.background = '#f0fdf4'; }}
+                    onMouseLeave={e => { e.currentTarget.style.borderColor = '#cbd5e1'; e.currentTarget.style.background = '#ffffff'; }}
+                  >
+                    <CheckSquare size={12} color="#059669" /> {allStatusesSelected ? 'Deselect All Statuses' : 'All Statuses'}
+                  </button>
+                  {(waGenStatuses.length > 0 || waGenPartners.length > 0) && (
+                    <button
+                      type="button"
+                      onClick={() => { setWaGenStatuses([]); setWaGenPartners([]); setWaGenCopied(false); }}
+                      style={{
+                        padding: '5px 11px', borderRadius: '8px', border: '1px solid #fecaca',
+                        background: '#fef2f2', color: '#dc2626', fontSize: '12px', fontWeight: 600,
+                        cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px',
+                        marginLeft: 'auto'
+                      }}
+                    >
+                      <RotateCcw size={12} /> Reset
+                    </button>
+                  )}
+                </div>
+
+                {/* Dual Filter Selectors */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                  {/* Left Column: Status Selector */}
+                  <div style={{
+                    background: '#f8fafc',
+                    borderRadius: '14px',
+                    border: '1px solid #e2e8f0',
+                    padding: '14px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '10px'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ fontSize: '12px', fontWeight: 700, color: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                          Target Statuses
+                        </span>
+                        <span style={{ fontSize: '11px', fontWeight: 700, color: '#2563eb', background: '#dbeafe', padding: '1px 6px', borderRadius: '10px' }}>
+                          {waGenStatuses.length}/{allStatuses.length}
+                        </span>
+                      </div>
                       <button
+                        type="button"
                         onClick={toggleAllStatuses}
                         style={{
-                          background: 'none', border: '1px solid #e2e8f0', borderRadius: '8px',
-                          padding: '4px 12px', fontSize: '11px', fontWeight: 600,
-                          color: allStatusesSelected ? '#dc2626' : '#25D366', cursor: 'pointer',
-                          transition: 'all 0.15s',
+                          background: 'transparent', border: 'none', color: '#2563eb',
+                          fontSize: '11.5px', fontWeight: 700, cursor: 'pointer', padding: '2px 4px'
                         }}
-                        onMouseEnter={e => { e.currentTarget.style.background = allStatusesSelected ? '#fef2f2' : '#f0fdf4'; }}
-                        onMouseLeave={e => { e.currentTarget.style.background = 'none'; }}
                       >
-                        {allStatusesSelected ? 'Deselect All' : 'Select All'}
+                        {allStatusesSelected ? 'Clear' : 'Select All'}
                       </button>
                     </div>
-                    <div style={{
-                      maxHeight: '200px', overflowY: 'auto', borderRadius: '12px',
-                      border: '2px solid #e2e8f0', background: '#ffffff', padding: '6px',
-                    }}>
-                      {allStatuses.map(s => {
+
+                    {/* Status Search */}
+                    <div style={{ position: 'relative' }}>
+                      <Search size={13} color="#94a3b8" style={{ position: 'absolute', left: '9px', top: '50%', transform: 'translateY(-50%)' }} />
+                      <input
+                        type="text"
+                        placeholder="Search statuses..."
+                        value={waGenStatusSearch}
+                        onChange={e => setWaGenStatusSearch(e.target.value)}
+                        style={{
+                          width: '100%',
+                          padding: '6px 10px 6px 28px',
+                          borderRadius: '8px',
+                          border: '1px solid #cbd5e1',
+                          background: '#ffffff',
+                          fontSize: '12px',
+                          outline: 'none',
+                          boxSizing: 'border-box'
+                        }}
+                      />
+                    </div>
+
+                    {/* Statuses List */}
+                    <div style={{ maxHeight: '180px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '3px', paddingRight: '2px' }}>
+                      {filteredStatuses.map(s => {
                         const count = tasks.filter(t => t.status === s).length;
                         const isChecked = waGenStatuses.includes(s);
                         const sc = statusColor(s);
                         return (
-                          <label
-                            key={s}
-                            style={{
-                              display: 'flex', alignItems: 'center', gap: '10px',
-                              padding: '9px 12px', borderRadius: '8px', cursor: 'pointer',
-                              transition: 'all 0.15s ease',
-                              background: isChecked ? '#f0fdf4' : 'transparent',
-                              border: isChecked ? '1px solid #bbf7d0' : '1px solid transparent',
-                              marginBottom: '2px',
-                            }}
-                            onMouseEnter={e => { if (!isChecked) e.currentTarget.style.background = '#f8fafc'; }}
-                            onMouseLeave={e => { if (!isChecked) e.currentTarget.style.background = 'transparent'; }}
-                          >
-                            <div style={{
-                              width: '18px', height: '18px', borderRadius: '5px', flexShrink: 0,
-                              border: isChecked ? '2px solid #25D366' : '2px solid #cbd5e1',
-                              background: isChecked ? '#25D366' : '#ffffff',
-                              display: 'flex', alignItems: 'center', justifyContent: 'center',
-                              transition: 'all 0.15s ease',
-                            }}>
-                              {isChecked && (
-                                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
-                                  <polyline points="20 6 9 17 4 12" />
-                                </svg>
-                              )}
-                            </div>
-                            <input
-                              type="checkbox"
-                              checked={isChecked}
-                              onChange={() => toggleStatus(s)}
-                              style={{ display: 'none' }}
-                            />
-                            <span style={{
-                              padding: '3px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: 600,
-                              background: sc.bg, color: sc.color, border: `1px solid ${sc.border}`,
-                            }}>{s}</span>
-                            <span style={{ fontSize: '12px', color: '#94a3b8', marginLeft: 'auto', fontWeight: 500 }}>
-                              {count}
-                            </span>
-                          </label>
-                        );
-                      })}
-                      {allStatuses.length === 0 && (
-                        <div style={{ textAlign: 'center', padding: '20px', color: '#94a3b8', fontSize: '13px' }}>No statuses found</div>
-                      )}
-                    </div>
-                    {waGenStatuses.length > 0 && (
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '10px' }}>
-                        {waGenStatuses.map(s => (
-                          <span
+                          <div
                             key={s}
                             onClick={() => toggleStatus(s)}
                             style={{
-                              padding: '3px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: 600,
-                              background: '#dcfce7', color: '#15803d', cursor: 'pointer',
-                              display: 'flex', alignItems: 'center', gap: '4px',
-                              transition: 'all 0.15s',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              padding: '6px 10px',
+                              borderRadius: '8px',
+                              cursor: 'pointer',
+                              background: isChecked ? '#ffffff' : 'transparent',
+                              border: isChecked ? '1px solid #93c5fd' : '1px solid transparent',
+                              boxShadow: isChecked ? '0 1px 3px rgba(37,99,235,0.08)' : 'none',
+                              transition: 'all 0.12s ease'
                             }}
-                            onMouseEnter={e => { e.currentTarget.style.background = '#fecaca'; e.currentTarget.style.color = '#dc2626'; }}
-                            onMouseLeave={e => { e.currentTarget.style.background = '#dcfce7'; e.currentTarget.style.color = '#15803d'; }}
+                            onMouseEnter={e => { if (!isChecked) e.currentTarget.style.background = '#f1f5f9'; }}
+                            onMouseLeave={e => { if (!isChecked) e.currentTarget.style.background = 'transparent'; }}
                           >
-                            {s} <X size={10} />
-                          </span>
-                        ))}
-                      </div>
-                    )}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                              <div style={{
+                                width: '16px', height: '16px', borderRadius: '4px',
+                                border: isChecked ? '1.5px solid #2563eb' : '1.5px solid #cbd5e1',
+                                background: isChecked ? '#2563eb' : '#ffffff',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                flexShrink: 0
+                              }}>
+                                {isChecked && <Check size={11} color="#ffffff" strokeWidth={3} />}
+                              </div>
+                              <span style={{
+                                padding: '2px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: 650,
+                                background: sc.bg, color: sc.color, border: `1px solid ${sc.border}`,
+                                maxWidth: '160px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
+                              }}>
+                                {s}
+                              </span>
+                            </div>
+                            <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 600 }}>
+                              {count}
+                            </span>
+                          </div>
+                        );
+                      })}
+                      {filteredStatuses.length === 0 && (
+                        <div style={{ textAlign: 'center', padding: '16px', color: '#94a3b8', fontSize: '12px' }}>
+                          No statuses match search
+                        </div>
+                      )}
+                    </div>
                   </div>
 
-                  {/* Right Column: Partner multi-select */}
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-                      <label style={{ fontSize: '12px', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Select Partners</label>
+                  {/* Right Column: Partner Selector */}
+                  <div style={{
+                    background: '#f8fafc',
+                    borderRadius: '14px',
+                    border: '1px solid #e2e8f0',
+                    padding: '14px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '10px'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ fontSize: '12px', fontWeight: 700, color: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                          Target Staff
+                        </span>
+                        <span style={{ fontSize: '11px', fontWeight: 700, color: '#2563eb', background: '#dbeafe', padding: '1px 6px', borderRadius: '10px' }}>
+                          {waGenPartners.length}/{allPartners.length}
+                        </span>
+                      </div>
                       <button
+                        type="button"
                         onClick={toggleAllPartners}
                         style={{
-                          background: 'none', border: '1px solid #e2e8f0', borderRadius: '8px',
-                          padding: '4px 12px', fontSize: '11px', fontWeight: 600,
-                          color: allPartnersSelected ? '#dc2626' : '#25D366', cursor: 'pointer',
-                          transition: 'all 0.15s',
+                          background: 'transparent', border: 'none', color: '#2563eb',
+                          fontSize: '11.5px', fontWeight: 700, cursor: 'pointer', padding: '2px 4px'
                         }}
-                        onMouseEnter={e => { e.currentTarget.style.background = allPartnersSelected ? '#fef2f2' : '#f0fdf4'; }}
-                        onMouseLeave={e => { e.currentTarget.style.background = 'none'; }}
                       >
-                        {allPartnersSelected ? 'Deselect All' : 'Select All'}
+                        {allPartnersSelected ? 'Clear' : 'Select All'}
                       </button>
                     </div>
-                    <div style={{
-                      maxHeight: '200px', overflowY: 'auto', borderRadius: '12px',
-                      border: '2px solid #e2e8f0', background: '#ffffff', padding: '6px',
-                    }}>
-                      {allPartners.map(p => {
+
+                    {/* Partner Search */}
+                    <div style={{ position: 'relative' }}>
+                      <Search size={13} color="#94a3b8" style={{ position: 'absolute', left: '9px', top: '50%', transform: 'translateY(-50%)' }} />
+                      <input
+                        type="text"
+                        placeholder="Search staff..."
+                        value={waGenPartnerSearch}
+                        onChange={e => setWaGenPartnerSearch(e.target.value)}
+                        style={{
+                          width: '100%',
+                          padding: '6px 10px 6px 28px',
+                          borderRadius: '8px',
+                          border: '1px solid #cbd5e1',
+                          background: '#ffffff',
+                          fontSize: '12px',
+                          outline: 'none',
+                          boxSizing: 'border-box'
+                        }}
+                      />
+                    </div>
+
+                    {/* Partner List */}
+                    <div style={{ maxHeight: '180px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '3px', paddingRight: '2px' }}>
+                      {filteredPartners.map(p => {
                         const count = tasks.filter(t => {
                           const activeIds = t.assigned_partners && t.assigned_partners.length > 0
                             ? t.assigned_partners
@@ -2206,120 +2639,214 @@ export default function BahrainTasks() {
                         }).length;
                         const isChecked = waGenPartners.includes(p.id);
                         return (
-                          <label
+                          <div
                             key={p.id}
+                            onClick={() => togglePartner(p.id)}
                             style={{
-                              display: 'flex', alignItems: 'center', gap: '10px',
-                              padding: '9px 12px', borderRadius: '8px', cursor: 'pointer',
-                              transition: 'all 0.15s ease',
-                              background: isChecked ? '#f0fdf4' : 'transparent',
-                              border: isChecked ? '1px solid #bbf7d0' : '1px solid transparent',
-                              marginBottom: '2px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              padding: '6px 10px',
+                              borderRadius: '8px',
+                              cursor: 'pointer',
+                              background: isChecked ? '#ffffff' : 'transparent',
+                              border: isChecked ? '1px solid #93c5fd' : '1px solid transparent',
+                              boxShadow: isChecked ? '0 1px 3px rgba(37,99,235,0.08)' : 'none',
+                              transition: 'all 0.12s ease'
                             }}
-                            onMouseEnter={e => { if (!isChecked) e.currentTarget.style.background = '#f8fafc'; }}
+                            onMouseEnter={e => { if (!isChecked) e.currentTarget.style.background = '#f1f5f9'; }}
                             onMouseLeave={e => { if (!isChecked) e.currentTarget.style.background = 'transparent'; }}
                           >
-                            <div style={{
-                              width: '18px', height: '18px', borderRadius: '5px', flexShrink: 0,
-                              border: isChecked ? '2px solid #25D366' : '2px solid #cbd5e1',
-                              background: isChecked ? '#25D366' : '#ffffff',
-                              display: 'flex', alignItems: 'center', justifyContent: 'center',
-                              transition: 'all 0.15s ease',
-                            }}>
-                              {isChecked && (
-                                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
-                                  <polyline points="20 6 9 17 4 12" />
-                                </svg>
-                              )}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                              <div style={{
+                                width: '16px', height: '16px', borderRadius: '4px',
+                                border: isChecked ? '1.5px solid #2563eb' : '1.5px solid #cbd5e1',
+                                background: isChecked ? '#2563eb' : '#ffffff',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                flexShrink: 0
+                              }}>
+                                {isChecked && <Check size={11} color="#ffffff" strokeWidth={3} />}
+                              </div>
+                              <div style={{
+                                width: '22px', height: '22px', borderRadius: '50%',
+                                background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)',
+                                color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                fontSize: '10px', fontWeight: 750, flexShrink: 0
+                              }}>
+                                {p.username.substring(0, 1).toUpperCase()}
+                              </div>
+                              <span style={{ fontSize: '12px', fontWeight: 650, color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {p.username}
+                              </span>
                             </div>
-                            <input
-                              type="checkbox"
-                              checked={isChecked}
-                              onChange={() => togglePartner(p.id)}
-                              style={{ display: 'none' }}
-                            />
-                            <div style={{
-                              width: '24px', height: '24px', borderRadius: '50%',
-                              background: 'linear-gradient(135deg, #e2e8f0, #cbd5e1)',
-                              color: '#475569', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                              fontSize: '10px', fontWeight: 700
-                            }}>
-                              {p.username.substring(0, 2).toUpperCase()}
-                            </div>
-                            <span style={{ fontSize: '13px', fontWeight: 600, color: '#1e293b' }}>
-                              {p.username}
-                            </span>
-                            <span style={{ fontSize: '12px', color: '#94a3b8', marginLeft: 'auto', fontWeight: 500 }}>
+                            <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 600 }}>
                               {count}
                             </span>
-                          </label>
+                          </div>
                         );
                       })}
-                      {allPartners.length === 0 && (
-                        <div style={{ textAlign: 'center', padding: '20px', color: '#94a3b8', fontSize: '13px' }}>No partners found</div>
+                      {filteredPartners.length === 0 && (
+                        <div style={{ textAlign: 'center', padding: '16px', color: '#94a3b8', fontSize: '12px' }}>
+                          No staff found
+                        </div>
                       )}
                     </div>
-                    {waGenPartners.length > 0 && (
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '10px' }}>
-                        {waGenPartners.map(pId => {
-                          const pName = allPartners.find(p => p.id === pId)?.username;
-                          return (
-                            <span
-                              key={pId}
-                              onClick={() => togglePartner(pId)}
-                              style={{
-                                padding: '3px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: 600,
-                                background: '#dbeafe', color: '#1d4ed8', cursor: 'pointer',
-                                display: 'flex', alignItems: 'center', gap: '4px',
-                                transition: 'all 0.15s',
-                              }}
-                              onMouseEnter={e => { e.currentTarget.style.background = '#fecaca'; e.currentTarget.style.color = '#dc2626'; }}
-                              onMouseLeave={e => { e.currentTarget.style.background = '#dbeafe'; e.currentTarget.style.color = '#1d4ed8'; }}
-                            >
-                              {pName} <X size={10} />
-                            </span>
-                          )
-                        })}
-                      </div>
-                    )}
                   </div>
                 </div>
 
-                {/* Results */}
-                {(waGenStatuses.length > 0 || waGenPartners.length > 0) && matchingTasks.length === 0 && (
-                  <div style={{ textAlign: 'center', padding: '30px', color: '#94a3b8', fontSize: '14px' }}>No tasks found for the selected combination</div>
-                )}
-
-                {(waGenStatuses.length > 0 || waGenPartners.length > 0) && matchingTasks.length > 0 && (
-                  <>
-                    {/* Count badge */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px', flexWrap: 'wrap' }}>
-                      <div style={{ padding: '4px 12px', borderRadius: '20px', background: '#dcfce7', color: '#15803d', fontSize: '12px', fontWeight: 700 }}>
-                        {matchingTasks.length} task{matchingTasks.length !== 1 ? 's' : ''}
-                      </div>
-                      <span style={{ fontSize: '12px', color: '#94a3b8' }}>
-                        matching the selected filters
-                      </span>
-                    </div>
-
-                    {/* Message preview */}
-                    <div style={{
-                      background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '14px',
-                      padding: '16px', marginBottom: '18px', maxHeight: '240px', overflowY: 'auto',
-                    }}>
-                      <div style={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.4px', color: '#16a34a', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <MessageSquare size={12} /> Message Preview
-                      </div>
-                      <pre style={{
-                        fontSize: '12px', lineHeight: 1.7, color: '#1e293b',
-                        whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-                        margin: 0, fontFamily: 'inherit',
-                      }}>{message}</pre>
-                    </div>
-
-                    {/* Action buttons */}
-                    <div style={{ display: 'flex', gap: '10px' }}>
+                {/* Formatting Options Bar */}
+                <div style={{
+                  background: '#ffffff',
+                  borderRadius: '12px',
+                  border: '1px solid #e2e8f0',
+                  padding: '12px 16px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '12px',
+                  flexWrap: 'wrap'
+                }}>
+                  {/* Grouping */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ fontSize: '11.5px', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      Grouping:
+                    </span>
+                    {(['status', 'partner', 'compact'] as const).map(mode => (
                       <button
+                        key={mode}
+                        type="button"
+                        onClick={() => setWaGenGroupBy(mode)}
+                        style={{
+                          padding: '4px 10px',
+                          borderRadius: '6px',
+                          border: waGenGroupBy === mode ? '1.5px solid #2563eb' : '1px solid #cbd5e1',
+                          background: waGenGroupBy === mode ? '#eff6ff' : '#ffffff',
+                          color: waGenGroupBy === mode ? '#1d4ed8' : '#64748b',
+                          fontSize: '11.5px',
+                          fontWeight: waGenGroupBy === mode ? 700 : 500,
+                          cursor: 'pointer',
+                          textTransform: 'capitalize'
+                        }}
+                      >
+                        {mode === 'partner' ? 'By Staff' : mode === 'status' ? 'By Status' : 'Compact'}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Include Toggles */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '11.5px', fontWeight: 600, color: '#334155', cursor: 'pointer' }}>
+                      <input type="checkbox" checked={waGenIncludeCr} onChange={e => setWaGenIncludeCr(e.target.checked)} style={{ accentColor: '#2563eb' }} />
+                      CR Number
+                    </label>
+                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '11.5px', fontWeight: 600, color: '#334155', cursor: 'pointer' }}>
+                      <input type="checkbox" checked={waGenIncludeDesc} onChange={e => setWaGenIncludeDesc(e.target.checked)} style={{ accentColor: '#2563eb' }} />
+                      Description
+                    </label>
+                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '11.5px', fontWeight: 600, color: '#334155', cursor: 'pointer' }}>
+                      <input type="checkbox" checked={waGenIncludePriority} onChange={e => setWaGenIncludePriority(e.target.checked)} style={{ accentColor: '#2563eb' }} />
+                      Priority
+                    </label>
+                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '11.5px', fontWeight: 600, color: '#334155', cursor: 'pointer' }}>
+                      <input type="checkbox" checked={waGenIncludeAuditor} onChange={e => setWaGenIncludeAuditor(e.target.checked)} style={{ accentColor: '#2563eb' }} />
+                      Auditor
+                    </label>
+                  </div>
+                </div>
+
+                {/* Message Preview or Empty State */}
+                {matchingTasks.length === 0 ? (
+                  <div style={{
+                    textAlign: 'center',
+                    padding: '36px 20px',
+                    borderRadius: '14px',
+                    background: '#f8fafc',
+                    border: '1px dashed #cbd5e1',
+                    color: '#64748b'
+                  }}>
+                    <MessageSquare size={32} color="#94a3b8" style={{ margin: '0 auto 10px' }} />
+                    <div style={{ fontSize: '14px', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>
+                      No tasks selected for WhatsApp message
+                    </div>
+                    <div style={{ fontSize: '12.5px', color: '#94a3b8' }}>
+                      Select one or more statuses / staff members above or click a Quick Preset to generate your broadcast.
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    {/* WhatsApp Chat Bubble Live Preview */}
+                    <div style={{
+                      borderRadius: '14px',
+                      border: '1px solid #bbf7d0',
+                      background: '#f0fdf4',
+                      overflow: 'hidden',
+                      boxShadow: '0 4px 16px rgba(34, 197, 94, 0.08)'
+                    }}>
+                      {/* Preview Header Bar */}
+                      <div style={{
+                        background: 'linear-gradient(135deg, #15803d, #166534)',
+                        padding: '10px 14px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        color: '#ffffff'
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <MessageSquare size={14} color="#86efac" />
+                          <span style={{ fontSize: '12px', fontWeight: 750, letterSpacing: '0.02em' }}>
+                            WhatsApp Message Live Preview
+                          </span>
+                          <span style={{ background: 'rgba(255,255,255,0.2)', fontSize: '11px', fontWeight: 700, padding: '1px 7px', borderRadius: '10px' }}>
+                            {matchingTasks.length} task{matchingTasks.length !== 1 ? 's' : ''}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(message).then(() => {
+                              setWaGenCopied(true);
+                              setTimeout(() => setWaGenCopied(false), 2500);
+                            });
+                          }}
+                          style={{
+                            background: 'rgba(255,255,255,0.18)',
+                            border: 'none',
+                            borderRadius: '6px',
+                            color: '#ffffff',
+                            padding: '4px 10px',
+                            fontSize: '11px',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}
+                        >
+                          {waGenCopied ? <Check size={12} /> : <Copy size={12} />}
+                          {waGenCopied ? 'Copied' : 'Quick Copy'}
+                        </button>
+                      </div>
+
+                      {/* Chat text content */}
+                      <div style={{ padding: '14px 16px', maxHeight: '230px', overflowY: 'auto' }}>
+                        <pre style={{
+                          fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                          fontSize: '12px',
+                          lineHeight: 1.6,
+                          color: '#0f172a',
+                          whiteSpace: 'pre-wrap',
+                          wordBreak: 'break-word',
+                          margin: 0
+                        }}>
+                          {message}
+                        </pre>
+                      </div>
+                    </div>
+
+                    {/* Action Bar */}
+                    <div style={{ display: 'flex', gap: '12px', marginTop: '16px' }}>
+                      <button
+                        type="button"
                         onClick={() => {
                           navigator.clipboard.writeText(message).then(() => {
                             setWaGenCopied(true);
@@ -2327,36 +2854,62 @@ export default function BahrainTasks() {
                           });
                         }}
                         style={{
-                          flex: 1, padding: '12px 16px', borderRadius: '12px',
-                          border: '1.5px solid #e2e8f0', background: waGenCopied ? '#f0fdf4' : '#ffffff',
-                          color: waGenCopied ? '#16a34a' : '#475569', fontWeight: 600, fontSize: '13px',
-                          cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          gap: '8px', transition: 'all 0.2s ease',
+                          flex: 1,
+                          padding: '12px 18px',
+                          borderRadius: '12px',
+                          border: '1.5px solid #cbd5e1',
+                          background: waGenCopied ? '#f0fdf4' : '#ffffff',
+                          color: waGenCopied ? '#16a34a' : '#1e293b',
+                          fontWeight: 700,
+                          fontSize: '13px',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '8px',
+                          transition: 'all 0.15s ease',
+                          boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
                         }}
-                        onMouseEnter={e => { if (!waGenCopied) { e.currentTarget.style.background = '#f8fafc'; e.currentTarget.style.borderColor = '#cbd5e1'; } }}
-                        onMouseLeave={e => { if (!waGenCopied) { e.currentTarget.style.background = '#ffffff'; e.currentTarget.style.borderColor = '#e2e8f0'; } }}
                       >
-                        {waGenCopied ? <><Check size={15} /> Copied!</> : <><Copy size={15} /> Copy Message</>}
+                        {waGenCopied ? <CheckCheck size={16} color="#16a34a" /> : <Copy size={16} color="#475569" />}
+                        {waGenCopied ? 'Copied to Clipboard!' : 'Copy Formatted Message'}
                       </button>
+
                       <button
+                        type="button"
                         onClick={() => {
                           window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, '_blank');
                         }}
                         style={{
-                          flex: 1, padding: '12px 16px', borderRadius: '12px',
-                          border: 'none', background: 'linear-gradient(135deg, #25D366, #128C7E)',
-                          color: '#ffffff', fontWeight: 700, fontSize: '13px',
-                          cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          gap: '8px', boxShadow: '0 4px 14px rgba(37,211,102,0.35)',
-                          transition: 'all 0.2s ease',
+                          flex: 1.2,
+                          padding: '12px 20px',
+                          borderRadius: '12px',
+                          border: 'none',
+                          background: 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
+                          color: '#ffffff',
+                          fontWeight: 750,
+                          fontSize: '13.5px',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '8px',
+                          boxShadow: '0 4px 16px rgba(34, 197, 94, 0.35)',
+                          transition: 'all 0.18s ease'
                         }}
-                        onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 6px 20px rgba(37,211,102,0.45)'; }}
-                        onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 4px 14px rgba(37,211,102,0.35)'; }}
+                        onMouseEnter={e => {
+                          e.currentTarget.style.transform = 'translateY(-1px)';
+                          e.currentTarget.style.boxShadow = '0 6px 20px rgba(34, 197, 94, 0.45)';
+                        }}
+                        onMouseLeave={e => {
+                          e.currentTarget.style.transform = 'none';
+                          e.currentTarget.style.boxShadow = '0 4px 16px rgba(34, 197, 94, 0.35)';
+                        }}
                       >
-                        <Send size={15} /> Share via WhatsApp
+                        <Send size={16} /> Open in WhatsApp & Send
                       </button>
                     </div>
-                  </>
+                  </div>
                 )}
               </div>
             );
@@ -2364,773 +2917,878 @@ export default function BahrainTasks() {
         </Modal>
       )}
 
+      {/* Helper function to render a single column cell dynamically based on user order */}
+      {(() => null)()}
+
       {/* Tasks Table — Desktop View (>768px) */}
-      <div className="desktop-task-view">
+      <div className="desktop-task-view" ref={containerRef}>
         <div className="task-table-wrap" style={{
-        width: '100%', overflowX: 'auto', borderRadius: '18px',
-        boxShadow: '0 4px 24px -2px rgba(15, 23, 42, 0.05), 0 2px 6px -1px rgba(15, 23, 42, 0.02)',
-        border: '1px solid rgba(226, 232, 240, 0.85)', background: '#ffffff',
-        WebkitOverflowScrolling: 'touch'
-      }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', background: '#ffffff' }}>
-          <thead>
-            <tr style={{
-              background: 'linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%)',
-              borderBottom: '1.5px solid #e2e8f0'
-            }}>
-              {multiSelectMode && (
-                <th style={{
-                  padding: '11px 8px', textAlign: 'center', width: '38px',
-                  borderBottom: '1.5px solid #e2e8f0'
-                }}>
-                  <input
-                    type="checkbox"
-                    checked={isAllFilteredSelected}
-                    ref={el => { if (el) el.indeterminate = isSomeFilteredSelected; }}
-                    onChange={e => {
-                      if (e.target.checked) selectAllFiltered();
-                      else deselectAll();
-                    }}
-                    style={{ cursor: 'pointer', width: '16px', height: '16px', accentColor: '#2563eb' }}
-                    title={isAllFilteredSelected ? 'Deselect All' : 'Select All Filtered'}
-                  />
-                </th>
-              )}
-              {[
-                { label: 'PL', align: 'center' },
-                { label: 'Company', align: 'left' },
-                { label: 'CR Number', align: 'left' },
-                { label: 'Task Type', align: 'left' },
-                { label: 'Description', align: 'left' },
-                { label: 'Desc Updated', align: 'left' },
-                { label: 'Priority', align: 'left' },
-                { label: 'Due Date', align: 'left' },
-                { label: 'Status', align: 'left' },
-                { label: 'Auditor', align: 'left' },
-                { label: 'Assigned To', align: 'left' },
-                { label: '', align: 'right' }
-              ].map((h, i) => (
-                <th key={i} style={{
-                  padding: '11px 8px', textAlign: h.align as any,
-                  fontSize: '10.5px', fontWeight: 700, textTransform: 'uppercase',
-                  letterSpacing: '0.05em', color: '#475569', whiteSpace: 'nowrap',
-                  borderBottom: '1.5px solid #e2e8f0'
-                }}>{h.label}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.length === 0 ? (
-              <tr>
-                <td colSpan={multiSelectMode ? 13 : 12} style={{ textAlign: 'center', padding: '64px 20px', color: '#94a3b8' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
-                    <div style={{ width: '56px', height: '56px', borderRadius: '16px', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <ListTodo size={28} color="#94a3b8" />
-                    </div>
-                    <div style={{ fontSize: '15px', fontWeight: 650, color: '#334155' }}>No matching tasks found</div>
-                    <div style={{ fontSize: '13px', color: '#94a3b8' }}>Try adjusting your filters or search keywords</div>
-                  </div>
-                </td>
+          width: '100%', overflowX: 'auto', borderRadius: '18px',
+          boxShadow: '0 4px 24px -2px rgba(15, 23, 42, 0.05), 0 2px 6px -1px rgba(15, 23, 42, 0.02)',
+          border: '1px solid rgba(226, 232, 240, 0.85)', background: '#ffffff',
+          WebkitOverflowScrolling: 'touch'
+        }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', background: '#ffffff' }}>
+            <thead>
+              <tr style={{
+                background: 'linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%)',
+                borderBottom: '1.5px solid #e2e8f0'
+              }}>
+                {multiSelectMode && (
+                  <th style={{
+                    padding: '11px 8px', textAlign: 'center', width: '38px',
+                    borderBottom: '1.5px solid #e2e8f0'
+                  }}>
+                    <input
+                      type="checkbox"
+                      checked={isAllFilteredSelected}
+                      ref={el => { if (el) el.indeterminate = isSomeFilteredSelected; }}
+                      onChange={e => {
+                        if (e.target.checked) selectAllFiltered();
+                        else deselectAll();
+                      }}
+                      style={{ cursor: 'pointer', width: '16px', height: '16px', accentColor: '#2563eb' }}
+                      title={isAllFilteredSelected ? 'Deselect All' : 'Select All Filtered'}
+                    />
+                  </th>
+                )}
+                {visibleColumns.length === 0 ? (
+                  <th style={{
+                    padding: '11px 16px', textAlign: 'left',
+                    fontSize: '11px', fontWeight: 700, color: '#dc2626',
+                    borderBottom: '1.5px solid #e2e8f0'
+                  }}>
+                    No Columns Visible (Enable columns in Columns menu or Settings)
+                  </th>
+                ) : (
+                  visibleColumns.map((col) => {
+                    const isActions = col.id === 'actions';
+                    const isPl = col.id === 'pl';
+                    return (
+                      <th key={col.id} style={{
+                        padding: isActions ? '11px 2px' : '11px 8px',
+                        textAlign: (isActions ? 'center' : col.align) as any,
+                        fontSize: '10.5px', fontWeight: 700, textTransform: 'uppercase',
+                        letterSpacing: '0.05em', color: '#475569', whiteSpace: 'nowrap',
+                        borderBottom: '1.5px solid #e2e8f0',
+                        width: isActions ? '32px' : (isPl ? '56px' : undefined),
+                        minWidth: isActions ? '32px' : (col.minWidth || 'auto'),
+                        maxWidth: isActions ? '36px' : undefined
+                      }}>
+                        {isActions ? '' : (col.shortLabel !== undefined && col.shortLabel !== '' ? col.shortLabel : col.label)}
+                      </th>
+                    );
+                  })
+                )}
               </tr>
-            ) : filtered.map(task => {
-              const company = companies.find(c => c.id === task.company_id);
-              const ttIds = task.task_type_ids && task.task_type_ids.length > 0 ? task.task_type_ids : (task.task_type_id ? task.task_type_id.split(',').map(s => s.trim()).filter(Boolean) : []);
-              const ttNames = ttIds.map(id => taskTypes.find(t => t.id === id)?.name).filter(Boolean);
-              const statusOptions = getStatusesForTask(ttIds, statusObjects, dynamicStatuses);
-              if (task.status && !statusOptions.includes(task.status)) {
-                statusOptions.push(task.status);
-                statusOptions.sort((a, b) => a.localeCompare(b));
-              }
-              const pc = priorityColor(task.priority);
-              const isMenuOpen = openMenuId === task.id;
-              const isSelected = selectedTaskIds.includes(task.id);
-
-              return (
-                <tr key={task.id} style={{
-                  borderBottom: '1px solid rgba(241, 245, 249, 0.9)',
-                  background: isSelected ? 'rgba(239, 246, 255, 0.85)' : 'transparent',
-                  transition: 'background 0.15s cubic-bezier(0.16, 1, 0.3, 1)'
-                }}
-                  onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = 'rgba(248, 250, 252, 0.85)'; }}
-                  onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = 'transparent'; }}>
-                  {multiSelectMode && (
-                    <td style={{ ...compactCell, textAlign: 'center', width: '38px' }} onClick={e => e.stopPropagation()}>
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={() => toggleSelectTask(task.id)}
-                        style={{ cursor: 'pointer', width: '16px', height: '16px', accentColor: '#2563eb' }}
-                      />
-                    </td>
-                  )}
-                  <td style={{ ...compactCell, textAlign: 'center', width: '48px' }}>
-                    <button
-                      onClick={() => handlePlUploadedToggle(task.id)}
-                      title={task.pl_uploaded ? 'PL Uploaded: Yes — click to change' : 'PL Uploaded: No — click to change'}
-                      style={{
-                        padding: '3px 8px', borderRadius: '12px',
-                        border: task.pl_uploaded ? '1px solid rgba(16, 185, 129, 0.35)' : '1px solid rgba(239, 68, 68, 0.35)',
-                        cursor: 'pointer', fontSize: '9.5px', fontWeight: 700,
-                        letterSpacing: '0.02em', transition: 'all 0.15s ease',
-                        background: task.pl_uploaded ? 'linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%)' : 'linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%)',
-                        color: task.pl_uploaded ? '#047857' : '#b91c1c',
-                        display: 'inline-flex', alignItems: 'center', gap: '3px',
-                        boxShadow: task.pl_uploaded ? '0 1px 2px rgba(16, 185, 129, 0.1)' : '0 1px 2px rgba(239, 68, 68, 0.1)'
-                      }}
-                      onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.05)'; }}
-                      onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; }}
-                    >
-                      {task.pl_uploaded ? '✓ Yes' : '✗ No'}
-                    </button>
-                  </td>
-                  <td style={compactCell}>
-                    <span style={{ fontWeight: 650, fontSize: '12.5px', color: '#0f172a', maxWidth: '125px', display: 'inline-block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', letterSpacing: '-0.01em' }} title={company?.company_name || 'Unknown'}>
-                      {company?.company_name || 'Unknown'}
-                    </span>
-                  </td>
-                  <td
-                    style={{ ...compactCell, position: 'relative', cursor: (canManageTask(task) && company) ? 'pointer' : 'default' }}
-                    onMouseEnter={() => setHoveredCrTaskId(task.id)}
-                    onMouseLeave={() => setHoveredCrTaskId(null)}
-                  >
-                    {inlineEditCrId === task.id ? (
-                      <div
-                        onClick={e => e.stopPropagation()}
-                        style={{
-                          display: 'flex',
-                          flexDirection: 'column',
-                          gap: '7px',
-                          minWidth: '220px',
-                          maxWidth: '260px',
-                          position: 'absolute',
-                          zIndex: 40,
-                          background: '#ffffff',
-                          padding: '10px 12px',
-                          borderRadius: '10px',
-                          boxShadow: '0 12px 30px rgba(15, 23, 42, 0.18), 0 0 0 1px rgba(59, 130, 246, 0.25)',
-                          top: '50%',
-                          transform: 'translateY(-50%)',
-                          left: '4px'
-                        }}
-                      >
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #f1f5f9', paddingBottom: '5px' }}>
-                          <span style={{ fontSize: '11px', fontWeight: 700, color: '#1e293b', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <FileSpreadsheet size={12} color="#2563eb" /> CR Details
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => setInlineEditCrId(null)}
-                            style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '2px', display: 'flex', alignItems: 'center' }}
-                            title="Close (Esc)"
-                          >
-                            <X size={12} />
-                          </button>
-                        </div>
-
-                        <div>
-                          <label style={{ display: 'block', fontSize: '9.5px', fontWeight: 650, color: '#64748b', marginBottom: '2px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                            CR Number
-                          </label>
-                          <input
-                            autoFocus
-                            type="text"
-                            value={inlineEditCrValue}
-                            onChange={e => setInlineEditCrValue(e.target.value)}
-                            placeholder="e.g. 167145-1"
-                            style={{
-                              width: '100%',
-                              padding: '5px 8px',
-                              fontSize: '11.5px',
-                              fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-                              borderRadius: '6px',
-                              border: '1.5px solid #cbd5e1',
-                              outline: 'none',
-                              color: '#0f172a',
-                              background: '#f8fafc',
-                              boxSizing: 'border-box'
-                            }}
-                            onFocus={e => {
-                              e.target.style.borderColor = '#2563eb';
-                              e.target.style.background = '#ffffff';
-                              e.target.style.boxShadow = '0 0 0 3px rgba(37,99,235,0.12)';
-                            }}
-                            onBlur={e => {
-                              e.target.style.borderColor = '#cbd5e1';
-                              e.target.style.background = '#f8fafc';
-                              e.target.style.boxShadow = 'none';
-                            }}
-                            onKeyDown={e => {
-                              if (e.key === 'Escape') setInlineEditCrId(null);
-                              else if (e.key === 'Enter') {
-                                if (company) saveInlineCrNumber(company.id, task.id);
-                              }
-                            }}
-                          />
-                        </div>
-
-                        <div>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2px' }}>
-                            <label style={{ fontSize: '9.5px', fontWeight: 650, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                              CR Link / URL
-                            </label>
-                            {inlineEditCrLinkValue && (
-                              <a
-                                href={formatExternalUrl(inlineEditCrLinkValue)}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                onClick={e => e.stopPropagation()}
-                                style={{ fontSize: '9.5px', color: '#2563eb', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '2px', fontWeight: 600 }}
-                                title="Test link in new tab"
-                              >
-                                Test <ExternalLink size={9} />
-                              </a>
-                            )}
-                          </div>
-                          <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                            <input
-                              type="url"
-                              value={inlineEditCrLinkValue}
-                              onChange={e => setInlineEditCrLinkValue(e.target.value)}
-                              placeholder="e.g. https://sijilat.bh/..."
-                              style={{
-                                width: '100%',
-                                padding: '5px 8px 5px 24px',
-                                fontSize: '11.5px',
-                                borderRadius: '6px',
-                                border: '1.5px solid #cbd5e1',
-                                outline: 'none',
-                                color: '#0f172a',
-                                background: '#f8fafc',
-                                boxSizing: 'border-box'
-                              }}
-                              onFocus={e => {
-                                e.target.style.borderColor = '#2563eb';
-                                e.target.style.background = '#ffffff';
-                                e.target.style.boxShadow = '0 0 0 3px rgba(37,99,235,0.12)';
-                              }}
-                              onBlur={e => {
-                                e.target.style.borderColor = '#cbd5e1';
-                                e.target.style.background = '#f8fafc';
-                                e.target.style.boxShadow = 'none';
-                              }}
-                              onKeyDown={e => {
-                                if (e.key === 'Escape') setInlineEditCrId(null);
-                                else if (e.key === 'Enter') {
-                                  if (company) saveInlineCrNumber(company.id, task.id);
-                                }
-                              }}
-                            />
-                            <span style={{ position: 'absolute', left: '7px', color: '#94a3b8', display: 'flex', alignItems: 'center', pointerEvents: 'none' }}>
-                              <ExternalLink size={11} />
-                            </span>
-                          </div>
-                        </div>
-
-                        <div style={{ display: 'flex', gap: '5px', justifyContent: 'flex-end', marginTop: '3px' }}>
-                          <button
-                            type="button"
-                            onClick={() => setInlineEditCrId(null)}
-                            style={{
-                              padding: '4px 8px',
-                              border: '1px solid #e2e8f0',
-                              background: '#f8fafc',
-                              color: '#64748b',
-                              borderRadius: '6px',
-                              cursor: 'pointer',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '3px',
-                              fontSize: '10.5px',
-                              fontWeight: 600
-                            }}
-                            title="Cancel (Esc)"
-                          >
-                            <X size={11} /> Cancel
-                          </button>
-                          <button
-                            type="button"
-                            disabled={savingCrTaskId === task.id}
-                            onClick={() => { if (company) saveInlineCrNumber(company.id, task.id); }}
-                            style={{
-                              padding: '4px 10px',
-                              border: 'none',
-                              background: '#2563eb',
-                              color: '#fff',
-                              borderRadius: '6px',
-                              cursor: savingCrTaskId === task.id ? 'wait' : 'pointer',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '3px',
-                              fontSize: '10.5px',
-                              fontWeight: 600,
-                              opacity: savingCrTaskId === task.id ? 0.7 : 1,
-                              boxShadow: '0 2px 6px rgba(37,99,235,0.25)'
-                            }}
-                            title="Save (Enter)"
-                          >
-                            <Check size={11} /> {savingCrTaskId === task.id ? 'Saving...' : 'Save'}
-                          </button>
-                        </div>
+            </thead>
+            <tbody>
+              {filtered.length === 0 ? (
+                <tr>
+                  <td colSpan={Math.max(1, visibleColumns.length) + (multiSelectMode ? 1 : 0)} style={{ textAlign: 'center', padding: '64px 20px', color: '#94a3b8' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
+                      <div style={{ width: '56px', height: '56px', borderRadius: '16px', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <ListTodo size={28} color="#94a3b8" />
                       </div>
-                    ) : (
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '3px', minHeight: '22px' }}>
-                        {company?.cr_number ? (
-                          <span style={{
-                            fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-                            fontSize: '10px', fontWeight: 600, color: '#334155',
-                            background: 'linear-gradient(135deg, #f8fafc, #f1f5f9)', padding: '2px 6px', borderRadius: '5px',
-                            border: '1px solid #cbd5e1', display: 'inline-block',
-                            maxWidth: '85px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                            letterSpacing: '0.02em',
-                          }} title={company.cr_number}>
-                            {company.cr_number}
-                          </span>
-                        ) : (
-                          <span style={{ fontSize: '11px', color: '#cbd5e1' }}>—</span>
-                        )}
-
-                        <div style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '3px',
-                          flexShrink: 0,
-                          opacity: hoveredCrTaskId === task.id ? 1 : 0,
-                          pointerEvents: hoveredCrTaskId === task.id ? 'auto' : 'none',
-                          transition: 'opacity 0.15s ease, transform 0.15s ease',
-                        }}>
-                          {/* CR Hyperlink Icon */}
-                          {company?.cr_link && (
-                            <a
-                              href={formatExternalUrl(company.cr_link)}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              onClick={e => {
-                                e.stopPropagation();
-                              }}
-                              style={{
-                                background: '#ecfdf5',
-                                border: '1px solid #a7f3d0',
-                                borderRadius: '5px',
-                                cursor: 'pointer',
-                                padding: '2px',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                color: '#059669',
-                                transition: 'all 0.15s ease',
-                                width: '19px',
-                                height: '19px',
-                                textDecoration: 'none',
-                                flexShrink: 0,
-                              }}
-                              title={`Open CR Link: ${company.cr_link}`}
-                              onMouseEnter={e => {
-                                e.currentTarget.style.background = '#d1fae5';
-                                e.currentTarget.style.borderColor = '#6ee7b7';
-                                e.currentTarget.style.color = '#047857';
-                              }}
-                              onMouseLeave={e => {
-                                e.currentTarget.style.background = '#ecfdf5';
-                                e.currentTarget.style.borderColor = '#a7f3d0';
-                                e.currentTarget.style.color = '#059669';
-                              }}
-                            >
-                              <ExternalLink size={10.5} />
-                            </a>
-                          )}
-
-                          {/* Edit CR Number & Link Button */}
-                          {canManageTask(task) && company && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setInlineEditCrId(task.id);
-                                setInlineEditCrValue(company.cr_number || '');
-                                setInlineEditCrLinkValue(company.cr_link || '');
-                              }}
-                              style={{
-                                background: '#eff6ff',
-                                border: '1px solid #dbeafe',
-                                borderRadius: '5px',
-                                cursor: 'pointer',
-                                padding: '2px',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                color: '#2563eb',
-                                transition: 'all 0.15s ease',
-                                width: '19px',
-                                height: '19px',
-                                flexShrink: 0,
-                              }}
-                              title="Edit CR Number & Link"
-                              onMouseEnter={e => { e.currentTarget.style.background = '#dbeafe'; }}
-                              onMouseLeave={e => { e.currentTarget.style.background = '#eff6ff'; }}
-                            >
-                              <Edit2 size={10} />
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </td>
-                  <td style={compactCell}>
-                    {ttNames.length > 0 ? (
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px' }}>
-                        {ttNames.map((name, i) => (
-                          <span key={i} style={{
-                            padding: '2px 6px', borderRadius: '5px', fontSize: '10px',
-                            fontWeight: 650, background: 'linear-gradient(135deg, #eff6ff, #dbeafe)',
-                            color: '#1d4ed8', border: '1px solid #bfdbfe', whiteSpace: 'nowrap',
-                            letterSpacing: '0.01em',
-                          }}>{name}</span>
-                        ))}
-                      </div>
-                    ) : <span style={{ fontSize: '11px', color: '#cbd5e1' }}>—</span>}
-                  </td>
-                  <td
-                    style={{ ...compactCell, position: 'relative', cursor: (task.description && inlineEditDescId !== task.id) ? 'pointer' : 'default' }}
-                    onMouseEnter={(e) => {
-                      setHoveredDescTaskId(task.id);
-                      if (task.description && inlineEditDescId !== task.id) {
-                        if (tooltipTimeoutRef.current) {
-                          clearTimeout(tooltipTimeoutRef.current);
-                          tooltipTimeoutRef.current = null;
-                        }
-                        if (activeTooltipRef.current === task.id) {
-                          return;
-                        }
-                        const rect = e.currentTarget.getBoundingClientRect();
-                        const tooltipWidth = 330;
-                        let left = rect.left + (rect.width / 2) - (tooltipWidth / 2);
-                        if (left < 16) left = 16;
-                        if (left + tooltipWidth > window.innerWidth - 16) {
-                          left = window.innerWidth - tooltipWidth - 16;
-                        }
-                        const top = rect.top - 6;
-                        const align: 'top' | 'bottom' = 'top';
-                        activeTooltipRef.current = task.id;
-                        setTooltipPos({ x: left, y: top, align });
-                        setActiveTooltipTaskId(task.id);
-                      }
-                    }}
-                    onMouseLeave={() => {
-                      setHoveredDescTaskId(null);
-                      if (tooltipTimeoutRef.current) {
-                        clearTimeout(tooltipTimeoutRef.current);
-                        tooltipTimeoutRef.current = null;
-                      }
-                      tooltipTimeoutRef.current = setTimeout(() => {
-                        activeTooltipRef.current = null;
-                        setActiveTooltipTaskId(null);
-                      }, 200);
-                    }}
-                  >
-                    {inlineEditDescId === task.id ? (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', minWidth: '200px', position: 'absolute', zIndex: 20, background: '#fff', padding: '10px', borderRadius: '10px', boxShadow: '0 12px 30px rgba(0,0,0,0.15)', border: '1px solid #93c5fd', top: '50%', transform: 'translateY(-50%)', left: '10px' }}>
-                        <textarea
-                          autoFocus
-                          value={inlineEditDescValue}
-                          onChange={e => setInlineEditDescValue(e.target.value)}
-                          style={{
-                            width: '100%',
-                            minHeight: '68px',
-                            padding: '8px',
-                            fontSize: '11.5px',
-                            borderRadius: '6px',
-                            border: '1.5px solid #2563eb',
-                            outline: 'none',
-                            resize: 'vertical',
-                            fontFamily: 'inherit',
-                            color: '#0f172a',
-                            boxShadow: '0 0 0 3px rgba(37,99,235,0.1)'
-                          }}
-                          onKeyDown={e => {
-                            if (e.key === 'Escape') {
-                              setInlineEditDescId(null);
-                            } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-                              saveInlineDescription(task.id);
-                            }
-                          }}
-                        />
-                        <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end', marginTop: '2px' }}>
-                          <button
-                            onClick={() => setInlineEditDescId(null)}
-                            style={{ padding: '4px 9px', border: '1px solid #e2e8f0', background: '#f8fafc', color: '#64748b', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', fontWeight: 600 }}
-                            title="Cancel (Esc)"
-                          >
-                            <X size={12} /> Cancel
-                          </button>
-                          <button
-                            onClick={() => saveInlineDescription(task.id)}
-                            style={{ padding: '4px 10px', border: 'none', background: '#2563eb', color: '#fff', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', fontWeight: 600 }}
-                            title="Save (Ctrl+Enter)"
-                          >
-                            <Check size={12} /> Save
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '3px', minHeight: '22px' }}>
-                        <span style={{ fontSize: '11.5px', color: '#475569', maxWidth: '120px', display: 'inline-block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={task.description || ''}>
-                          {task.description || '—'}
-                        </span>
-                        {canManageTask(task) && (
-                          <button
-                            onClick={() => {
-                              setInlineEditDescId(task.id);
-                              setInlineEditDescValue(task.description || '');
-                              activeTooltipRef.current = null;
-                              setActiveTooltipTaskId(null);
-                            }}
-                            style={{
-                              background: '#eff6ff',
-                              border: '1px solid #dbeafe',
-                              borderRadius: '5px',
-                              cursor: 'pointer',
-                              padding: '2px',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              color: '#2563eb',
-                              transition: 'all 0.15s ease',
-                              opacity: hoveredDescTaskId === task.id ? 1 : 0,
-                              pointerEvents: hoveredDescTaskId === task.id ? 'auto' as const : 'none' as const,
-                              width: '19px',
-                              height: '19px',
-                              flexShrink: 0,
-                            }}
-                            title="Edit Description"
-                            onMouseEnter={e => { e.currentTarget.style.background = '#dbeafe'; }}
-                            onMouseLeave={e => { e.currentTarget.style.background = '#eff6ff'; }}
-                          >
-                            <Edit2 size={10} />
-                          </button>
-                        )}
-                      </div>
-                    )}
-                  </td>
-                  <td style={compactCell}>
-                    {(() => {
-                      const updateDate = descUpdateMap[task.id] || (task.description ? task.created_at : null);
-                      if (!updateDate || !task.description || task.description.trim() === '') {
-                        return <span style={{ fontSize: '10.5px', color: '#cbd5e1' }}>—</span>;
-                      }
-                      const updateTime = new Date(updateDate).getTime();
-                      const isRecent = !isNaN(updateTime) && (Date.now() - updateTime < 24 * 60 * 60 * 1000) && (Date.now() >= updateTime - 60000);
-                      return (
-                        <span
-                          title={`Last updated: ${new Date(updateDate).toLocaleString()}`}
-                          style={{
-                            fontSize: '10px',
-                            color: isRecent ? '#0284c7' : '#64748b',
-                            fontWeight: isRecent ? 650 : 500,
-                            whiteSpace: 'nowrap',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '3px',
-                            background: isRecent ? 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)' : 'transparent',
-                            padding: isRecent ? '2px 5px' : '0',
-                            borderRadius: isRecent ? '5px' : '0',
-                            border: isRecent ? '1px solid #bae6fd' : 'none',
-                          }}
-                        >
-                          {isRecent && <span style={{ width: '4.5px', height: '4.5px', borderRadius: '50%', background: '#0284c7', boxShadow: '0 0 0 1.5px #bae6fd' }} />}
-                          {formatDescDate(updateDate)}
-                        </span>
-                      );
-                    })()}
-                  </td>
-                  <td style={compactCell}>
-                    {canUpdateStatus ? (
-                      <select value={task.priority} onChange={e => handlePriorityChange(task.id, e.target.value)}
-                        style={{
-                          padding: '3px 6px', borderRadius: '7px', border: '1px solid rgba(0,0,0,0.06)',
-                          background: pc.bg, color: pc.color, fontWeight: 700,
-                          fontSize: '10.5px', cursor: 'pointer', outline: 'none',
-                          boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
-                        }}>
-                        {BAHRAIN_PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
-                      </select>
-                    ) : (
-                      <span style={{ padding: '3px 6px', borderRadius: '7px', fontSize: '10px', fontWeight: 700, background: pc.bg, color: pc.color, whiteSpace: 'nowrap' }}>
-                        {task.priority}
-                      </span>
-                    )}
-                  </td>
-                  <td style={compactCell}>
-                    <span style={{ fontSize: '11px', color: '#475569', fontWeight: 500, whiteSpace: 'nowrap', fontFamily: 'ui-monospace, monospace' }}>
-                      {task.deadline || '—'}
-                    </span>
-                  </td>
-                  <td style={compactCell}>
-                    {canUpdateStatus ? (() => {
-                      const sc = statusColor(task.status);
-                      return (
-                        <select value={task.status} onChange={e => handleStatusChange(task.id, e.target.value)}
-                          style={{
-                            padding: '3.5px 6px', borderRadius: '7px',
-                            border: `1px solid ${sc.border}`, background: sc.bg,
-                            color: sc.color, fontWeight: 650, fontSize: '10.5px',
-                            cursor: 'pointer', outline: 'none', minWidth: '95px', maxWidth: '125px',
-                            boxShadow: '0 1px 2px rgba(0,0,0,0.02)'
-                          }}>
-                          {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
-                        </select>
-                      );
-                    })() : (() => {
-                      const sc = statusColor(task.status);
-                      return (
-                        <span style={{
-                          padding: '2.5px 6px', borderRadius: '6px', fontSize: '10.5px',
-                          fontWeight: 650, background: sc.bg, color: sc.color,
-                          border: `1px solid ${sc.border}`, whiteSpace: 'nowrap'
-                        }}>
-                          {task.status}
-                        </span>
-                      );
-                    })()}
-                  </td>
-                  <td style={compactCell}>
-                    {isAdminUser ? (
-                      <select value={task.auditor_id || ''} onChange={e => handleAssignAuditor(task.id, e.target.value)}
-                        style={{
-                          padding: '3.5px 6px', borderRadius: '7px', border: '1px solid #e2e8f0',
-                          background: '#f8fafc', fontSize: '10.5px', color: '#1e293b',
-                          minWidth: '85px', maxWidth: '115px', cursor: 'pointer', outline: 'none', fontWeight: 500,
-                          boxShadow: '0 1px 2px rgba(0,0,0,0.02)'
-                        }}>
-                        <option value="">No Auditor</option>
-                        {auditors.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                      </select>
-                    ) : (
-                      <span style={{ fontSize: '11px', color: '#475569', fontWeight: 500 }}>
-                        {auditors.find(a => a.id === task.auditor_id)?.name || '—'}
-                      </span>
-                    )}
-                  </td>
-                  <td style={compactCell}>
-                    {isAdminUser ? (
-                      <select value={task.assigned_to || ''} onChange={e => handleAssign(task.id, e.target.value)}
-                        style={{
-                          padding: '3.5px 6px', borderRadius: '7px', border: '1px solid #e2e8f0',
-                          background: '#f8fafc', fontSize: '10.5px', color: '#1e293b',
-                          minWidth: '85px', maxWidth: '115px', cursor: 'pointer', outline: 'none', fontWeight: 500,
-                          boxShadow: '0 1px 2px rgba(0,0,0,0.02)'
-                        }}>
-                        <option value="">Unassigned</option>
-                        {partners.map(p => <option key={p.id} value={p.id}>{p.username}</option>)}
-                      </select>
-                    ) : (
-                      <span style={{ fontSize: '11px', color: '#1e293b', fontWeight: 500 }}>
-                        {(() => {
-                          const activePartnerIds = task.assigned_partners && task.assigned_partners.length > 0 
-                            ? task.assigned_partners 
-                            : (task.assigned_to ? [task.assigned_to] : []);
-                          const allNames = activePartnerIds.map((id: string) => partners.find((p: any) => p.id === id)?.username).filter(Boolean);
-                          return allNames.length > 0 ? allNames.join(', ') : 'Unassigned';
-                        })()}
-                      </span>
-                    )}
-                  </td>
-                  <td style={{ ...compactCell, position: 'relative', width: '32px', padding: '6px 2px' }}>
-                    <button onClick={e => { 
-                      e.stopPropagation(); 
-                      if (isMenuOpen) {
-                        setOpenMenuId(null);
-                      } else {
-                        const rect = e.currentTarget.getBoundingClientRect();
-                        const menuHeight = 180;
-                        let top: number | undefined = rect.bottom + 4;
-                        let bottom: number | undefined = undefined;
-                        let maxHeight = `calc(100vh - ${top}px - 10px)`;
-                        
-                        if (rect.bottom + menuHeight > window.innerHeight && rect.top > window.innerHeight - rect.bottom) {
-                          top = undefined;
-                          bottom = window.innerHeight - rect.top + 4;
-                          maxHeight = `calc(${rect.top}px - 10px)`;
-                        }
-                        
-                        setMenuPos({ top, bottom, right: window.innerWidth - rect.right, maxHeight });
-                        setOpenMenuId(task.id);
-                      }
-                    }}
-                      style={{
-                        background: isMenuOpen ? '#eff6ff' : 'transparent',
-                        border: 'none',
-                        cursor: 'pointer', borderRadius: '8px', padding: '6px',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        transition: 'all 0.15s ease', position: 'relative',
-                        marginLeft: 'auto',
-                        width: '30px',
-                        height: '30px',
-                      }}
-                      onMouseEnter={e => { e.currentTarget.style.background = '#f1f5f9'; }}
-                      onMouseLeave={e => { if (!isMenuOpen) { e.currentTarget.style.background = 'transparent'; } }}>
-                      <MoreHorizontal size={17} color="#64748b" />
-                    </button>
-                    {isMenuOpen && typeof window !== 'undefined' && createPortal(
-                      <div style={{ position: 'fixed', top: menuPos.top, bottom: menuPos.bottom, right: menuPos.right, maxHeight: menuPos.maxHeight || 'none', overflowY: 'auto', background: '#fff', borderRadius: '12px', boxShadow: '0 8px 30px rgba(0,0,0,0.12)', border: '1px solid #e2e8f0', zIndex: 9999, minWidth: '165px' }}
-                        onClick={e => e.stopPropagation()}>
-                        <button onClick={() => { viewDetail(task.id); setOpenMenuId(null); }} style={menuItemStyle}>
-                          <Eye size={14} color="#3b82f6" /> View Details
-                        </button>
-                        {canManageTask(task) && (<>
-                          <button onClick={() => { openEditTask(task); setOpenMenuId(null); }} style={menuItemStyle}>
-                            <Edit2 size={14} color="#f59e0b" /> Edit Task
-                          </button>
-                        </>)}
-                        <div style={{ height: '1px', background: '#f1f5f9', margin: '2px 0' }} />
-                        <button
-                          onClick={() => {
-                            const comp = companies.find(c => c.id === task.company_id);
-                            const ttIds = task.task_type_ids && task.task_type_ids.length > 0 ? task.task_type_ids : (task.task_type_id ? task.task_type_id.split(',').map(s => s.trim()).filter(Boolean) : []);
-                            const ttNames = ttIds.map(id => taskTypes.find(t => t.id === id)?.name).filter(Boolean).join(', ') || 'N/A';
-                            const activePartnerIds = task.assigned_partners && task.assigned_partners.length > 0 
-                              ? task.assigned_partners 
-                              : (task.assigned_to ? [task.assigned_to] : []);
-                            const allNames = activePartnerIds.map((id: string) => partners.find((p: any) => p.id === id)?.username).filter(Boolean);
-                            const assignedNames = allNames.length > 0 ? allNames.join(', ') : 'Unassigned';
-                            const msg = [
-                              '━━━━━━━━━━━━━━━━━━',
-                              '*Task Update*',
-                              '━━━━━━━━━━━━━━━━━━',
-                              '',
-                              `*Company:* ${comp?.company_name || 'Unknown'}`,
-                              `*CR Number:* ${comp?.cr_number || 'N/A'}`,
-                              `*Audit Type:* ${ttNames}`,
-                              `*Assigned To:* ${assignedNames}`,
-                              `*Status:* ${task.status || 'N/A'}`,
-                              ...(task.description ? [`*Description:* ${task.description}`] : []),
-                            ].join('\n');
-                            window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
-                            setOpenMenuId(null);
-                          }}
-                          style={menuItemStyle}
-                          onMouseEnter={e => e.currentTarget.style.background = '#f0fdf4'}
-                          onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                        >
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="#25D366" style={{ flexShrink: 0 }}>
-                            <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
-                          </svg>
-                          <span style={{ color: '#25D366', fontWeight: 600 }}>WhatsApp</span>
-                        </button>
-                        {canManageTask(task) && (<>
-                          <div style={{ height: '1px', background: '#f1f5f9', margin: '2px 0' }} />
-                          <button onClick={() => { deleteTask(task.id); setOpenMenuId(null); }} style={{ ...menuItemStyle, color: '#ef4444' }}>
-                            <Trash2 size={14} color="#ef4444" /> Delete
-                          </button>
-                        </>)}
-                      </div>,
-                      document.body
-                    )}
+                      <div style={{ fontSize: '15px', fontWeight: 650, color: '#334155' }}>No matching tasks found</div>
+                      <div style={{ fontSize: '13px', color: '#94a3b8' }}>Try adjusting your filters or search keywords</div>
+                    </div>
                   </td>
                 </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+              ) : paginatedTasks.map(task => {
+                const company = companies.find(c => c.id === task.company_id);
+                const ttIds = task.task_type_ids && task.task_type_ids.length > 0 ? task.task_type_ids : (task.task_type_id ? task.task_type_id.split(',').map(s => s.trim()).filter(Boolean) : []);
+                const ttNames = ttIds.map(id => taskTypes.find(t => t.id === id)?.name).filter(Boolean);
+                const statusOptions = getStatusesForTask(ttIds, statusObjects, dynamicStatuses);
+                if (task.status && !statusOptions.includes(task.status)) {
+                  statusOptions.push(task.status);
+                  statusOptions.sort((a, b) => a.localeCompare(b));
+                }
+                const pc = priorityColor(task.priority);
+                const isMenuOpen = openMenuId === task.id;
+                const isSelected = selectedTaskIds.includes(task.id);
+
+                return (
+                  <tr key={task.id} style={{
+                    borderBottom: '1px solid rgba(241, 245, 249, 0.9)',
+                    background: isSelected ? 'rgba(239, 246, 255, 0.85)' : 'transparent',
+                    transition: 'background 0.15s cubic-bezier(0.16, 1, 0.3, 1)'
+                  }}
+                    onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = 'rgba(248, 250, 252, 0.85)'; }}
+                    onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = 'transparent'; }}>
+                    {multiSelectMode && (
+                      <td style={{ ...compactCell, textAlign: 'center', width: '38px' }} onClick={e => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleSelectTask(task.id)}
+                          style={{ cursor: 'pointer', width: '16px', height: '16px', accentColor: '#2563eb' }}
+                        />
+                      </td>
+                    )}
+
+                    {/* Render Columns Dynamically in User-Defined Order */}
+                    {visibleColumns.map((col) => {
+                      switch (col.id) {
+                        case 'pl':
+                          return (
+                            <td key={`pl-${task.id}`} style={{ ...compactCell, textAlign: 'center', width: '56px', padding: '6px 4px' }}>
+                              <button
+                                onClick={() => handlePlUploadedToggle(task.id)}
+                                title={task.pl_uploaded ? 'Engagement Letter (PL): Signed & Uploaded (Click to toggle)' : 'Engagement Letter (PL): Pending / Not Signed (Click to toggle)'}
+                                style={{
+                                  padding: '3.5px 7.5px',
+                                  borderRadius: '8px',
+                                  border: task.pl_uploaded ? '1px solid #10b981' : '1px solid #fda4af',
+                                  cursor: 'pointer',
+                                  fontSize: '11px',
+                                  fontWeight: 700,
+                                  letterSpacing: '0.01em',
+                                  transition: 'all 0.15s ease',
+                                  background: task.pl_uploaded ? 'linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%)' : 'linear-gradient(135deg, #fff1f2 0%, #ffe4e6 100%)',
+                                  color: task.pl_uploaded ? '#047857' : '#e11d48',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  gap: '4px',
+                                  whiteSpace: 'nowrap',
+                                  boxShadow: task.pl_uploaded ? '0 1px 3px rgba(16, 185, 129, 0.18)' : '0 1px 2px rgba(225, 29, 72, 0.08)'
+                                }}
+                                onMouseEnter={e => {
+                                  e.currentTarget.style.transform = 'translateY(-1px)';
+                                  e.currentTarget.style.boxShadow = task.pl_uploaded ? '0 3px 8px rgba(16, 185, 129, 0.28)' : '0 3px 8px rgba(225, 29, 72, 0.18)';
+                                }}
+                                onMouseLeave={e => {
+                                  e.currentTarget.style.transform = 'none';
+                                  e.currentTarget.style.boxShadow = task.pl_uploaded ? '0 1px 3px rgba(16, 185, 129, 0.18)' : '0 1px 2px rgba(225, 29, 72, 0.08)';
+                                }}
+                              >
+                                {task.pl_uploaded ? (
+                                  <>
+                                    <CheckCircle2 size={12} strokeWidth={2.6} color="#059669" />
+                                    <span>Yes</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <XCircle size={12} strokeWidth={2.2} color="#e11d48" />
+                                    <span>No</span>
+                                  </>
+                                )}
+                              </button>
+                            </td>
+                          );
+
+                        case 'company':
+                          return (
+                            <td key={`comp-${task.id}`} style={compactCell}>
+                              <span style={{ fontWeight: 650, fontSize: '12.5px', color: '#0f172a', maxWidth: '125px', display: 'inline-block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', letterSpacing: '-0.01em' }} title={company?.company_name || 'Unknown'}>
+                                {company?.company_name || 'Unknown'}
+                              </span>
+                            </td>
+                          );
+
+                        case 'cr_number':
+                          return (
+                            <td
+                              key={`cr-${task.id}`}
+                              style={{ ...compactCell, position: 'relative', cursor: (canManageTask(task) && company) ? 'pointer' : 'default' }}
+                              onMouseEnter={() => setHoveredCrTaskId(task.id)}
+                              onMouseLeave={() => setHoveredCrTaskId(null)}
+                            >
+                              {inlineEditCrId === task.id ? (
+                                <div
+                                  onClick={e => e.stopPropagation()}
+                                  style={{
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    gap: '7px',
+                                    minWidth: '220px',
+                                    maxWidth: '260px',
+                                    position: 'absolute',
+                                    zIndex: 40,
+                                    background: '#ffffff',
+                                    padding: '10px 12px',
+                                    borderRadius: '10px',
+                                    boxShadow: '0 12px 30px rgba(15, 23, 42, 0.18), 0 0 0 1px rgba(59, 130, 246, 0.25)',
+                                    top: '50%',
+                                    transform: 'translateY(-50%)',
+                                    left: '4px'
+                                  }}
+                                >
+                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #f1f5f9', paddingBottom: '5px' }}>
+                                    <span style={{ fontSize: '11px', fontWeight: 700, color: '#1e293b', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                      <FileSpreadsheet size={12} color="#2563eb" /> CR Details
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => setInlineEditCrId(null)}
+                                      style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '2px', display: 'flex', alignItems: 'center' }}
+                                      title="Close (Esc)"
+                                    >
+                                      <X size={12} />
+                                    </button>
+                                  </div>
+
+                                  <div>
+                                    <label style={{ display: 'block', fontSize: '9.5px', fontWeight: 650, color: '#64748b', marginBottom: '2px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                                      CR Number
+                                    </label>
+                                    <input
+                                      autoFocus
+                                      type="text"
+                                      value={inlineEditCrValue}
+                                      onChange={e => setInlineEditCrValue(e.target.value)}
+                                      placeholder="e.g. 167145-1"
+                                      style={{
+                                        width: '100%',
+                                        padding: '5px 8px',
+                                        fontSize: '11.5px',
+                                        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+                                        borderRadius: '6px',
+                                        border: '1.5px solid #cbd5e1',
+                                        outline: 'none',
+                                        color: '#0f172a',
+                                        background: '#f8fafc',
+                                        boxSizing: 'border-box'
+                                      }}
+                                      onFocus={e => {
+                                        e.target.style.borderColor = '#2563eb';
+                                        e.target.style.background = '#ffffff';
+                                        e.target.style.boxShadow = '0 0 0 3px rgba(37,99,235,0.12)';
+                                      }}
+                                      onBlur={e => {
+                                        e.target.style.borderColor = '#cbd5e1';
+                                        e.target.style.background = '#f8fafc';
+                                        e.target.style.boxShadow = 'none';
+                                      }}
+                                      onKeyDown={e => {
+                                        if (e.key === 'Escape') setInlineEditCrId(null);
+                                        else if (e.key === 'Enter') {
+                                          if (company) saveInlineCrNumber(company.id, task.id);
+                                        }
+                                      }}
+                                    />
+                                  </div>
+
+                                  <div>
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2px' }}>
+                                      <label style={{ fontSize: '9.5px', fontWeight: 650, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                                        CR Link / URL
+                                      </label>
+                                      {inlineEditCrLinkValue && (
+                                        <a
+                                          href={formatExternalUrl(inlineEditCrLinkValue)}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          onClick={e => e.stopPropagation()}
+                                          style={{ fontSize: '9.5px', color: '#2563eb', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '2px', fontWeight: 600 }}
+                                          title="Test link in new tab"
+                                        >
+                                          Test <ExternalLink size={9} />
+                                        </a>
+                                      )}
+                                    </div>
+                                    <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                                      <input
+                                        type="url"
+                                        value={inlineEditCrLinkValue}
+                                        onChange={e => setInlineEditCrLinkValue(e.target.value)}
+                                        placeholder="e.g. https://sijilat.bh/..."
+                                        style={{
+                                          width: '100%',
+                                          padding: '5px 8px 5px 24px',
+                                          fontSize: '11.5px',
+                                          borderRadius: '6px',
+                                          border: '1.5px solid #cbd5e1',
+                                          outline: 'none',
+                                          color: '#0f172a',
+                                          background: '#f8fafc',
+                                          boxSizing: 'border-box'
+                                        }}
+                                        onFocus={e => {
+                                          e.target.style.borderColor = '#2563eb';
+                                          e.target.style.background = '#ffffff';
+                                          e.target.style.boxShadow = '0 0 0 3px rgba(37,99,235,0.12)';
+                                        }}
+                                        onBlur={e => {
+                                          e.target.style.borderColor = '#cbd5e1';
+                                          e.target.style.background = '#f8fafc';
+                                          e.target.style.boxShadow = 'none';
+                                        }}
+                                        onKeyDown={e => {
+                                          if (e.key === 'Escape') setInlineEditCrId(null);
+                                          else if (e.key === 'Enter') {
+                                            if (company) saveInlineCrNumber(company.id, task.id);
+                                          }
+                                        }}
+                                      />
+                                      <span style={{ position: 'absolute', left: '7px', color: '#94a3b8', display: 'flex', alignItems: 'center', pointerEvents: 'none' }}>
+                                        <ExternalLink size={11} />
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  <div style={{ display: 'flex', gap: '5px', justifyContent: 'flex-end', marginTop: '3px' }}>
+                                    <button
+                                      type="button"
+                                      onClick={() => setInlineEditCrId(null)}
+                                      style={{
+                                        padding: '4px 8px',
+                                        border: '1px solid #e2e8f0',
+                                        background: '#f8fafc',
+                                        color: '#64748b',
+                                        borderRadius: '6px',
+                                        cursor: 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '3px',
+                                        fontSize: '10.5px',
+                                        fontWeight: 600
+                                      }}
+                                      title="Cancel (Esc)"
+                                    >
+                                      <X size={11} /> Cancel
+                                    </button>
+                                    <button
+                                      type="button"
+                                      disabled={savingCrTaskId === task.id}
+                                      onClick={() => { if (company) saveInlineCrNumber(company.id, task.id); }}
+                                      style={{
+                                        padding: '4px 10px',
+                                        border: 'none',
+                                        background: '#2563eb',
+                                        color: '#fff',
+                                        borderRadius: '6px',
+                                        cursor: savingCrTaskId === task.id ? 'wait' : 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '3px',
+                                        fontSize: '10.5px',
+                                        fontWeight: 600,
+                                        opacity: savingCrTaskId === task.id ? 0.7 : 1,
+                                        boxShadow: '0 2px 6px rgba(37,99,235,0.25)'
+                                      }}
+                                      title="Save (Enter)"
+                                    >
+                                      <Check size={11} /> {savingCrTaskId === task.id ? 'Saving...' : 'Save'}
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '3px', minHeight: '22px' }}>
+                                  {company?.cr_number ? (
+                                    <span style={{
+                                      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+                                      fontSize: '10px', fontWeight: 600, color: '#334155',
+                                      background: 'linear-gradient(135deg, #f8fafc, #f1f5f9)', padding: '2px 6px', borderRadius: '5px',
+                                      border: '1px solid #cbd5e1', display: 'inline-block',
+                                      maxWidth: '85px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                                      letterSpacing: '0.02em',
+                                    }} title={company.cr_number}>
+                                      {company.cr_number}
+                                    </span>
+                                  ) : (
+                                    <span style={{ fontSize: '11px', color: '#cbd5e1' }}>—</span>
+                                  )}
+
+                                  <div style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '3px',
+                                    flexShrink: 0,
+                                    opacity: hoveredCrTaskId === task.id ? 1 : 0,
+                                    pointerEvents: hoveredCrTaskId === task.id ? 'auto' : 'none',
+                                    transition: 'opacity 0.15s ease, transform 0.15s ease',
+                                  }}>
+                                    {/* CR Hyperlink Icon */}
+                                    {company?.cr_link && (
+                                      <a
+                                        href={formatExternalUrl(company.cr_link)}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        onClick={e => {
+                                          e.stopPropagation();
+                                        }}
+                                        style={{
+                                          background: '#ecfdf5',
+                                          border: '1px solid #a7f3d0',
+                                          borderRadius: '5px',
+                                          cursor: 'pointer',
+                                          padding: '2px',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          justifyContent: 'center',
+                                          color: '#059669',
+                                          transition: 'all 0.15s ease',
+                                          width: '19px',
+                                          height: '19px',
+                                          textDecoration: 'none',
+                                          flexShrink: 0,
+                                        }}
+                                        title={`Open CR Link: ${company.cr_link}`}
+                                        onMouseEnter={e => {
+                                          e.currentTarget.style.background = '#d1fae5';
+                                          e.currentTarget.style.borderColor = '#6ee7b7';
+                                          e.currentTarget.style.color = '#047857';
+                                        }}
+                                        onMouseLeave={e => {
+                                          e.currentTarget.style.background = '#ecfdf5';
+                                          e.currentTarget.style.borderColor = '#a7f3d0';
+                                          e.currentTarget.style.color = '#059669';
+                                        }}
+                                      >
+                                        <ExternalLink size={10.5} />
+                                      </a>
+                                    )}
+
+                                    {/* Edit CR Number & Link Button */}
+                                    {canManageTask(task) && company && (
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setInlineEditCrId(task.id);
+                                          setInlineEditCrValue(company.cr_number || '');
+                                          setInlineEditCrLinkValue(company.cr_link || '');
+                                        }}
+                                        style={{
+                                          background: '#eff6ff',
+                                          border: '1px solid #dbeafe',
+                                          borderRadius: '5px',
+                                          cursor: 'pointer',
+                                          padding: '2px',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          justifyContent: 'center',
+                                          color: '#2563eb',
+                                          transition: 'all 0.15s ease',
+                                          width: '19px',
+                                          height: '19px',
+                                          flexShrink: 0,
+                                        }}
+                                        title="Edit CR Number & Link"
+                                        onMouseEnter={e => { e.currentTarget.style.background = '#dbeafe'; }}
+                                        onMouseLeave={e => { e.currentTarget.style.background = '#eff6ff'; }}
+                                      >
+                                        <Edit2 size={10} />
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+                            </td>
+                          );
+
+                        case 'task_type':
+                          return (
+                            <td key={`tt-${task.id}`} style={compactCell}>
+                              {ttNames.length > 0 ? (
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px' }}>
+                                  {ttNames.map((name, i) => (
+                                    <span key={i} style={{
+                                      padding: '2px 6px', borderRadius: '5px', fontSize: '10px',
+                                      fontWeight: 650, background: 'linear-gradient(135deg, #eff6ff, #dbeafe)',
+                                      color: '#1d4ed8', border: '1px solid #bfdbfe', whiteSpace: 'nowrap',
+                                      letterSpacing: '0.01em',
+                                    }}>{name}</span>
+                                  ))}
+                                </div>
+                              ) : <span style={{ fontSize: '11px', color: '#cbd5e1' }}>—</span>}
+                            </td>
+                          );
+
+                        case 'description':
+                          return (
+                            <td
+                              key={`desc-${task.id}`}
+                              style={{ ...compactCell, position: 'relative', cursor: (task.description && inlineEditDescId !== task.id) ? 'pointer' : 'default' }}
+                              onMouseEnter={(e) => {
+                                setHoveredDescTaskId(task.id);
+                                if (task.description && inlineEditDescId !== task.id) {
+                                  if (tooltipTimeoutRef.current) {
+                                    clearTimeout(tooltipTimeoutRef.current);
+                                    tooltipTimeoutRef.current = null;
+                                  }
+                                  if (activeTooltipRef.current === task.id) {
+                                    return;
+                                  }
+                                  const rect = e.currentTarget.getBoundingClientRect();
+                                  const tooltipWidth = 330;
+                                  let left = rect.left + (rect.width / 2) - (tooltipWidth / 2);
+                                  if (left < 16) left = 16;
+                                  if (left + tooltipWidth > window.innerWidth - 16) {
+                                    left = window.innerWidth - tooltipWidth - 16;
+                                  }
+                                  const top = rect.top - 6;
+                                  const align: 'top' | 'bottom' = 'top';
+                                  activeTooltipRef.current = task.id;
+                                  setTooltipPos({ x: left, y: top, align });
+                                  setActiveTooltipTaskId(task.id);
+                                }
+                              }}
+                              onMouseLeave={() => {
+                                setHoveredDescTaskId(null);
+                                if (tooltipTimeoutRef.current) {
+                                  clearTimeout(tooltipTimeoutRef.current);
+                                  tooltipTimeoutRef.current = null;
+                                }
+                                tooltipTimeoutRef.current = setTimeout(() => {
+                                  activeTooltipRef.current = null;
+                                  setActiveTooltipTaskId(null);
+                                }, 200);
+                              }}
+                            >
+                              {inlineEditDescId === task.id ? (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', minWidth: '200px', position: 'absolute', zIndex: 20, background: '#fff', padding: '10px', borderRadius: '10px', boxShadow: '0 12px 30px rgba(0,0,0,0.15)', border: '1px solid #93c5fd', top: '50%', transform: 'translateY(-50%)', left: '10px' }}>
+                                  <textarea
+                                    autoFocus
+                                    value={inlineEditDescValue}
+                                    onChange={e => setInlineEditDescValue(e.target.value)}
+                                    style={{
+                                      width: '100%',
+                                      minHeight: '68px',
+                                      padding: '8px',
+                                      fontSize: '11.5px',
+                                      borderRadius: '6px',
+                                      border: '1.5px solid #2563eb',
+                                      outline: 'none',
+                                      resize: 'vertical',
+                                      fontFamily: 'inherit',
+                                      color: '#0f172a',
+                                      boxShadow: '0 0 0 3px rgba(37,99,235,0.1)'
+                                    }}
+                                    onKeyDown={e => {
+                                      if (e.key === 'Escape') {
+                                        setInlineEditDescId(null);
+                                      } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                                        saveInlineDescription(task.id);
+                                      }
+                                    }}
+                                  />
+                                  <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end', marginTop: '2px' }}>
+                                    <button
+                                      onClick={() => setInlineEditDescId(null)}
+                                      style={{ padding: '4px 9px', border: '1px solid #e2e8f0', background: '#f8fafc', color: '#64748b', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', fontWeight: 600 }}
+                                      title="Cancel (Esc)"
+                                    >
+                                      <X size={12} /> Cancel
+                                    </button>
+                                    <button
+                                      onClick={() => saveInlineDescription(task.id)}
+                                      style={{ padding: '4px 10px', border: 'none', background: '#2563eb', color: '#fff', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', fontWeight: 600 }}
+                                      title="Save (Ctrl+Enter)"
+                                    >
+                                      <Check size={12} /> Save
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '3px', minHeight: '22px' }}>
+                                  <span style={{ fontSize: '11.5px', color: '#475569', maxWidth: '120px', display: 'inline-block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={task.description || ''}>
+                                    {task.description || '—'}
+                                  </span>
+                                  {canManageTask(task) && (
+                                    <button
+                                      onClick={() => {
+                                        setInlineEditDescId(task.id);
+                                        setInlineEditDescValue(task.description || '');
+                                        activeTooltipRef.current = null;
+                                        setActiveTooltipTaskId(null);
+                                      }}
+                                      style={{
+                                        background: '#eff6ff',
+                                        border: '1px solid #dbeafe',
+                                        borderRadius: '5px',
+                                        cursor: 'pointer',
+                                        padding: '2px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        color: '#2563eb',
+                                        transition: 'all 0.15s ease',
+                                        opacity: hoveredDescTaskId === task.id ? 1 : 0,
+                                        pointerEvents: hoveredDescTaskId === task.id ? 'auto' as const : 'none' as const,
+                                        width: '19px',
+                                        height: '19px',
+                                        flexShrink: 0,
+                                      }}
+                                      title="Edit Description"
+                                      onMouseEnter={e => { e.currentTarget.style.background = '#dbeafe'; }}
+                                      onMouseLeave={e => { e.currentTarget.style.background = '#eff6ff'; }}
+                                    >
+                                      <Edit2 size={10} />
+                                    </button>
+                                  )}
+                                </div>
+                              )}
+                            </td>
+                          );
+
+                        case 'desc_updated':
+                          return (
+                            <td key={`desc_up-${task.id}`} style={compactCell}>
+                              {(() => {
+                                const updateDate = descUpdateMap[task.id] || (task.description ? task.created_at : null);
+                                if (!updateDate || !task.description || task.description.trim() === '') {
+                                  return <span style={{ fontSize: '10.5px', color: '#cbd5e1' }}>—</span>;
+                                }
+                                const updateTime = new Date(updateDate).getTime();
+                                const isRecent = !isNaN(updateTime) && (currentTime - updateTime < 24 * 60 * 60 * 1000) && (currentTime >= updateTime - 60000);
+                                return (
+                                  <span
+                                    title={`Last updated: ${new Date(updateDate).toLocaleString()}`}
+                                    style={{
+                                      fontSize: '10px',
+                                      color: isRecent ? '#0284c7' : '#64748b',
+                                      fontWeight: isRecent ? 650 : 500,
+                                      whiteSpace: 'nowrap',
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '3px',
+                                      background: isRecent ? 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)' : 'transparent',
+                                      padding: isRecent ? '2px 5px' : '0',
+                                      borderRadius: isRecent ? '5px' : '0',
+                                      border: isRecent ? '1px solid #bae6fd' : 'none',
+                                    }}
+                                  >
+                                    {isRecent && <span style={{ width: '4.5px', height: '4.5px', borderRadius: '50%', background: '#0284c7', boxShadow: '0 0 0 1.5px #bae6fd' }} />}
+                                    {formatDescDate(updateDate)}
+                                  </span>
+                                );
+                              })()}
+                            </td>
+                          );
+
+                        case 'priority':
+                          return (
+                            <td key={`prio-${task.id}`} style={compactCell}>
+                              {canUpdateStatus ? (
+                                <select value={task.priority} onChange={e => handlePriorityChange(task.id, e.target.value)}
+                                  style={{
+                                    padding: '3px 6px', borderRadius: '7px', border: '1px solid rgba(0,0,0,0.06)',
+                                    background: pc.bg, color: pc.color, fontWeight: 700,
+                                    fontSize: '10.5px', cursor: 'pointer', outline: 'none',
+                                    boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
+                                  }}>
+                                  {BAHRAIN_PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
+                                </select>
+                              ) : (
+                                <span style={{ padding: '3px 6px', borderRadius: '7px', fontSize: '10px', fontWeight: 700, background: pc.bg, color: pc.color, whiteSpace: 'nowrap' }}>
+                                  {task.priority}
+                                </span>
+                              )}
+                            </td>
+                          );
+
+                        case 'deadline':
+                          return (
+                            <td key={`dl-${task.id}`} style={compactCell}>
+                              <span style={{ fontSize: '11px', color: '#475569', fontWeight: 500, whiteSpace: 'nowrap', fontFamily: 'ui-monospace, monospace' }}>
+                                {task.deadline || '—'}
+                              </span>
+                            </td>
+                          );
+
+                        case 'status':
+                          return (
+                            <td key={`stat-${task.id}`} style={compactCell}>
+                              {canUpdateStatus ? (() => {
+                                const sc = statusColor(task.status);
+                                return (
+                                  <select value={task.status} onChange={e => handleStatusChange(task.id, e.target.value)}
+                                    style={{
+                                      padding: '3.5px 6px', borderRadius: '7px',
+                                      border: `1px solid ${sc.border}`, background: sc.bg,
+                                      color: sc.color, fontWeight: 650, fontSize: '10.5px',
+                                      cursor: 'pointer', outline: 'none', minWidth: '95px', maxWidth: '125px',
+                                      boxShadow: '0 1px 2px rgba(0,0,0,0.02)'
+                                    }}>
+                                    {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
+                                  </select>
+                                );
+                              })() : (() => {
+                                const sc = statusColor(task.status);
+                                return (
+                                  <span style={{
+                                    padding: '2.5px 6px', borderRadius: '6px', fontSize: '10.5px',
+                                    fontWeight: 650, background: sc.bg, color: sc.color,
+                                    border: `1px solid ${sc.border}`, whiteSpace: 'nowrap'
+                                  }}>
+                                    {task.status}
+                                  </span>
+                                );
+                              })()}
+                            </td>
+                          );
+
+                        case 'auditor':
+                          return (
+                            <td key={`aud-${task.id}`} style={compactCell}>
+                              {isAdminUser ? (
+                                <select value={task.auditor_id || ''} onChange={e => handleAssignAuditor(task.id, e.target.value)}
+                                  style={{
+                                    padding: '3.5px 6px', borderRadius: '7px', border: '1px solid #e2e8f0',
+                                    background: '#f8fafc', fontSize: '10.5px', color: '#1e293b',
+                                    minWidth: '85px', maxWidth: '115px', cursor: 'pointer', outline: 'none', fontWeight: 500,
+                                    boxShadow: '0 1px 2px rgba(0,0,0,0.02)'
+                                  }}>
+                                  <option value="">No Auditor</option>
+                                  {auditors.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                                </select>
+                              ) : (
+                                <span style={{ fontSize: '11px', color: '#475569', fontWeight: 500 }}>
+                                  {auditors.find(a => a.id === task.auditor_id)?.name || '—'}
+                                </span>
+                              )}
+                            </td>
+                          );
+
+                        case 'assigned_to':
+                          return (
+                            <td key={`ass-${task.id}`} style={compactCell}>
+                              {isAdminUser ? (
+                                <select value={task.assigned_to || ''} onChange={e => handleAssign(task.id, e.target.value)}
+                                  style={{
+                                    padding: '3.5px 6px', borderRadius: '7px', border: '1px solid #e2e8f0',
+                                    background: '#f8fafc', fontSize: '10.5px', color: '#1e293b',
+                                    minWidth: '85px', maxWidth: '115px', cursor: 'pointer', outline: 'none', fontWeight: 500,
+                                    boxShadow: '0 1px 2px rgba(0,0,0,0.02)'
+                                  }}>
+                                  <option value="">Unassigned</option>
+                                  {partners.map(p => <option key={p.id} value={p.id}>{p.username}</option>)}
+                                </select>
+                              ) : (
+                                <span style={{ fontSize: '11px', color: '#1e293b', fontWeight: 500 }}>
+                                  {(() => {
+                                    const activePartnerIds = task.assigned_partners && task.assigned_partners.length > 0 
+                                      ? task.assigned_partners 
+                                      : (task.assigned_to ? [task.assigned_to] : []);
+                                    const allNames = activePartnerIds.map((id: string) => partners.find((p: any) => p.id === id)?.username).filter(Boolean);
+                                    return allNames.length > 0 ? allNames.join(', ') : 'Unassigned';
+                                  })()}
+                                </span>
+                              )}
+                            </td>
+                          );
+
+                        case 'actions':
+                          return (
+                            <td key={`act-${task.id}`} style={{
+                              ...compactCell,
+                              position: 'relative',
+                              width: '32px',
+                              minWidth: '32px',
+                              maxWidth: '36px',
+                              padding: '4px 2px',
+                              textAlign: 'center'
+                            }}>
+                              <button onClick={e => { 
+                                e.stopPropagation(); 
+                                if (isMenuOpen) {
+                                  setOpenMenuId(null);
+                                } else {
+                                  const rect = e.currentTarget.getBoundingClientRect();
+                                  const menuHeight = 180;
+                                  let top: number | undefined = rect.bottom + 4;
+                                  let bottom: number | undefined = undefined;
+                                  let maxHeight = `calc(100vh - ${top}px - 10px)`;
+                                  
+                                  if (rect.bottom + menuHeight > window.innerHeight && rect.top > window.innerHeight - rect.bottom) {
+                                    top = undefined;
+                                    bottom = window.innerHeight - rect.top + 4;
+                                    maxHeight = `calc(${rect.top}px - 10px)`;
+                                  }
+                                  
+                                  setMenuPos({ top, bottom, right: window.innerWidth - rect.right, maxHeight });
+                                  setOpenMenuId(task.id);
+                                }
+                              }}
+                                style={{
+                                  background: isMenuOpen ? '#eff6ff' : 'transparent',
+                                  border: 'none',
+                                  cursor: 'pointer',
+                                  borderRadius: '6px',
+                                  padding: '3px',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  transition: 'all 0.15s ease',
+                                  position: 'relative',
+                                  width: '26px',
+                                  height: '26px',
+                                  margin: '0 auto'
+                                }}
+                                onMouseEnter={e => { e.currentTarget.style.background = '#f1f5f9'; }}
+                                onMouseLeave={e => { if (!isMenuOpen) { e.currentTarget.style.background = 'transparent'; } }}>
+                                <MoreHorizontal size={16} color="#64748b" />
+                              </button>
+                              {isMenuOpen && typeof window !== 'undefined' && createPortal(
+                                <div style={{ position: 'fixed', top: menuPos.top, bottom: menuPos.bottom, right: menuPos.right, maxHeight: menuPos.maxHeight || 'none', overflowY: 'auto', background: '#fff', borderRadius: '12px', boxShadow: '0 8px 30px rgba(0,0,0,0.12)', border: '1px solid #e2e8f0', zIndex: 9999, minWidth: '165px' }}
+                                  onClick={e => e.stopPropagation()}>
+                                  <button onClick={() => { viewDetail(task.id); setOpenMenuId(null); }} style={menuItemStyle}>
+                                    <Eye size={14} color="#3b82f6" /> View Details
+                                  </button>
+                                  {canManageTask(task) && (<>
+                                    <button onClick={() => { openEditTask(task); setOpenMenuId(null); }} style={menuItemStyle}>
+                                      <Edit2 size={14} color="#f59e0b" /> Edit Task
+                                    </button>
+                                  </>)}
+                                  <div style={{ height: '1px', background: '#f1f5f9', margin: '2px 0' }} />
+                                  <button
+                                    onClick={() => {
+                                      const comp = companies.find(c => c.id === task.company_id);
+                                      const ttIds = task.task_type_ids && task.task_type_ids.length > 0 ? task.task_type_ids : (task.task_type_id ? task.task_type_id.split(',').map(s => s.trim()).filter(Boolean) : []);
+                                      const ttNames = ttIds.map(id => taskTypes.find(t => t.id === id)?.name).filter(Boolean).join(', ') || 'N/A';
+                                      const activePartnerIds = task.assigned_partners && task.assigned_partners.length > 0 
+                                        ? task.assigned_partners 
+                                        : (task.assigned_to ? [task.assigned_to] : []);
+                                      const allNames = activePartnerIds.map((id: string) => partners.find((p: any) => p.id === id)?.username).filter(Boolean);
+                                      const assignedNames = allNames.length > 0 ? allNames.join(', ') : 'Unassigned';
+                                      const msg = [
+                                        '━━━━━━━━━━━━━━━━━━',
+                                        '*Task Update*',
+                                        '━━━━━━━━━━━━━━━━━━',
+                                        '',
+                                        `*Company:* ${comp?.company_name || 'Unknown'}`,
+                                        `*CR Number:* ${comp?.cr_number || 'N/A'}`,
+                                        `*Audit Type:* ${ttNames}`,
+                                        `*Assigned To:* ${assignedNames}`,
+                                        `*Status:* ${task.status || 'N/A'}`,
+                                        ...(task.description ? [`*Description:* ${task.description}`] : []),
+                                      ].join('\n');
+                                      window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
+                                      setOpenMenuId(null);
+                                    }}
+                                    style={menuItemStyle}
+                                    onMouseEnter={e => e.currentTarget.style.background = '#f0fdf4'}
+                                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                                  >
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="#25D366" style={{ flexShrink: 0 }}>
+                                      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+                                    </svg>
+                                    <span style={{ color: '#25D366', fontWeight: 600 }}>WhatsApp</span>
+                                  </button>
+                                  {canManageTask(task) && (<>
+                                    <div style={{ height: '1px', background: '#f1f5f9', margin: '2px 0' }} />
+                                    <button onClick={() => { deleteTask(task.id); setOpenMenuId(null); }} style={{ ...menuItemStyle, color: '#ef4444' }}>
+                                      <Trash2 size={14} color="#ef4444" /> Delete
+                                    </button>
+                                  </>)}
+                                </div>,
+                                document.body
+                              )}
+                            </td>
+                          );
+
+                        default:
+                          return null;
+                      }
+                    })}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* Mobile Task Cards View (<= 768px) */}
@@ -3147,7 +3805,7 @@ export default function BahrainTasks() {
             <div style={{ fontSize: '12.5px', color: '#94a3b8', marginTop: '4px' }}>Try adjusting your filters or keywords</div>
           </div>
         ) : (
-          filtered.map(task => {
+          paginatedTasks.map(task => {
             const company = companies.find(c => c.id === task.company_id);
             const ttIds = task.task_type_ids && task.task_type_ids.length > 0 ? task.task_type_ids : (task.task_type_id ? task.task_type_id.split(',').map(s => s.trim()).filter(Boolean) : []);
             const ttNames = ttIds.map(id => taskTypes.find(t => t.id === id)?.name).filter(Boolean);
@@ -3354,60 +4012,39 @@ export default function BahrainTasks() {
                   {/* PL Uploaded Pill */}
                   <button
                     onClick={() => handlePlUploadedToggle(task.id)}
+                    title={task.pl_uploaded ? 'Engagement Letter (PL): Signed (Click to toggle)' : 'Engagement Letter (PL): Pending (Click to toggle)'}
                     style={{
-                      padding: '2px 8px', borderRadius: '6px',
-                      border: task.pl_uploaded ? '1px solid #a7f3d0' : '1px solid #fecaca',
-                      cursor: 'pointer', fontSize: '10.5px', fontWeight: 650,
-                      background: task.pl_uploaded ? '#ecfdf5' : '#fef2f2',
-                      color: task.pl_uploaded ? '#059669' : '#dc2626',
-                      display: 'inline-flex', alignItems: 'center', gap: '3px'
+                      padding: '3px 8px',
+                      borderRadius: '8px',
+                      border: task.pl_uploaded ? '1px solid #10b981' : '1px solid #fda4af',
+                      cursor: 'pointer',
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      background: task.pl_uploaded ? '#ecfdf5' : '#fff1f2',
+                      color: task.pl_uploaded ? '#047857' : '#e11d48',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      boxShadow: task.pl_uploaded ? '0 1px 2px rgba(16, 185, 129, 0.15)' : '0 1px 2px rgba(225, 29, 72, 0.08)'
                     }}
                   >
-                    PL: {task.pl_uploaded ? '✓ Yes' : '✗ No'}
+                    {task.pl_uploaded ? <CheckCircle2 size={12} strokeWidth={2.6} color="#059669" /> : <XCircle size={12} strokeWidth={2.2} color="#e11d48" />}
+                    <span>PL: {task.pl_uploaded ? 'Yes' : 'No'}</span>
                   </button>
 
                   {/* CR Number Monospace Chip */}
                   {company?.cr_number ? (
-                    <span
-                      onClick={() => {
-                        if (canManageTask(task) && company) {
-                          setInlineEditCrId(task.id);
-                          setInlineEditCrValue(company.cr_number || '');
-                          setInlineEditCrLinkValue(company.cr_link || '');
-                        }
-                      }}
-                      style={{
-                        fontFamily: 'ui-monospace, monospace',
-                        fontSize: '10.5px', fontWeight: 600, color: '#475569',
-                        background: '#f1f5f9', padding: '2px 6px', borderRadius: '5px',
-                        border: '1px solid #cbd5e1', cursor: canManageTask(task) ? 'pointer' : 'default',
-                        display: 'inline-flex', alignItems: 'center', gap: '3px'
-                      }}
-                      title="Tap to edit CR Number & Link"
-                    >
+                    <span style={{
+                      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+                      fontSize: '10.5px', fontWeight: 600, color: '#334155',
+                      background: '#f8fafc', padding: '2px 6px', borderRadius: '5px',
+                      border: '1px solid #cbd5e1', display: 'inline-flex', alignItems: 'center', gap: '4px'
+                    }}>
                       CR: {company.cr_number}
-                      {canManageTask(task) && <Edit2 size={9} color="#64748b" />}
                     </span>
-                  ) : (
-                    canManageTask(task) && company && (
-                      <button
-                        onClick={() => {
-                          setInlineEditCrId(task.id);
-                          setInlineEditCrValue('');
-                          setInlineEditCrLinkValue('');
-                        }}
-                        style={{
-                          background: '#f8fafc', border: '1px dashed #cbd5e1', borderRadius: '5px',
-                          padding: '2px 6px', fontSize: '10px', color: '#64748b', fontWeight: 600,
-                          display: 'inline-flex', alignItems: 'center', gap: '3px', cursor: 'pointer'
-                        }}
-                      >
-                        <Plus size={9} /> CR
-                      </button>
-                    )
-                  )}
+                  ) : null}
 
-                  {/* CR Hyperlink Pill (Mobile) */}
+                  {/* CR Link */}
                   {company?.cr_link && (
                     <a
                       href={formatExternalUrl(company.cr_link)}
@@ -3415,87 +4052,68 @@ export default function BahrainTasks() {
                       rel="noopener noreferrer"
                       onClick={e => e.stopPropagation()}
                       style={{
-                        background: '#ecfdf5',
-                        border: '1px solid #a7f3d0',
-                        borderRadius: '5px',
-                        padding: '2px 6px',
-                        fontSize: '10.5px',
-                        fontWeight: 650,
-                        color: '#059669',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '3px',
-                        textDecoration: 'none'
+                        fontSize: '10.5px', color: '#059669', background: '#ecfdf5',
+                        border: '1px solid #a7f3d0', padding: '2px 6px', borderRadius: '5px',
+                        display: 'inline-flex', alignItems: 'center', gap: '2px', textDecoration: 'none', fontWeight: 600
                       }}
-                      title={`Open CR Link: ${company.cr_link}`}
                     >
-                      <ExternalLink size={9.5} /> Link
+                      <ExternalLink size={10} /> Link
                     </a>
+                  )}
+
+                  {/* Edit CR Trigger */}
+                  {canManageTask(task) && company && (
+                    <button
+                      onClick={() => {
+                        setInlineEditCrId(task.id);
+                        setInlineEditCrValue(company.cr_number || '');
+                        setInlineEditCrLinkValue(company.cr_link || '');
+                      }}
+                      style={{
+                        fontSize: '10px', color: '#2563eb', background: '#eff6ff',
+                        border: '1px solid #dbeafe', padding: '2px 5px', borderRadius: '4px',
+                        cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '2px'
+                      }}
+                    >
+                      <Edit2 size={9} /> CR
+                    </button>
                   )}
                 </div>
 
-                {/* Inline CR edit mini form if activated (Mobile) */}
+                {/* Inline CR Number & Link Editor on Mobile */}
                 {inlineEditCrId === task.id && (
-                  <div style={{ background: '#eff6ff', padding: '10px 12px', borderRadius: '8px', border: '1px solid #bfdbfe', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <span style={{ fontSize: '11px', fontWeight: 700, color: '#1e40af', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <FileSpreadsheet size={12} /> Edit CR Details
-                      </span>
-                      <button
-                        onClick={() => setInlineEditCrId(null)}
-                        style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', padding: '2px' }}
-                      >
-                        <X size={12} />
-                      </button>
+                  <div
+                    onClick={e => e.stopPropagation()}
+                    style={{ background: '#f0f9ff', padding: '8px', borderRadius: '8px', border: '1px solid #bae6fd', display: 'flex', flexDirection: 'column', gap: '6px' }}
+                  >
+                    <div style={{ fontSize: '11px', fontWeight: 700, color: '#0369a1', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span>Edit CR Details</span>
+                      <button onClick={() => setInlineEditCrId(null)} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}><X size={12} /></button>
                     </div>
                     <input
                       autoFocus
                       type="text"
                       value={inlineEditCrValue}
                       onChange={e => setInlineEditCrValue(e.target.value)}
-                      placeholder="CR Number (e.g. 167145-1)"
-                      style={{ width: '100%', padding: '5px 8px', fontSize: '12px', borderRadius: '6px', border: '1px solid #93c5fd', background: '#fff', boxSizing: 'border-box' }}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter' && company) saveInlineCrNumber(company.id, task.id);
-                        if (e.key === 'Escape') setInlineEditCrId(null);
-                      }}
+                      placeholder="CR Number"
+                      style={{ width: '100%', padding: '6px', fontSize: '12px', borderRadius: '6px', border: '1px solid #bae6fd' }}
+                      onKeyDown={e => { if (e.key === 'Enter' && company) saveInlineCrNumber(company.id, task.id); }}
                     />
                     <input
                       type="url"
                       value={inlineEditCrLinkValue}
                       onChange={e => setInlineEditCrLinkValue(e.target.value)}
-                      placeholder="CR Link / URL (e.g. https://...)"
-                      style={{ width: '100%', padding: '5px 8px', fontSize: '12px', borderRadius: '6px', border: '1px solid #93c5fd', background: '#fff', boxSizing: 'border-box' }}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter' && company) saveInlineCrNumber(company.id, task.id);
-                        if (e.key === 'Escape') setInlineEditCrId(null);
-                      }}
+                      placeholder="CR Link"
+                      style={{ width: '100%', padding: '6px', fontSize: '12px', borderRadius: '6px', border: '1px solid #bae6fd' }}
+                      onKeyDown={e => { if (e.key === 'Enter' && company) saveInlineCrNumber(company.id, task.id); }}
                     />
-                    <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end', marginTop: '2px' }}>
-                      <button
-                        onClick={() => setInlineEditCrId(null)}
-                        style={{ padding: '4px 10px', border: '1px solid #cbd5e1', background: '#fff', borderRadius: '6px', fontSize: '11px', fontWeight: 600, cursor: 'pointer' }}
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        disabled={savingCrTaskId === task.id}
-                        onClick={() => { if (company) saveInlineCrNumber(company.id, task.id); }}
-                        style={{
-                          padding: '4px 12px',
-                          border: 'none',
-                          background: '#2563eb',
-                          color: '#fff',
-                          borderRadius: '6px',
-                          fontSize: '11px',
-                          fontWeight: 600,
-                          cursor: savingCrTaskId === task.id ? 'wait' : 'pointer',
-                          opacity: savingCrTaskId === task.id ? 0.7 : 1
-                        }}
-                      >
-                        {savingCrTaskId === task.id ? 'Saving...' : 'Save'}
-                      </button>
-                    </div>
+                    <button
+                      disabled={savingCrTaskId === task.id}
+                      onClick={() => { if (company) saveInlineCrNumber(company.id, task.id); }}
+                      style={{ padding: '6px', background: '#2563eb', color: '#fff', borderRadius: '6px', fontSize: '11px', fontWeight: 600, border: 'none', cursor: 'pointer' }}
+                    >
+                      {savingCrTaskId === task.id ? 'Saving...' : 'Save'}
+                    </button>
                   </div>
                 )}
 
@@ -3520,40 +4138,46 @@ export default function BahrainTasks() {
                         {task.description}
                       </span>
                       {canManageTask(task) && (
-                        <Edit2 size={10} color="#94a3b8" style={{ flexShrink: 0 }} />
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setInlineEditDescId(task.id);
+                            setInlineEditDescValue(task.description || '');
+                          }}
+                          style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '2px', display: 'flex', flexShrink: 0 }}
+                        >
+                          <Edit2 size={11} />
+                        </button>
                       )}
                     </div>
-                    {/* Date badge */}
+                    {/* Desc update timestamp */}
                     {(() => {
                       const updateDate = descUpdateMap[task.id] || task.created_at;
                       if (!updateDate) return null;
                       const updateTime = new Date(updateDate).getTime();
-                      const isRecent = !isNaN(updateTime) && (Date.now() - updateTime < 24 * 60 * 60 * 1000) && (Date.now() >= updateTime - 60000);
+                      const isRecent = !isNaN(updateTime) && (currentTime - updateTime < 24 * 60 * 60 * 1000);
                       return (
-                        <div style={{ fontSize: '10px', color: isRecent ? '#0284c7' : '#94a3b8', fontWeight: isRecent ? 650 : 500, marginTop: '3px', display: 'flex', alignItems: 'center', gap: '3px' }}>
-                          {isRecent && <span style={{ width: '4px', height: '4px', borderRadius: '50%', background: '#0284c7' }} />}
-                          Updated: {formatDescDate(updateDate)}
+                        <div style={{ fontSize: '10px', color: isRecent ? '#0284c7' : '#94a3b8', marginTop: '3px', fontWeight: isRecent ? 600 : 400 }}>
+                          Updated: {formatDescDate(updateDate)} {isRecent ? '• Recent' : ''}
                         </div>
                       );
                     })()}
                   </div>
                 ) : (
                   canManageTask(task) && inlineEditDescId !== task.id && (
-                    <div style={{ display: 'flex' }}>
-                      <button
-                        onClick={() => {
-                          setInlineEditDescId(task.id);
-                          setInlineEditDescValue('');
-                        }}
-                        style={{
-                          background: 'transparent', border: 'none', padding: '0',
-                          fontSize: '11px', color: '#94a3b8', cursor: 'pointer',
-                          display: 'inline-flex', alignItems: 'center', gap: '4px'
-                        }}
-                      >
-                        <Plus size={11} /> Add description
-                      </button>
-                    </div>
+                    <button
+                      onClick={() => {
+                        setInlineEditDescId(task.id);
+                        setInlineEditDescValue('');
+                      }}
+                      style={{
+                        background: 'transparent', border: '1px dashed #cbd5e1', borderRadius: '6px',
+                        padding: '4px 8px', fontSize: '11px', color: '#94a3b8', cursor: 'pointer',
+                        display: 'inline-flex', alignItems: 'center', gap: '4px', alignSelf: 'flex-start'
+                      }}
+                    >
+                      <Plus size={11} /> Add description
+                    </button>
                   )
                 )}
 
@@ -3643,7 +4267,174 @@ export default function BahrainTasks() {
         )}
       </div>
 
+      {/* ─── Task Management Pagination Navigation Bar ─── */}
+      {totalCount > 0 && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '14px',
+          marginTop: '20px',
+          marginBottom: '28px',
+          padding: '14px 18px',
+          background: 'rgba(255, 255, 255, 0.85)',
+          backdropFilter: 'blur(10px)',
+          borderRadius: '16px',
+          border: '1px solid rgba(226, 232, 240, 0.9)',
+          boxShadow: '0 2px 10px rgba(0,0,0,0.02)'
+        }}>
+          {/* Left Side: Showing Range & Total Results */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+            <div style={{ fontSize: '13px', color: '#475569', fontWeight: 600 }}>
+              Showing <strong style={{ color: '#0f172a' }}>{startIndex + 1}</strong>–<strong style={{ color: '#0f172a' }}>{endIndex}</strong> of <strong style={{ color: '#2563eb' }}>{totalCount}</strong> tasks
+              {totalCount !== tasks.length && (
+                <span style={{ fontSize: '12px', color: '#94a3b8', marginLeft: '6px' }}>
+                  (filtered from {tasks.length} total)
+                </span>
+              )}
+            </div>
 
+            {/* Rows Per Page Options: 25, 50, 100, All */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 600 }}>Rows per page:</span>
+              <div style={{
+                display: 'inline-flex',
+                background: '#f1f5f9',
+                padding: '2px',
+                borderRadius: '8px',
+                border: '1px solid #e2e8f0'
+              }}>
+                {([25, 50, 100, 'all'] as const).map(option => {
+                  const isSelected = pageSize === option;
+                  return (
+                    <button
+                      key={`rows-${option}`}
+                      type="button"
+                      onClick={() => handlePageSizeChange(option)}
+                      style={{
+                        padding: '3px 10px',
+                        borderRadius: '6px',
+                        border: 'none',
+                        background: isSelected ? '#ffffff' : 'transparent',
+                        color: isSelected ? '#2563eb' : '#64748b',
+                        fontSize: '11.5px',
+                        fontWeight: isSelected ? 750 : 600,
+                        cursor: 'pointer',
+                        boxShadow: isSelected ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                        transition: 'all 0.15s ease'
+                      }}
+                    >
+                      {option === 'all' ? 'All' : option}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* Right Side: Page Numbers & Prev/Next (hidden when 'all' or single page) */}
+          {pageSize !== 'all' && totalPages > 1 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <button
+                type="button"
+                onClick={() => handlePageChange(safeCurrentPage - 1)}
+                disabled={safeCurrentPage <= 1}
+                style={{
+                  padding: '6px 12px',
+                  borderRadius: '8px',
+                  border: '1px solid #e2e8f0',
+                  background: safeCurrentPage <= 1 ? '#f8fafc' : '#ffffff',
+                  color: safeCurrentPage <= 1 ? '#cbd5e1' : '#334155',
+                  fontSize: '12px',
+                  fontWeight: 650,
+                  cursor: safeCurrentPage <= 1 ? 'not-allowed' : 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <ChevronLeft size={14} /> Previous
+              </button>
+
+              {(() => {
+                const pageNumbers: (number | string)[] = [];
+                if (totalPages <= 7) {
+                  for (let i = 1; i <= totalPages; i++) pageNumbers.push(i);
+                } else {
+                  pageNumbers.push(1);
+                  if (safeCurrentPage > 3) pageNumbers.push('...');
+                  const start = Math.max(2, safeCurrentPage - 1);
+                  const end = Math.min(totalPages - 1, safeCurrentPage + 1);
+                  for (let i = start; i <= end; i++) pageNumbers.push(i);
+                  if (safeCurrentPage < totalPages - 2) pageNumbers.push('...');
+                  pageNumbers.push(totalPages);
+                }
+
+                return pageNumbers.map((p, idx) => {
+                  if (p === '...') {
+                    return (
+                      <span key={`dots-${idx}`} style={{ padding: '0 4px', color: '#94a3b8', fontSize: '13px', fontWeight: 600 }}>
+                        …
+                      </span>
+                    );
+                  }
+
+                  const pageNum = p as number;
+                  const isCurrent = pageNum === safeCurrentPage;
+
+                  return (
+                    <button
+                      key={`page-${pageNum}`}
+                      type="button"
+                      onClick={() => handlePageChange(pageNum)}
+                      style={{
+                        minWidth: '32px',
+                        height: '32px',
+                        padding: '0 6px',
+                        borderRadius: '8px',
+                        border: isCurrent ? 'none' : '1px solid #e2e8f0',
+                        background: isCurrent ? '#2563eb' : '#ffffff',
+                        color: isCurrent ? '#ffffff' : '#334155',
+                        fontSize: '12px',
+                        fontWeight: isCurrent ? 750 : 600,
+                        cursor: isCurrent ? 'default' : 'pointer',
+                        boxShadow: isCurrent ? '0 2px 6px rgba(37,99,235,0.28)' : 'none',
+                        transition: 'all 0.15s ease'
+                      }}
+                    >
+                      {pageNum}
+                    </button>
+                  );
+                });
+              })()}
+
+              <button
+                type="button"
+                onClick={() => handlePageChange(safeCurrentPage + 1)}
+                disabled={safeCurrentPage >= totalPages}
+                style={{
+                  padding: '6px 12px',
+                  borderRadius: '8px',
+                  border: '1px solid #e2e8f0',
+                  background: safeCurrentPage >= totalPages ? '#f8fafc' : '#ffffff',
+                  color: safeCurrentPage >= totalPages ? '#cbd5e1' : '#334155',
+                  fontSize: '12px',
+                  fontWeight: 650,
+                  cursor: safeCurrentPage >= totalPages ? 'not-allowed' : 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                Next <ChevronRight size={14} />
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* New/Edit Task Modal */}
       {showTaskModal && (
