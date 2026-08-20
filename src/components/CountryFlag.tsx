@@ -34,6 +34,30 @@ export function getCountryCode(code?: string, name?: string): string {
   return c || 'BH';
 }
 
+// Returns canonical full display name for a country code or string
+export function getCanonicalCountryName(str?: string): string {
+  if (!str) return 'Bahrain';
+  const s = str.trim();
+  const lower = s.toLowerCase();
+  const upper = s.toUpperCase();
+
+  if (upper === 'BH' || lower === 'bahrain') return 'Bahrain';
+  if (upper === 'NZ' || lower === 'new zealand' || lower === 'newzealand') return 'New Zealand';
+  if (upper === 'UAE' || upper === 'AE' || lower === 'uae' || lower.includes('emirates') || lower === 'united arab emirates') return 'UAE';
+  if (upper === 'SA' || upper === 'KSA' || lower.includes('saudi')) return 'Saudi Arabia';
+  if (upper === 'OM' || lower === 'oman') return 'Oman';
+  if (upper === 'QA' || lower === 'qatar') return 'Qatar';
+  if (upper === 'KW' || lower === 'kuwait') return 'Kuwait';
+  if (upper === 'GB' || upper === 'UK' || lower === 'united kingdom' || lower === 'uk') return 'United Kingdom';
+  if (upper === 'US' || upper === 'USA' || lower === 'united states' || lower === 'usa') return 'United States';
+  if (upper === 'PK' || lower === 'pakistan') return 'Pakistan';
+  if (upper === 'IN' || lower === 'india') return 'India';
+  if (upper === 'CA' || lower === 'canada') return 'Canada';
+  if (upper === 'AU' || lower === 'australia') return 'Australia';
+
+  return s;
+}
+
 /**
  * High-performance, cross-platform Country Flag component.
  * Renders authentic vector SVG flags that display with 100% fidelity on ALL operating systems,

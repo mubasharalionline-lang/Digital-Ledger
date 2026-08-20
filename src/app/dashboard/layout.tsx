@@ -10,12 +10,12 @@ import {
   LayoutGrid, Landmark, CheckCircle2, CalendarCheck2, Boxes,
   Contact2, History, SlidersHorizontal, LogOut,
   ChevronLeft, ChevronRight, Menu, ChevronDown,
-  Plus, X, Loader2, Globe
+  Plus, X, Loader2, Globe, Activity
 } from 'lucide-react';
 import CountryFlag from '@/components/CountryFlag';
 import { initTheme } from '@/lib/theme';
 
-interface NavItem { label: string; href: string; icon: ReactNode; adminOnly?: boolean; }
+interface NavItem { label: string; href: string; icon: ReactNode; adminOnly?: boolean; isSectionHeader?: boolean; }
 interface CountryRecord { id: string; code: string; name: string; flag: string; }
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
@@ -161,10 +161,11 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     const canViewCompanies = user?.permissions?.can_view_companies === true;
     return [
       { label: 'Dashboard', href: '/dashboard', icon: <LayoutGrid size={20} /> },
+      { label: 'Partner Workload', href: '/dashboard/partner-workload', icon: <Activity size={20} />, adminOnly: true },
       { label: 'Companies', href: '/dashboard/companies', icon: <Landmark size={20} />, adminOnly: !canViewCompanies },
       { label: 'Tasks', href: '/dashboard/tasks', icon: <CheckCircle2 size={20} /> },
+      { label: 'Task Types', href: '/dashboard/task-types', icon: <Boxes size={20} />, adminOnly: true, isSectionHeader: true },
       { label: 'Daily Tasks', href: '/dashboard/daily-tasks', icon: <CalendarCheck2 size={20} /> },
-      { label: 'Task Types', href: '/dashboard/task-types', icon: <Boxes size={20} />, adminOnly: true },
       { label: terms.staffSingular + 's', href: '/dashboard/staff', icon: <Contact2 size={20} />, adminOnly: true },
       { label: 'Edits', href: '/dashboard/edits', icon: <History size={20} />, adminOnly: true },
       { label: 'Settings', href: '/dashboard/settings', icon: <SlidersHorizontal size={20} />, adminOnly: true },
@@ -304,7 +305,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         <nav style={{ flex: 1, padding: collapsed ? '10px 6px' : '12px 10px', display: 'flex', flexDirection: 'column', gap: '3px', overflowY: 'auto' }}>
           {filteredNav.map((item, idx) => {
             const isActive = pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href));
-            const isFirstAdminItem = item.adminOnly && (idx === 0 || !filteredNav[idx - 1]?.adminOnly);
+            const isFirstAdminItem = item.isSectionHeader;
             
             return (
               <React.Fragment key={item.href}>
