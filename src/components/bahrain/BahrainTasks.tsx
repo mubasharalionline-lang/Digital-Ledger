@@ -21,11 +21,30 @@ import {
   MessageSquare, Copy, Send, Search, ListTodo, FileSpreadsheet, CheckSquare,
   Square, Download, ChevronDown, ChevronLeft, ChevronRight, ExternalLink, Link2,
   SlidersHorizontal, Columns3, RotateCcw, XCircle, Sparkles, Filter, FileCheck2, FileX2, CheckCheck,
-  Calendar, FolderOpen
+  Calendar, FolderOpen, Globe
 } from 'lucide-react';
 import { EGRESS_OPTIMIZATION_MODE } from '@/lib/optimizationConfig';
 import { exportTaskManagementExcel, formatPlDateDisplay } from '@/lib/reportExportUtils';
 import CountryFlag from '@/components/CountryFlag';
+
+function GoogleDriveIcon({ size = 14, style }: { size?: number; style?: React.CSSProperties }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 87.3 78"
+      style={{ display: 'block', flexShrink: 0, ...style }}
+      aria-hidden="true"
+    >
+      <path d="m6.6 66.85 3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3l13.75-23.8H0c0 1.55.4 3.1 1.2 4.5z" fill="#0066da" />
+      <path d="m43.65 25-13.75-23.8c-1.35.8-2.5 1.9-3.3 3.3l-25.4 44a9.06 9.06 0 0 0 -1.2 4.5h27.5z" fill="#00ac47" />
+      <path d="m73.55 76.8c1.35-.8 2.5-1.9 3.3-3.3l1.6-2.75 7.65-13.25c.8-1.4 1.2-2.95 1.2-4.5h-27.502l5.852 11.5z" fill="#ea4335" />
+      <path d="m43.65 25 13.75-23.8c-1.35-.8-2.9-1.2-4.5-1.2h-18.5c-1.6 0-3.15.45-4.5 1.2z" fill="#00832d" />
+      <path d="m59.8 53h-32.3l-13.75 23.8c1.35.8 2.9 1.2 4.5 1.2h50.8c1.6 0 3.15-.45 4.5-1.2z" fill="#2684fc" />
+      <path d="m73.4 26.5-12.7-22c-.8-1.4-1.95-2.5-3.3-3.3l-13.75 23.8 16.15 28h27.45c0-1.55-.4-3.1-1.2-4.5z" fill="#ffba00" />
+    </svg>
+  );
+}
 
 export default function BahrainTasks() {
   const { user: currentUser } = getSession();
@@ -74,6 +93,27 @@ export default function BahrainTasks() {
   });
   const [currentPage, setCurrentPage] = useState(1);
   const [currentTime, setCurrentTime] = useState(() => Date.now());
+  const [isDark, setIsDark] = useState(() => {
+    if (typeof document !== 'undefined') {
+      return document.documentElement.getAttribute('data-theme') === 'dark' || document.documentElement.classList.contains('dark');
+    }
+    return false;
+  });
+
+  useEffect(() => {
+    const checkTheme = () => {
+      const isDarkTheme = document.documentElement.getAttribute('data-theme') === 'dark' || document.documentElement.classList.contains('dark');
+      setIsDark(isDarkTheme);
+    };
+    checkTheme();
+    window.addEventListener('app-theme-changed', checkTheme);
+    const observer = new MutationObserver(checkTheme);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'class'] });
+    return () => {
+      window.removeEventListener('app-theme-changed', checkTheme);
+      observer.disconnect();
+    };
+  }, []);
 
   const searchParams = useSearchParams();
 
@@ -128,11 +168,19 @@ export default function BahrainTasks() {
     setCurrentPage(1);
     if (typeof window !== 'undefined') {
       localStorage.setItem('dl_tasks_page_size', String(newSize));
+      window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
     }
   };
 
   const handlePageChange = (newPage: number) => {
     setCurrentPage(newPage);
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
+    }
   };
 
   // New Task modal
@@ -1445,67 +1493,217 @@ export default function BahrainTasks() {
 
 
 
-  const priorityColor = (p: string) => {
-    switch (p) {
-      case 'Urgent':
-      case 'Critical': return { bg: '#E74C3C', color: '#fff' };
-      case 'High': return { bg: '#F39C12', color: '#fff' };
-      case 'Medium': return { bg: '#3498DB', color: '#fff' };
-      case 'Low': return { bg: '#95A5A6', color: '#fff' };
-      default: return { bg: '#95A5A6', color: '#fff' };
+  const getColumnColorConfig = (colId: string) => {
+    if (!isDark) {
+      return {
+        headerColor: '#475569',
+        dotColor: 'transparent',
+        tagBg: 'var(--bg-tertiary)',
+        tagText: '#1e293b',
+        tagBorder: '#e2e8f0'
+      };
+    }
+    switch (colId) {
+      case 'pl':
+        return { headerColor: '#a5b4fc', dotColor: '#818cf8', tagBg: 'rgba(99, 102, 241, 0.15)', tagText: '#a5b4fc', tagBorder: 'rgba(99, 102, 241, 0.35)' };
+      case 'company':
+        return { headerColor: '#38bdf8', dotColor: '#0ea5e9', tagBg: 'rgba(56, 189, 248, 0.14)', tagText: '#38bdf8', tagBorder: 'rgba(56, 189, 248, 0.35)' };
+      case 'cr_number':
+        return { headerColor: '#fbbf24', dotColor: '#f59e0b', tagBg: 'rgba(245, 158, 11, 0.14)', tagText: '#fbbf24', tagBorder: 'rgba(245, 158, 11, 0.35)' };
+      case 'task_type':
+        return { headerColor: '#60a5fa', dotColor: '#3b82f6', tagBg: 'rgba(59, 130, 246, 0.15)', tagText: '#60a5fa', tagBorder: 'rgba(59, 130, 246, 0.35)' };
+      case 'description':
+        return { headerColor: '#94a3b8', dotColor: '#64748b', tagBg: 'rgba(148, 163, 184, 0.12)', tagText: 'var(--text-secondary)', tagBorder: 'var(--border)' };
+      case 'desc_updated':
+        return { headerColor: '#22d3ee', dotColor: '#06b6d4', tagBg: 'rgba(6, 182, 212, 0.15)', tagText: '#22d3ee', tagBorder: 'rgba(6, 182, 212, 0.35)' };
+      case 'priority':
+        return { headerColor: '#fb7185', dotColor: '#f43f5e', tagBg: 'rgba(244, 63, 94, 0.15)', tagText: '#fb7185', tagBorder: 'rgba(244, 63, 94, 0.35)' };
+      case 'deadline':
+        return { headerColor: '#fb923c', dotColor: '#f97316', tagBg: 'rgba(249, 115, 22, 0.15)', tagText: '#fb923c', tagBorder: 'rgba(249, 115, 22, 0.35)' };
+      case 'status':
+        return { headerColor: '#34d399', dotColor: '#10b981', tagBg: 'rgba(16, 185, 129, 0.15)', tagText: '#34d399', tagBorder: 'rgba(16, 185, 129, 0.35)' };
+      case 'auditor':
+        return { headerColor: '#c084fc', dotColor: '#a855f7', tagBg: 'rgba(168, 85, 247, 0.15)', tagText: '#c084fc', tagBorder: 'rgba(168, 85, 247, 0.35)' };
+      case 'assigned_to':
+        return { headerColor: '#2dd4bf', dotColor: '#14b8a6', tagBg: 'rgba(20, 184, 166, 0.15)', tagText: '#2dd4bf', tagBorder: 'rgba(20, 184, 166, 0.35)' };
+      default:
+        return { headerColor: 'var(--text-secondary)', dotColor: 'var(--text-tertiary)', tagBg: 'var(--bg-tertiary)', tagText: 'var(--text-primary)', tagBorder: 'var(--border)' };
     }
   };
 
+  const priorityColor = (p: string) => {
+    if (!isDark) {
+      switch (p) {
+        case 'Urgent':
+        case 'Critical': return { bg: '#E74C3C', color: '#fff', border: 'rgba(0,0,0,0.06)' };
+        case 'High': return { bg: '#F39C12', color: '#fff', border: 'rgba(0,0,0,0.06)' };
+        case 'Medium': return { bg: '#3498DB', color: '#fff', border: 'rgba(0,0,0,0.06)' };
+        case 'Low': return { bg: '#95A5A6', color: '#fff', border: 'rgba(0,0,0,0.06)' };
+        default: return { bg: '#95A5A6', color: '#fff', border: 'rgba(0,0,0,0.06)' };
+      }
+    }
+    switch (p) {
+      case 'Urgent':
+      case 'Critical': return { bg: 'rgba(239, 68, 68, 0.18)', color: '#f87171', border: 'rgba(239, 68, 68, 0.45)' };
+      case 'High': return { bg: 'rgba(245, 158, 11, 0.18)', color: '#fbbf24', border: 'rgba(245, 158, 11, 0.45)' };
+      case 'Medium': return { bg: 'rgba(59, 130, 246, 0.18)', color: '#60a5fa', border: 'rgba(59, 130, 246, 0.45)' };
+      case 'Low': return { bg: 'rgba(148, 163, 184, 0.15)', color: '#94a3b8', border: 'rgba(148, 163, 184, 0.35)' };
+      default: return { bg: 'rgba(148, 163, 184, 0.15)', color: '#94a3b8', border: 'rgba(148, 163, 184, 0.35)' };
+    }
+  };
+
+  const DARK_PARTNER_PALETTES = [
+    { text: '#38bdf8', bg: 'rgba(56, 189, 248, 0.22)', border: 'rgba(56, 189, 248, 0.55)', avatarBg: 'linear-gradient(135deg, #0284c7, #38bdf8)' },
+    { text: '#c084fc', bg: 'rgba(192, 132, 252, 0.22)', border: 'rgba(192, 132, 252, 0.55)', avatarBg: 'linear-gradient(135deg, #7e22ce, #c084fc)' },
+    { text: '#34d399', bg: 'rgba(52, 211, 153, 0.22)', border: 'rgba(52, 211, 153, 0.55)', avatarBg: 'linear-gradient(135deg, #059669, #34d399)' },
+    { text: '#fbbf24', bg: 'rgba(251, 191, 36, 0.22)', border: 'rgba(251, 191, 36, 0.55)', avatarBg: 'linear-gradient(135deg, #d97706, #fbbf24)' },
+    { text: '#f472b6', bg: 'rgba(244, 114, 182, 0.22)', border: 'rgba(244, 114, 182, 0.55)', avatarBg: 'linear-gradient(135deg, #db2777, #f472b6)' },
+    { text: '#818cf8', bg: 'rgba(129, 140, 248, 0.22)', border: 'rgba(129, 140, 248, 0.55)', avatarBg: 'linear-gradient(135deg, #4f46e5, #818cf8)' },
+    { text: '#2dd4bf', bg: 'rgba(45, 212, 191, 0.22)', border: 'rgba(45, 212, 191, 0.55)', avatarBg: 'linear-gradient(135deg, #0d9488, #2dd4bf)' },
+    { text: '#fb923c', bg: 'rgba(249, 115, 22, 0.22)', border: 'rgba(249, 115, 22, 0.55)', avatarBg: 'linear-gradient(135deg, #ea580c, #fb923c)' },
+    { text: '#a78bfa', bg: 'rgba(167, 139, 250, 0.22)', border: 'rgba(167, 139, 250, 0.55)', avatarBg: 'linear-gradient(135deg, #6d28d9, #a78bfa)' },
+    { text: '#4ade80', bg: 'rgba(74, 222, 128, 0.22)', border: 'rgba(74, 222, 128, 0.55)', avatarBg: 'linear-gradient(135deg, #16a34a, #4ade80)' },
+  ];
+
+  const LIGHT_PARTNER_PALETTES = [
+    { text: '#0284c7', bg: '#f0f9ff', border: '#bae6fd', avatarBg: 'linear-gradient(135deg, #0284c7, #38bdf8)' },
+    { text: '#7e22ce', bg: '#faf5ff', border: '#e9d5ff', avatarBg: 'linear-gradient(135deg, #7e22ce, #c084fc)' },
+    { text: '#059669', bg: '#ecfdf5', border: '#a7f3d0', avatarBg: 'linear-gradient(135deg, #059669, #34d399)' },
+    { text: '#d97706', bg: '#fffbeb', border: '#fde68a', avatarBg: 'linear-gradient(135deg, #d97706, #fbbf24)' },
+    { text: '#db2777', bg: '#fdf2f8', border: '#fbcfe8', avatarBg: 'linear-gradient(135deg, #db2777, #f472b6)' },
+    { text: '#4f46e5', bg: '#eef2ff', border: '#c7d2fe', avatarBg: 'linear-gradient(135deg, #4f46e5, #818cf8)' },
+    { text: '#0d9488', bg: '#f0fdfa', border: '#99f6e4', avatarBg: 'linear-gradient(135deg, #0d9488, #2dd4bf)' },
+    { text: '#ea580c', bg: '#fff7ed', border: '#fed7aa', avatarBg: 'linear-gradient(135deg, #ea580c, #fb923c)' },
+    { text: '#6d28d9', bg: '#f5f3ff', border: '#ddd6fe', avatarBg: 'linear-gradient(135deg, #6d28d9, #a78bfa)' },
+    { text: '#16a34a', bg: '#f0fdf4', border: '#bbf7d0', avatarBg: 'linear-gradient(135deg, #16a34a, #4ade80)' },
+  ];
+
+  const getPartnerColor = (identifier?: string | null) => {
+    if (!identifier || identifier.trim() === '') {
+      return {
+        text: 'var(--text-secondary)',
+        bg: 'var(--bg-tertiary)',
+        border: 'var(--border)',
+        avatarBg: 'linear-gradient(135deg, #64748b, #94a3b8)'
+      };
+    }
+    let hash = 0;
+    for (let i = 0; i < identifier.length; i++) {
+      hash = identifier.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const palettes = isDark ? DARK_PARTNER_PALETTES : LIGHT_PARTNER_PALETTES;
+    const index = Math.abs(hash) % palettes.length;
+    return palettes[index];
+  };
+
   const statusColor = (s: string) => {
-    if (!s) return { bg: '#47556912', color: '#475569', border: '#47556924' };
+    if (!isDark) {
+      if (!s) return { bg: '#47556912', color: '#475569', border: '#47556924', dot: '#475569', glow: 'none' };
+      const sl = s.trim().toLowerCase();
+      let hex = '#475569'; // Default Slate 700
+
+      // 1. Success / Completed / Done / Submitted (Emerald / Teal / Cyan / Green)
+      if (sl === 'completed' || sl === 'done' || sl.includes('submitted')) hex = '#047857'; // Emerald 700
+      else if (sl === 'closed') hex = '#065f46';    // Emerald 800
+      else if (sl === 'filed' || sl.includes('file')) hex = '#0e7490';     // Cyan 700
+      else if (sl.includes('received')) hex = '#16a34a'; // Green 600
+
+      // 2. Query / Info / Ask (Yellow / Gold)
+      else if (sl.includes('query') || sl.includes('info') || sl.includes('question') || sl.includes('letter') || sl.includes('confirmation')) hex = '#a16207'; // Yellow 700
+
+      // 3. Review / Verification / Auditor / Approval (Purple / Violet)
+      else if (sl.includes('review') || sl.includes('auditor') || sl.includes('approval') || sl.includes('validation')) hex = '#6d28d9'; // Purple 700
+
+      // 4. Financials / Billing / Accounting (Indigo / Violet)
+      else if (sl.includes('payment') || sl.includes('financial') || sl.includes('billing') || sl.includes('invoice') || sl.includes('xero')) hex = '#4338ca'; // Indigo 700
+
+      // 5. Active / Work / In Progress (Blue / Sky)
+      else if (sl === 'in progress' || sl === 'progress' || sl.includes('progress') || sl.includes('progess')) hex = '#1d4ed8'; // Blue 700
+      else if (sl === 'active' || sl === 'started' || sl === 'running') hex = '#1e40af'; // Blue 800
+      else if (sl.includes('checklist')) hex = '#0369a1'; // Sky 700
+
+      // 6. Danger / Alerts (Red / Rose)
+      else if (sl === 'overdue') hex = '#b91c1c';   // Red 700
+      else if (sl === 'urgent' || sl === 'high') hex = '#991b1b'; // Red 800
+      else if (sl === 'rework' || sl === 'blocked') hex = '#be123c'; // Rose 700
+
+      // 7. Pending / Deferred / Awaiting (Amber / Orange)
+      else if (sl === 'pending' || sl.includes('yet to start') || sl.includes('not started')) hex = '#b45309';   // Amber 700
+      else if (sl.includes('hold') || sl.includes('waiting') || sl.includes('awaited') || sl.includes('pending')) hex = '#c2410c'; // Orange 700
+
+      // 8. Info / Draft / Default
+      else if (sl === 'new' || sl === 'created') hex = '#0369a1'; // Sky 700
+      else if (sl === 'draft' || sl === 'memo') hex = '#475569'; // Slate 700
+
+      // Broad Fallbacks
+      else if (sl.includes('completed') || sl.includes('closed') || sl.includes('done') || sl.includes('filed')) hex = '#047857';
+      else if (sl.includes('review') || sl.includes('waiting') || sl.includes('draft') || sl.includes('auditor')) hex = '#6d28d9';
+      else if (sl.includes('progress') || sl.includes('active') || sl.includes('started')) hex = '#1d4ed8';
+      else if (sl.includes('urgent') || sl.includes('overdue') || sl.includes('rework') || sl.includes('block')) hex = '#b91c1c';
+      else if (sl.includes('query') || sl.includes('info') || sl.includes('question')) hex = '#a16207';
+      else if (sl.includes('financial') || sl.includes('billing') || sl.includes('invoice')) hex = '#4338ca';
+
+      return {
+        bg: `${hex}12`,
+        color: hex,
+        border: `${hex}24`,
+        dot: hex,
+        glow: 'none'
+      };
+    }
+
+    if (!s) return { bg: 'rgba(148, 163, 184, 0.12)', color: 'var(--text-tertiary)', border: 'var(--border)', dot: '#94a3b8', glow: 'none' };
     const sl = s.trim().toLowerCase();
-    let hex = '#475569'; // Default Slate 700
+    let hex = '#60a5fa';
+    let rgb = '96, 165, 250';
 
-    // 1. Success / Completed / Done / Submitted (Emerald / Teal / Cyan / Green)
-    if (sl === 'completed' || sl === 'done' || sl.includes('submitted')) hex = '#047857'; // Emerald 700
-    else if (sl === 'closed') hex = '#065f46';    // Emerald 800
-    else if (sl === 'filed' || sl.includes('file')) hex = '#0e7490';     // Cyan 700
-    else if (sl.includes('received')) hex = '#16a34a'; // Green 600
+    // 1. Success / Completed / Done / Submitted
+    if (sl === 'completed' || sl === 'done' || sl.includes('submitted')) { hex = '#34d399'; rgb = '52, 211, 153'; }
+    else if (sl === 'closed') { hex = '#10b981'; rgb = '16, 185, 129'; }
+    else if (sl === 'filed' || sl.includes('file')) { hex = '#22d3ee'; rgb = '34, 211, 238'; }
+    else if (sl.includes('received') || sl.includes('accepted')) { hex = '#4ade80'; rgb = '74, 222, 128'; }
 
-    // 2. Query / Info / Ask (Yellow / Gold)
-    else if (sl.includes('query') || sl.includes('info') || sl.includes('question') || sl.includes('letter') || sl.includes('confirmation')) hex = '#a16207'; // Yellow 700
+    // 2. Query / Info / Ask
+    else if (sl.includes('query') || sl.includes('info') || sl.includes('question') || sl.includes('letter') || sl.includes('confirmation')) { hex = '#facc15'; rgb = '250, 204, 21'; }
 
-    // 3. Review / Verification / Auditor / Approval (Purple / Violet)
-    else if (sl.includes('review') || sl.includes('auditor') || sl.includes('approval') || sl.includes('validation')) hex = '#6d28d9'; // Purple 700
+    // 3. Review / Verification / Auditor / Approval
+    else if (sl.includes('review') || sl.includes('auditor') || sl.includes('approval') || sl.includes('validation')) { hex = '#c084fc'; rgb = '192, 132, 252'; }
 
-    // 4. Financials / Billing / Accounting (Indigo / Violet)
-    else if (sl.includes('payment') || sl.includes('financial') || sl.includes('billing') || sl.includes('invoice') || sl.includes('xero')) hex = '#4338ca'; // Indigo 700
+    // 4. Financials / Billing / Accounting
+    else if (sl.includes('payment') || sl.includes('financial') || sl.includes('billing') || sl.includes('invoice') || sl.includes('xero')) { hex = '#818cf8'; rgb = '129, 140, 248'; }
 
-    // 5. Active / Work / In Progress (Blue / Sky)
-    else if (sl === 'in progress' || sl === 'progress' || sl.includes('progress') || sl.includes('progess')) hex = '#1d4ed8'; // Blue 700
-    else if (sl === 'active' || sl === 'started' || sl === 'running') hex = '#1e40af'; // Blue 800
-    else if (sl.includes('checklist')) hex = '#0369a1'; // Sky 700
+    // 5. Active / Work / In Progress
+    else if (sl === 'in progress' || sl === 'progress' || sl.includes('progress') || sl.includes('progess')) { hex = '#38bdf8'; rgb = '56, 189, 248'; }
+    else if (sl === 'active' || sl === 'started' || sl === 'running') { hex = '#60a5fa'; rgb = '96, 165, 250'; }
+    else if (sl.includes('checklist')) { hex = '#2dd4bf'; rgb = '45, 212, 191'; }
 
-    // 6. Danger / Alerts (Red / Rose)
-    else if (sl === 'overdue') hex = '#b91c1c';   // Red 700
-    else if (sl === 'urgent' || sl === 'high') hex = '#991b1b'; // Red 800
-    else if (sl === 'rework' || sl === 'blocked') hex = '#be123c'; // Rose 700
+    // 6. Danger / Alerts
+    else if (sl === 'overdue' || sl === 'urgent' || sl === 'high') { hex = '#f87171'; rgb = '248, 113, 113'; }
+    else if (sl === 'rework' || sl === 'blocked' || sl.includes('reject')) { hex = '#fb7185'; rgb = '251, 113, 133'; }
 
-    // 7. Pending / Deferred / Awaiting (Amber / Orange)
-    else if (sl === 'pending' || sl.includes('yet to start') || sl.includes('not started')) hex = '#b45309';   // Amber 700
-    else if (sl.includes('hold') || sl.includes('waiting') || sl.includes('awaited') || sl.includes('pending')) hex = '#c2410c'; // Orange 700
+    // 7. Pending / Deferred / Awaiting
+    else if (sl === 'pending' || sl.includes('yet to start') || sl.includes('not started')) { hex = '#fbbf24'; rgb = '251, 191, 36'; }
+    else if (sl.includes('hold') || sl.includes('waiting') || sl.includes('awaited')) { hex = '#fb923c'; rgb = '251, 146, 60'; }
 
     // 8. Info / Draft / Default
-    else if (sl === 'new' || sl === 'created') hex = '#0369a1'; // Sky 700
-    else if (sl === 'draft' || sl === 'memo') hex = '#475569'; // Slate 700
+    else if (sl === 'new' || sl === 'created') { hex = '#38bdf8'; rgb = '56, 189, 248'; }
+    else if (sl === 'draft' || sl === 'memo') { hex = '#94a3b8'; rgb = '148, 163, 184'; }
 
     // Broad Fallbacks
-    else if (sl.includes('completed') || sl.includes('closed') || sl.includes('done') || sl.includes('filed')) hex = '#047857';
-    else if (sl.includes('review') || sl.includes('waiting') || sl.includes('draft') || sl.includes('auditor')) hex = '#6d28d9';
-    else if (sl.includes('progress') || sl.includes('active') || sl.includes('started')) hex = '#1d4ed8';
-    else if (sl.includes('urgent') || sl.includes('overdue') || sl.includes('rework') || sl.includes('block')) hex = '#b91c1c';
-    else if (sl.includes('query') || sl.includes('info') || sl.includes('question')) hex = '#a16207';
-    else if (sl.includes('financial') || sl.includes('billing') || sl.includes('invoice')) hex = '#4338ca';
+    else if (sl.includes('completed') || sl.includes('closed') || sl.includes('done') || sl.includes('filed')) { hex = '#34d399'; rgb = '52, 211, 153'; }
+    else if (sl.includes('review') || sl.includes('waiting') || sl.includes('draft') || sl.includes('auditor')) { hex = '#c084fc'; rgb = '192, 132, 252'; }
+    else if (sl.includes('progress') || sl.includes('active') || sl.includes('started')) { hex = '#38bdf8'; rgb = '56, 189, 248'; }
+    else if (sl.includes('urgent') || sl.includes('overdue') || sl.includes('rework') || sl.includes('block')) { hex = '#f87171'; rgb = '248, 113, 113'; }
+    else if (sl.includes('query') || sl.includes('info') || sl.includes('question')) { hex = '#facc15'; rgb = '250, 204, 21'; }
+    else if (sl.includes('financial') || sl.includes('billing') || sl.includes('invoice')) { hex = '#818cf8'; rgb = '129, 140, 248'; }
+    else { hex = '#94a3b8'; rgb = '148, 163, 184'; }
 
     return {
-      bg: `${hex}12`,
+      bg: `rgba(${rgb}, 0.22)`,
       color: hex,
-      border: `${hex}24`
+      border: `rgba(${rgb}, 0.55)`,
+      dot: hex,
+      glow: `0 0 10px rgba(${rgb}, 0.25)`
     };
   };
 
@@ -1664,20 +1862,20 @@ export default function BahrainTasks() {
               setRecentLoading(false);
             }}
             style={{
-              background: '#ffffff', borderRadius: '14px', padding: '16px 18px',
-              border: '1px solid #e2e8f0', cursor: 'pointer',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.03)', transition: 'all 0.2s ease',
+              background: 'var(--bg-card, var(--bg-secondary))', borderRadius: '14px', padding: '16px 18px',
+              border: '1px solid var(--border)', cursor: 'pointer',
+              boxShadow: 'var(--card-shadow)', transition: 'all 0.2s ease',
               display: 'flex', alignItems: 'center', gap: '14px',
             }}
-            onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 6px 18px rgba(59,130,246,0.12)'; e.currentTarget.style.borderColor = '#93c5fd'; }}
-            onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.03)'; e.currentTarget.style.borderColor = '#e2e8f0'; }}
+            onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 6px 18px rgba(59,130,246,0.18)'; e.currentTarget.style.borderColor = 'var(--accent)'; }}
+            onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = 'var(--card-shadow)'; e.currentTarget.style.borderColor = 'var(--border)'; }}
           >
-            <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: 'linear-gradient(135deg, #dbeafe, #bfdbfe)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <Clock size={20} color="#2563eb" />
+            <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: 'linear-gradient(135deg, rgba(59,130,246,0.2), rgba(59,130,246,0.35))', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <Clock size={20} color="#3b82f6" />
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.3px' }}>Recently Modified</div>
-              <div style={{ fontSize: '22px', fontWeight: 800, color: '#0f172a', lineHeight: 1.2 }}>
+              <div style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.3px' }}>Recently Modified</div>
+              <div style={{ fontSize: '22px', fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1.2 }}>
                 {(() => {
                   const now = new Date();
                   const recent = tasks.filter(t => {
@@ -1687,74 +1885,74 @@ export default function BahrainTasks() {
                   return recent.length;
                 })()}
               </div>
-              <div style={{ fontSize: '10.5px', color: '#94a3b8', marginTop: '1px' }}>Last 7 days · Click to view</div>
+              <div style={{ fontSize: '10.5px', color: 'var(--text-tertiary)', marginTop: '1px' }}>Last 7 days · Click to view</div>
             </div>
-            <ArrowRight size={16} color="#94a3b8" />
+            <ArrowRight size={16} color="var(--text-tertiary)" />
           </div>
 
           {/* Card 2: Completed Tasks */}
           <div
             onClick={() => setShowCompletedModal(true)}
             style={{
-              background: '#ffffff', borderRadius: '14px', padding: '16px 18px',
-              border: '1px solid #e2e8f0', cursor: 'pointer',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.03)', transition: 'all 0.2s ease',
+              background: 'var(--bg-card, var(--bg-secondary))', borderRadius: '14px', padding: '16px 18px',
+              border: '1px solid var(--border)', cursor: 'pointer',
+              boxShadow: 'var(--card-shadow)', transition: 'all 0.2s ease',
               display: 'flex', alignItems: 'center', gap: '14px',
             }}
-            onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 6px 18px rgba(16,185,129,0.12)'; e.currentTarget.style.borderColor = '#6ee7b7'; }}
-            onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.03)'; e.currentTarget.style.borderColor = '#e2e8f0'; }}
+            onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 6px 18px rgba(16,185,129,0.18)'; e.currentTarget.style.borderColor = '#10b981'; }}
+            onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = 'var(--card-shadow)'; e.currentTarget.style.borderColor = 'var(--border)'; }}
           >
-            <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: 'linear-gradient(135deg, #d1fae5, #a7f3d0)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <CheckCircle2 size={20} color="#059669" />
+            <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: 'linear-gradient(135deg, rgba(16,185,129,0.2), rgba(16,185,129,0.35))', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <CheckCircle2 size={20} color="#10b981" />
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.3px' }}>Completed</div>
-              <div style={{ fontSize: '22px', fontWeight: 800, color: '#0f172a', lineHeight: 1.2 }}>
+              <div style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.3px' }}>Completed</div>
+              <div style={{ fontSize: '22px', fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1.2 }}>
                 {tasks.filter(t => {
                   const sl = (t.status || '').toLowerCase();
                   return sl.includes('complete') || sl.includes('closed') || sl.includes('filed') || sl.includes('done');
                 }).length}
               </div>
-              <div style={{ fontSize: '10.5px', color: '#94a3b8', marginTop: '1px' }}>Total completed · Click to view</div>
+              <div style={{ fontSize: '10.5px', color: 'var(--text-tertiary)', marginTop: '1px' }}>Total completed · Click to view</div>
             </div>
-            <ArrowRight size={16} color="#94a3b8" />
+            <ArrowRight size={16} color="var(--text-tertiary)" />
           </div>
 
           {/* Card 3: All Task Types */}
           <div
             onClick={() => setShowTaskTypeModal(true)}
             style={{
-              background: '#ffffff', borderRadius: '14px', padding: '16px 18px',
-              border: '1px solid #e2e8f0', cursor: 'pointer',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.03)', transition: 'all 0.2s ease',
+              background: 'var(--bg-card, var(--bg-secondary))', borderRadius: '14px', padding: '16px 18px',
+              border: '1px solid var(--border)', cursor: 'pointer',
+              boxShadow: 'var(--card-shadow)', transition: 'all 0.2s ease',
               display: 'flex', alignItems: 'center', gap: '14px',
             }}
-            onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 4px 16px rgba(139,92,246,0.12)'; e.currentTarget.style.borderColor = '#c4b5fd'; }}
-            onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.03)'; e.currentTarget.style.borderColor = '#e2e8f0'; }}
+            onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 4px 16px rgba(139,92,246,0.18)'; e.currentTarget.style.borderColor = '#8b5cf6'; }}
+            onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = 'var(--card-shadow)'; e.currentTarget.style.borderColor = 'var(--border)'; }}
           >
-            <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: 'linear-gradient(135deg, #ede9fe, #ddd6fe)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <BarChart3 size={20} color="#7c3aed" />
+            <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: 'linear-gradient(135deg, rgba(139,92,246,0.2), rgba(139,92,246,0.35))', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <BarChart3 size={20} color="#8b5cf6" />
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.3px' }}>Task Types</div>
-              <div style={{ fontSize: '22px', fontWeight: 800, color: '#0f172a', lineHeight: 1.2 }}>
+              <div style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.3px' }}>Task Types</div>
+              <div style={{ fontSize: '22px', fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1.2 }}>
                 {taskTypes.filter(t => t.active).length}
               </div>
-              <div style={{ fontSize: '10.5px', color: '#94a3b8', marginTop: '1px' }}>Distribution · Click to view</div>
+              <div style={{ fontSize: '10.5px', color: 'var(--text-tertiary)', marginTop: '1px' }}>Distribution · Click to view</div>
             </div>
-            <ArrowRight size={16} color="#94a3b8" />
+            <ArrowRight size={16} color="var(--text-tertiary)" />
           </div>
 
           {/* Card 4: WhatsApp Message Generator */}
           <div
             onClick={() => { setShowStatusModal(true); setWaGenStatuses([]); setWaGenPartners([]); setWaGenCopied(false); }}
             style={{
-              background: 'linear-gradient(135deg, #ffffff 0%, #f0fdf4 100%)',
+              background: 'linear-gradient(135deg, rgba(34,197,94,0.12) 0%, rgba(22,163,74,0.22) 100%)',
               borderRadius: '16px',
               padding: '16px 18px',
-              border: '1px solid #bbf7d0',
+              border: '1px solid rgba(34,197,94,0.35)',
               cursor: 'pointer',
-              boxShadow: '0 2px 10px rgba(34, 197, 94, 0.06), 0 1px 3px rgba(0,0,0,0.03)',
+              boxShadow: 'var(--card-shadow)',
               transition: 'all 0.22s cubic-bezier(0.4, 0, 0.2, 1)',
               display: 'flex',
               alignItems: 'center',
@@ -1764,13 +1962,13 @@ export default function BahrainTasks() {
             }}
             onMouseEnter={e => {
               e.currentTarget.style.transform = 'translateY(-2px)';
-              e.currentTarget.style.boxShadow = '0 8px 24px rgba(34, 197, 94, 0.2), 0 2px 6px rgba(0,0,0,0.04)';
-              e.currentTarget.style.borderColor = '#4ade80';
+              e.currentTarget.style.boxShadow = '0 8px 24px rgba(34, 197, 94, 0.22)';
+              e.currentTarget.style.borderColor = '#22c55e';
             }}
             onMouseLeave={e => {
               e.currentTarget.style.transform = 'none';
-              e.currentTarget.style.boxShadow = '0 2px 10px rgba(34, 197, 94, 0.06), 0 1px 3px rgba(0,0,0,0.03)';
-              e.currentTarget.style.borderColor = '#bbf7d0';
+              e.currentTarget.style.boxShadow = 'var(--card-shadow)';
+              e.currentTarget.style.borderColor = 'rgba(34,197,94,0.35)';
             }}
           >
             <div style={{
@@ -1795,10 +1993,10 @@ export default function BahrainTasks() {
                 </span>
                 <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#22c55e', display: 'inline-block' }} />
               </div>
-              <div style={{ fontSize: '17px', fontWeight: 800, color: '#0f172a', letterSpacing: '-0.02em', lineHeight: 1.25 }}>
+              <div style={{ fontSize: '17px', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em', lineHeight: 1.25 }}>
                 Share Tasks
               </div>
-              <div style={{ fontSize: '11px', color: '#15803d', fontWeight: 550, marginTop: '2px' }}>
+              <div style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 550, marginTop: '2px' }}>
                 Filter by status & partner
               </div>
             </div>
@@ -1806,11 +2004,11 @@ export default function BahrainTasks() {
               width: '28px',
               height: '28px',
               borderRadius: '8px',
-              background: '#dcfce7',
+              background: 'rgba(34, 197, 94, 0.2)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: '#16a34a',
+              color: '#22c55e',
               flexShrink: 0
             }}>
               <ArrowRight size={15} strokeWidth={2.5} />
@@ -1822,10 +2020,9 @@ export default function BahrainTasks() {
       {/* Filters (Placed below cards) */}
       <div className="task-filters" style={{
         display: 'flex', gap: '10px', marginBottom: '22px', flexWrap: 'wrap',
-        padding: '16px 18px', background: 'rgba(255, 255, 255, 0.75)',
-        backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
-        borderRadius: '18px', border: '1px solid rgba(255,255,255,0.9)',
-        boxShadow: '0 4px 20px rgba(0,0,0,0.03)', alignItems: 'center'
+        padding: '16px 18px', background: 'var(--bg-card, var(--bg-secondary))',
+        borderRadius: '18px', border: '1px solid var(--border)',
+        boxShadow: 'var(--card-shadow)', alignItems: 'center'
       }}>
         <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={filterStyle}>
           <option value="">All Status</option>
@@ -1877,7 +2074,7 @@ export default function BahrainTasks() {
             style={{ ...filterStyle, width: '100%', paddingRight: search ? '28px' : '12px' }}
           />
           {search && (
-            <button onClick={() => setSearch('')} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '2px', display: 'flex' }}>
+            <button onClick={() => setSearch('')} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-tertiary)', cursor: 'pointer', padding: '2px', display: 'flex' }}>
               <X size={13} />
             </button>
           )}
@@ -1890,9 +2087,9 @@ export default function BahrainTasks() {
             onClick={() => setShowColumnPicker(!showColumnPicker)}
             style={{
               padding: '8px 14px',
-              background: showColumnPicker ? '#eff6ff' : '#ffffff',
-              color: showColumnPicker ? '#1d4ed8' : '#334155',
-              border: showColumnPicker ? '1.5px solid #3b82f6' : '1px solid #cbd5e1',
+              background: showColumnPicker ? 'var(--accent-light)' : 'var(--bg-secondary)',
+              color: showColumnPicker ? 'var(--accent)' : 'var(--text-primary)',
+              border: showColumnPicker ? '1.5px solid var(--accent)' : '1px solid var(--border)',
               borderRadius: '10px',
               cursor: 'pointer',
               fontWeight: 650,
@@ -1902,11 +2099,11 @@ export default function BahrainTasks() {
               gap: '6px',
               whiteSpace: 'nowrap',
               transition: 'all 0.15s ease',
-              boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
+              boxShadow: 'var(--card-shadow)'
             }}
             title="Choose which columns to show or hide in this table"
           >
-            <Columns3 size={14} color="#2563eb" />
+            <Columns3 size={14} color="var(--accent)" />
             <span>Columns ({visibleColumns.length})</span>
             <ChevronDown size={12} style={{ transform: showColumnPicker ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s ease' }} />
           </button>
@@ -1919,64 +2116,69 @@ export default function BahrainTasks() {
                 top: 'calc(100% + 6px)',
                 left: 0,
                 zIndex: 1000,
-                background: '#ffffff',
+                background: 'var(--bg-card, var(--bg-secondary))',
                 borderRadius: '14px',
-                border: '1px solid #cbd5e1',
-                boxShadow: '0 14px 34px rgba(15,23,42,0.18), 0 2px 8px rgba(0,0,0,0.06)',
+                border: '1px solid var(--border)',
+                boxShadow: '0 14px 34px rgba(0,0,0,0.35), 0 2px 8px rgba(0,0,0,0.1)',
                 padding: '12px',
                 minWidth: '240px',
                 maxHeight: '360px',
                 overflowY: 'auto'
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', paddingBottom: '6px', borderBottom: '1px solid #f1f5f9' }}>
-                <span style={{ fontSize: '11px', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', paddingBottom: '6px', borderBottom: '1px solid var(--border)' }}>
+                <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                   Columns ({visibleColumns.length}/{columnsConfig.length})
                 </span>
                 <button
                   type="button"
                   onClick={() => setShowColumnPicker(false)}
-                  style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '2px' }}
+                  style={{ background: 'none', border: 'none', color: 'var(--text-tertiary)', cursor: 'pointer', padding: '2px' }}
                 >
                   <X size={13} />
                 </button>
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', marginBottom: '10px' }}>
-                {columnsConfig.map(col => (
-                  <label
-                    key={`picker-${col.id}`}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      padding: '5px 7px',
-                      borderRadius: '6px',
-                      cursor: 'pointer',
-                      fontSize: '12px',
-                      color: col.visible ? '#0f172a' : '#64748b',
-                      fontWeight: col.visible ? 600 : 400,
-                      background: col.visible ? '#f8fafc' : 'transparent'
-                    }}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={col.visible}
-                      onChange={() => toggleColumnVisibility(col.id)}
-                      style={{ accentColor: '#2563eb', cursor: 'pointer' }}
-                    />
-                    <span>{col.label}</span>
-                  </label>
-                ))}
+                {columnsConfig.map(col => {
+                  const colCfg = getColumnColorConfig(col.id);
+                  return (
+                    <label
+                      key={`picker-${col.id}`}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        padding: '6px 8px',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        fontSize: '12px',
+                        color: col.visible ? 'var(--text-primary)' : 'var(--text-tertiary)',
+                        fontWeight: col.visible ? 650 : 400,
+                        background: col.visible ? 'var(--bg-tertiary)' : 'transparent',
+                        transition: 'all 0.12s ease'
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={col.visible}
+                        onChange={() => toggleColumnVisibility(col.id)}
+                        style={{ accentColor: 'var(--accent)', cursor: 'pointer' }}
+                      />
+                      <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: colCfg.dotColor, display: isDark ? 'inline-block' : 'none', flexShrink: 0 }} />
+                      <span>{col.label}</span>
+                    </label>
+                  );
+                })}
               </div>
 
-              <div style={{ paddingTop: '8px', borderTop: '1px solid #f1f5f9' }}>
+              <div style={{ paddingTop: '8px', borderTop: '1px solid var(--border)' }}>
                 <Link
                   href="/dashboard/settings"
                   onClick={() => setShowColumnPicker(false)}
                   style={{
                     fontSize: '11.5px',
-                    color: '#2563eb',
+                    color: 'var(--accent)',
                     fontWeight: 700,
                     textDecoration: 'none',
                     display: 'flex',
@@ -1985,7 +2187,7 @@ export default function BahrainTasks() {
                     gap: '4px',
                     padding: '6px',
                     borderRadius: '6px',
-                    background: '#eff6ff'
+                    background: 'var(--accent-light)'
                   }}
                 >
                   <SlidersHorizontal size={12} /> Custom Order in Settings →
@@ -1998,9 +2200,9 @@ export default function BahrainTasks() {
         {(filterStatus || filterPriority || filterCompany || filterPartner || filterAuditor || filterTaskType || filterDescUpdated || search) && (
           <button
             onClick={() => { setFilterStatus(''); setFilterPriority(''); setFilterCompany(''); setFilterPartner(''); setFilterAuditor(''); setFilterTaskType(''); setFilterDescUpdated(''); setSearch(''); }}
-            style={{ padding: '8px 16px', background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: '10px', cursor: 'pointer', fontWeight: 600, fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap', transition: 'all 0.15s ease' }}
-            onMouseEnter={e => { e.currentTarget.style.background = '#fee2e2'; }}
-            onMouseLeave={e => { e.currentTarget.style.background = '#fef2f2'; }}
+            style={{ padding: '8px 16px', background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '10px', cursor: 'pointer', fontWeight: 600, fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap', transition: 'all 0.15s ease' }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239, 68, 68, 0.25)'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(239, 68, 68, 0.15)'; }}
           >
             <X size={14} /> Clear Filters
           </button>
@@ -2537,58 +2739,58 @@ export default function BahrainTasks() {
 
                 {/* Quick Presets Toolbar */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: '11.5px', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  <span style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                     Quick Presets:
                   </span>
                   <button
                     type="button"
                     onClick={selectPendingTasks}
                     style={{
-                      padding: '5px 11px', borderRadius: '8px', border: '1px solid #cbd5e1',
-                      background: '#ffffff', color: '#334155', fontSize: '12px', fontWeight: 600,
+                      padding: '5px 11px', borderRadius: '8px', border: '1px solid var(--border)',
+                      background: 'var(--bg-secondary)', color: 'var(--text-primary)', fontSize: '12px', fontWeight: 600,
                       cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '5px',
                       transition: 'all 0.15s ease'
                     }}
-                    onMouseEnter={e => { e.currentTarget.style.borderColor = '#3b82f6'; e.currentTarget.style.background = '#eff6ff'; }}
-                    onMouseLeave={e => { e.currentTarget.style.borderColor = '#cbd5e1'; e.currentTarget.style.background = '#ffffff'; }}
+                    onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.background = 'var(--accent-light)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.background = 'var(--bg-secondary)'; }}
                   >
-                    <Clock size={12} color="#2563eb" /> Active / Pending
+                    <Clock size={12} color="var(--accent)" /> Active / Pending
                   </button>
                   <button
                     type="button"
                     onClick={selectUrgentTasks}
                     style={{
-                      padding: '5px 11px', borderRadius: '8px', border: '1px solid #cbd5e1',
-                      background: '#ffffff', color: '#334155', fontSize: '12px', fontWeight: 600,
+                      padding: '5px 11px', borderRadius: '8px', border: '1px solid var(--border)',
+                      background: 'var(--bg-secondary)', color: 'var(--text-primary)', fontSize: '12px', fontWeight: 600,
                       cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '5px',
                       transition: 'all 0.15s ease'
                     }}
-                    onMouseEnter={e => { e.currentTarget.style.borderColor = '#ef4444'; e.currentTarget.style.background = '#fef2f2'; }}
-                    onMouseLeave={e => { e.currentTarget.style.borderColor = '#cbd5e1'; e.currentTarget.style.background = '#ffffff'; }}
+                    onMouseEnter={e => { e.currentTarget.style.borderColor = '#ef4444'; e.currentTarget.style.background = 'rgba(239, 68, 68, 0.15)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.background = 'var(--bg-secondary)'; }}
                   >
-                    <span style={{ color: '#dc2626' }}>●</span> Urgent ({urgentCount})
+                    <span style={{ color: '#ef4444' }}>●</span> Urgent ({urgentCount})
                   </button>
                   <button
                     type="button"
                     onClick={toggleAllStatuses}
                     style={{
-                      padding: '5px 11px', borderRadius: '8px', border: '1px solid #cbd5e1',
-                      background: '#ffffff', color: '#334155', fontSize: '12px', fontWeight: 600,
+                      padding: '5px 11px', borderRadius: '8px', border: '1px solid var(--border)',
+                      background: 'var(--bg-secondary)', color: 'var(--text-primary)', fontSize: '12px', fontWeight: 600,
                       cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '5px',
                       transition: 'all 0.15s ease'
                     }}
-                    onMouseEnter={e => { e.currentTarget.style.borderColor = '#10b981'; e.currentTarget.style.background = '#f0fdf4'; }}
-                    onMouseLeave={e => { e.currentTarget.style.borderColor = '#cbd5e1'; e.currentTarget.style.background = '#ffffff'; }}
+                    onMouseEnter={e => { e.currentTarget.style.borderColor = '#10b981'; e.currentTarget.style.background = 'rgba(16, 185, 129, 0.15)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.background = 'var(--bg-secondary)'; }}
                   >
-                    <CheckSquare size={12} color="#059669" /> {allStatusesSelected ? 'Deselect All Statuses' : 'All Statuses'}
+                    <CheckSquare size={12} color="#10b981" /> {allStatusesSelected ? 'Deselect All Statuses' : 'All Statuses'}
                   </button>
                   {(waGenStatuses.length > 0 || waGenPartners.length > 0) && (
                     <button
                       type="button"
                       onClick={() => { setWaGenStatuses([]); setWaGenPartners([]); setWaGenCopied(false); }}
                       style={{
-                        padding: '5px 11px', borderRadius: '8px', border: '1px solid #fecaca',
-                        background: '#fef2f2', color: '#dc2626', fontSize: '12px', fontWeight: 600,
+                        padding: '5px 11px', borderRadius: '8px', border: '1px solid rgba(239, 68, 68, 0.3)',
+                        background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444', fontSize: '12px', fontWeight: 600,
                         cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px',
                         marginLeft: 'auto'
                       }}
@@ -2602,9 +2804,9 @@ export default function BahrainTasks() {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                   {/* Left Column: Status Selector */}
                   <div style={{
-                    background: '#f8fafc',
+                    background: 'var(--bg-tertiary)',
                     borderRadius: '14px',
-                    border: '1px solid #e2e8f0',
+                    border: '1px solid var(--border)',
                     padding: '14px',
                     display: 'flex',
                     flexDirection: 'column',
@@ -2612,10 +2814,10 @@ export default function BahrainTasks() {
                   }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <span style={{ fontSize: '12px', fontWeight: 700, color: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                        <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                           Target Statuses
                         </span>
-                        <span style={{ fontSize: '11px', fontWeight: 700, color: '#2563eb', background: '#dbeafe', padding: '1px 6px', borderRadius: '10px' }}>
+                        <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--accent)', background: 'var(--accent-light)', padding: '1px 6px', borderRadius: '10px' }}>
                           {waGenStatuses.length}/{allStatuses.length}
                         </span>
                       </div>
@@ -2623,7 +2825,7 @@ export default function BahrainTasks() {
                         type="button"
                         onClick={toggleAllStatuses}
                         style={{
-                          background: 'transparent', border: 'none', color: '#2563eb',
+                          background: 'transparent', border: 'none', color: 'var(--accent)',
                           fontSize: '11.5px', fontWeight: 700, cursor: 'pointer', padding: '2px 4px'
                         }}
                       >
@@ -2633,7 +2835,7 @@ export default function BahrainTasks() {
 
                     {/* Status Search */}
                     <div style={{ position: 'relative' }}>
-                      <Search size={13} color="#94a3b8" style={{ position: 'absolute', left: '9px', top: '50%', transform: 'translateY(-50%)' }} />
+                      <Search size={13} color="var(--text-tertiary)" style={{ position: 'absolute', left: '9px', top: '50%', transform: 'translateY(-50%)' }} />
                       <input
                         type="text"
                         placeholder="Search statuses..."
@@ -2643,8 +2845,9 @@ export default function BahrainTasks() {
                           width: '100%',
                           padding: '6px 10px 6px 28px',
                           borderRadius: '8px',
-                          border: '1px solid #cbd5e1',
-                          background: '#ffffff',
+                          border: '1px solid var(--border)',
+                          background: 'var(--bg-secondary)',
+                          color: 'var(--text-primary)',
                           fontSize: '12px',
                           outline: 'none',
                           boxSizing: 'border-box'
@@ -2669,19 +2872,19 @@ export default function BahrainTasks() {
                               padding: '6px 10px',
                               borderRadius: '8px',
                               cursor: 'pointer',
-                              background: isChecked ? '#ffffff' : 'transparent',
-                              border: isChecked ? '1px solid #93c5fd' : '1px solid transparent',
-                              boxShadow: isChecked ? '0 1px 3px rgba(37,99,235,0.08)' : 'none',
+                              background: isChecked ? 'var(--bg-secondary)' : 'transparent',
+                              border: isChecked ? '1px solid var(--accent)' : '1px solid transparent',
+                              boxShadow: isChecked ? 'var(--card-shadow)' : 'none',
                               transition: 'all 0.12s ease'
                             }}
-                            onMouseEnter={e => { if (!isChecked) e.currentTarget.style.background = '#f1f5f9'; }}
+                            onMouseEnter={e => { if (!isChecked) e.currentTarget.style.background = 'var(--bg-card, var(--bg-secondary))'; }}
                             onMouseLeave={e => { if (!isChecked) e.currentTarget.style.background = 'transparent'; }}
                           >
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
                               <div style={{
                                 width: '16px', height: '16px', borderRadius: '4px',
-                                border: isChecked ? '1.5px solid #2563eb' : '1.5px solid #cbd5e1',
-                                background: isChecked ? '#2563eb' : '#ffffff',
+                                border: isChecked ? '1.5px solid var(--accent)' : '1.5px solid var(--border)',
+                                background: isChecked ? 'var(--accent)' : 'var(--bg-secondary)',
                                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                                 flexShrink: 0
                               }}>
@@ -2695,14 +2898,14 @@ export default function BahrainTasks() {
                                 {s}
                               </span>
                             </div>
-                            <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 600 }}>
+                            <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600 }}>
                               {count}
                             </span>
                           </div>
                         );
                       })}
                       {filteredStatuses.length === 0 && (
-                        <div style={{ textAlign: 'center', padding: '16px', color: '#94a3b8', fontSize: '12px' }}>
+                        <div style={{ textAlign: 'center', padding: '16px', color: 'var(--text-tertiary)', fontSize: '12px' }}>
                           No statuses match search
                         </div>
                       )}
@@ -2711,9 +2914,9 @@ export default function BahrainTasks() {
 
                   {/* Right Column: Partner Selector */}
                   <div style={{
-                    background: '#f8fafc',
+                    background: 'var(--bg-tertiary)',
                     borderRadius: '14px',
-                    border: '1px solid #e2e8f0',
+                    border: '1px solid var(--border)',
                     padding: '14px',
                     display: 'flex',
                     flexDirection: 'column',
@@ -2721,10 +2924,10 @@ export default function BahrainTasks() {
                   }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <span style={{ fontSize: '12px', fontWeight: 700, color: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                        <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                           Target Staff
                         </span>
-                        <span style={{ fontSize: '11px', fontWeight: 700, color: '#2563eb', background: '#dbeafe', padding: '1px 6px', borderRadius: '10px' }}>
+                        <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--accent)', background: 'var(--accent-light)', padding: '1px 6px', borderRadius: '10px' }}>
                           {waGenPartners.length}/{allPartners.length}
                         </span>
                       </div>
@@ -2732,7 +2935,7 @@ export default function BahrainTasks() {
                         type="button"
                         onClick={toggleAllPartners}
                         style={{
-                          background: 'transparent', border: 'none', color: '#2563eb',
+                          background: 'transparent', border: 'none', color: 'var(--accent)',
                           fontSize: '11.5px', fontWeight: 700, cursor: 'pointer', padding: '2px 4px'
                         }}
                       >
@@ -2742,7 +2945,7 @@ export default function BahrainTasks() {
 
                     {/* Partner Search */}
                     <div style={{ position: 'relative' }}>
-                      <Search size={13} color="#94a3b8" style={{ position: 'absolute', left: '9px', top: '50%', transform: 'translateY(-50%)' }} />
+                      <Search size={13} color="var(--text-tertiary)" style={{ position: 'absolute', left: '9px', top: '50%', transform: 'translateY(-50%)' }} />
                       <input
                         type="text"
                         placeholder="Search staff..."
@@ -2752,8 +2955,9 @@ export default function BahrainTasks() {
                           width: '100%',
                           padding: '6px 10px 6px 28px',
                           borderRadius: '8px',
-                          border: '1px solid #cbd5e1',
-                          background: '#ffffff',
+                          border: '1px solid var(--border)',
+                          background: 'var(--bg-secondary)',
+                          color: 'var(--text-primary)',
                           fontSize: '12px',
                           outline: 'none',
                           boxSizing: 'border-box'
@@ -2782,19 +2986,19 @@ export default function BahrainTasks() {
                               padding: '6px 10px',
                               borderRadius: '8px',
                               cursor: 'pointer',
-                              background: isChecked ? '#ffffff' : 'transparent',
-                              border: isChecked ? '1px solid #93c5fd' : '1px solid transparent',
-                              boxShadow: isChecked ? '0 1px 3px rgba(37,99,235,0.08)' : 'none',
+                              background: isChecked ? 'var(--bg-secondary)' : 'transparent',
+                              border: isChecked ? '1px solid var(--accent)' : '1px solid transparent',
+                              boxShadow: isChecked ? 'var(--card-shadow)' : 'none',
                               transition: 'all 0.12s ease'
                             }}
-                            onMouseEnter={e => { if (!isChecked) e.currentTarget.style.background = '#f1f5f9'; }}
+                            onMouseEnter={e => { if (!isChecked) e.currentTarget.style.background = 'var(--bg-card, var(--bg-secondary))'; }}
                             onMouseLeave={e => { if (!isChecked) e.currentTarget.style.background = 'transparent'; }}
                           >
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
                               <div style={{
                                 width: '16px', height: '16px', borderRadius: '4px',
-                                border: isChecked ? '1.5px solid #2563eb' : '1.5px solid #cbd5e1',
-                                background: isChecked ? '#2563eb' : '#ffffff',
+                                border: isChecked ? '1.5px solid var(--accent)' : '1.5px solid var(--border)',
+                                background: isChecked ? 'var(--accent)' : 'var(--bg-secondary)',
                                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                                 flexShrink: 0
                               }}>
@@ -2808,18 +3012,18 @@ export default function BahrainTasks() {
                               }}>
                                 {p.username.substring(0, 1).toUpperCase()}
                               </div>
-                              <span style={{ fontSize: '12px', fontWeight: 650, color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              <span style={{ fontSize: '12px', fontWeight: 650, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                 {p.username}
                               </span>
                             </div>
-                            <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 600 }}>
+                            <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600 }}>
                               {count}
                             </span>
                           </div>
                         );
                       })}
                       {filteredPartners.length === 0 && (
-                        <div style={{ textAlign: 'center', padding: '16px', color: '#94a3b8', fontSize: '12px' }}>
+                        <div style={{ textAlign: 'center', padding: '16px', color: 'var(--text-tertiary)', fontSize: '12px' }}>
                           No staff found
                         </div>
                       )}
@@ -2829,9 +3033,9 @@ export default function BahrainTasks() {
 
                 {/* Formatting Options Bar */}
                 <div style={{
-                  background: '#ffffff',
+                  background: 'var(--bg-secondary)',
                   borderRadius: '12px',
-                  border: '1px solid #e2e8f0',
+                  border: '1px solid var(--border)',
                   padding: '12px 16px',
                   display: 'flex',
                   alignItems: 'center',
@@ -2841,7 +3045,7 @@ export default function BahrainTasks() {
                 }}>
                   {/* Grouping */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span style={{ fontSize: '11.5px', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    <span style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                       Grouping:
                     </span>
                     {(['status', 'partner', 'compact'] as const).map(mode => (
@@ -2852,9 +3056,9 @@ export default function BahrainTasks() {
                         style={{
                           padding: '4px 10px',
                           borderRadius: '6px',
-                          border: waGenGroupBy === mode ? '1.5px solid #2563eb' : '1px solid #cbd5e1',
-                          background: waGenGroupBy === mode ? '#eff6ff' : '#ffffff',
-                          color: waGenGroupBy === mode ? '#1d4ed8' : '#64748b',
+                          border: waGenGroupBy === mode ? '1.5px solid var(--accent)' : '1px solid var(--border)',
+                          background: waGenGroupBy === mode ? 'var(--accent-light)' : 'var(--bg-secondary)',
+                          color: waGenGroupBy === mode ? 'var(--accent)' : 'var(--text-secondary)',
                           fontSize: '11.5px',
                           fontWeight: waGenGroupBy === mode ? 700 : 500,
                           cursor: 'pointer',
@@ -2868,20 +3072,20 @@ export default function BahrainTasks() {
 
                   {/* Include Toggles */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '11.5px', fontWeight: 600, color: '#334155', cursor: 'pointer' }}>
-                      <input type="checkbox" checked={waGenIncludeCr} onChange={e => setWaGenIncludeCr(e.target.checked)} style={{ accentColor: '#2563eb' }} />
+                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '11.5px', fontWeight: 600, color: 'var(--text-primary)', cursor: 'pointer' }}>
+                      <input type="checkbox" checked={waGenIncludeCr} onChange={e => setWaGenIncludeCr(e.target.checked)} style={{ accentColor: 'var(--accent)' }} />
                       CR Number
                     </label>
-                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '11.5px', fontWeight: 600, color: '#334155', cursor: 'pointer' }}>
-                      <input type="checkbox" checked={waGenIncludeDesc} onChange={e => setWaGenIncludeDesc(e.target.checked)} style={{ accentColor: '#2563eb' }} />
+                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '11.5px', fontWeight: 600, color: 'var(--text-primary)', cursor: 'pointer' }}>
+                      <input type="checkbox" checked={waGenIncludeDesc} onChange={e => setWaGenIncludeDesc(e.target.checked)} style={{ accentColor: 'var(--accent)' }} />
                       Description
                     </label>
-                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '11.5px', fontWeight: 600, color: '#334155', cursor: 'pointer' }}>
-                      <input type="checkbox" checked={waGenIncludePriority} onChange={e => setWaGenIncludePriority(e.target.checked)} style={{ accentColor: '#2563eb' }} />
+                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '11.5px', fontWeight: 600, color: 'var(--text-primary)', cursor: 'pointer' }}>
+                      <input type="checkbox" checked={waGenIncludePriority} onChange={e => setWaGenIncludePriority(e.target.checked)} style={{ accentColor: 'var(--accent)' }} />
                       Priority
                     </label>
-                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '11.5px', fontWeight: 600, color: '#334155', cursor: 'pointer' }}>
-                      <input type="checkbox" checked={waGenIncludeAuditor} onChange={e => setWaGenIncludeAuditor(e.target.checked)} style={{ accentColor: '#2563eb' }} />
+                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '11.5px', fontWeight: 600, color: 'var(--text-primary)', cursor: 'pointer' }}>
+                      <input type="checkbox" checked={waGenIncludeAuditor} onChange={e => setWaGenIncludeAuditor(e.target.checked)} style={{ accentColor: 'var(--accent)' }} />
                       Auditor
                     </label>
                   </div>
@@ -3054,23 +3258,23 @@ export default function BahrainTasks() {
       {(() => null)()}
 
       {/* Tasks Table — Desktop View (>768px) */}
-      <div className="desktop-task-view" ref={containerRef}>
+      <div className="desktop-task-view" ref={containerRef} style={{ width: '100%', maxWidth: '100%' }}>
         <div className="task-table-wrap" style={{
-          width: '100%', overflowX: 'auto', borderRadius: '18px',
-          boxShadow: '0 4px 24px -2px rgba(15, 23, 42, 0.05), 0 2px 6px -1px rgba(15, 23, 42, 0.02)',
-          border: '1px solid rgba(226, 232, 240, 0.85)', background: '#ffffff',
+          width: '100%', maxWidth: '100%', overflowX: 'auto', borderRadius: '18px',
+          boxShadow: 'var(--card-shadow)',
+          border: '1px solid var(--border)', background: 'var(--bg-card, var(--bg-secondary))',
           WebkitOverflowScrolling: 'touch'
         }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', background: '#ffffff' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', background: 'var(--bg-card, var(--bg-secondary))', tableLayout: 'auto' }}>
             <thead>
               <tr style={{
-                background: 'linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%)',
-                borderBottom: '1.5px solid #e2e8f0'
+                background: 'var(--bg-tertiary)',
+                borderBottom: '1.5px solid var(--border)'
               }}>
                 {multiSelectMode && (
                   <th style={{
-                    padding: '11px 8px', textAlign: 'center', width: '38px',
-                    borderBottom: '1.5px solid #e2e8f0'
+                    padding: '10px 4px', textAlign: 'center', width: '32px', minWidth: '32px',
+                    borderBottom: '1.5px solid var(--border)'
                   }}>
                     <input
                       type="checkbox"
@@ -3080,16 +3284,16 @@ export default function BahrainTasks() {
                         if (e.target.checked) selectAllFiltered();
                         else deselectAll();
                       }}
-                      style={{ cursor: 'pointer', width: '16px', height: '16px', accentColor: '#2563eb' }}
+                      style={{ cursor: 'pointer', width: '15px', height: '15px', accentColor: 'var(--accent)' }}
                       title={isAllFilteredSelected ? 'Deselect All' : 'Select All Filtered'}
                     />
                   </th>
                 )}
                 {visibleColumns.length === 0 ? (
                   <th style={{
-                    padding: '11px 16px', textAlign: 'left',
+                    padding: '10px 14px', textAlign: 'left',
                     fontSize: '11px', fontWeight: 700, color: '#dc2626',
-                    borderBottom: '1.5px solid #e2e8f0'
+                    borderBottom: '1.5px solid var(--border)'
                   }}>
                     No Columns Visible (Enable columns in Columns menu or Settings)
                   </th>
@@ -3097,18 +3301,24 @@ export default function BahrainTasks() {
                   visibleColumns.map((col) => {
                     const isActions = col.id === 'actions';
                     const isPl = col.id === 'pl';
+                    const colCfg = getColumnColorConfig(col.id);
                     return (
                       <th key={col.id} style={{
-                        padding: isActions ? '11px 2px' : '11px 8px',
+                        padding: isActions ? '10px 2px' : '10px 6px',
                         textAlign: (isActions ? 'center' : col.align) as any,
-                        fontSize: '10.5px', fontWeight: 700, textTransform: 'uppercase',
-                        letterSpacing: '0.05em', color: '#475569', whiteSpace: 'nowrap',
-                        borderBottom: '1.5px solid #e2e8f0',
-                        width: isActions ? '32px' : (isPl ? '110px' : undefined),
-                        minWidth: isActions ? '32px' : (isPl ? '100px' : (col.minWidth || 'auto')),
-                        maxWidth: isActions ? '36px' : undefined
+                        fontSize: '10px', fontWeight: 750, textTransform: 'uppercase',
+                        letterSpacing: '0.04em', color: colCfg.headerColor, whiteSpace: 'nowrap',
+                        borderBottom: isDark ? `2px solid ${colCfg.tagBorder || 'var(--border)'}` : '1.5px solid var(--border)',
+                        width: isActions ? '32px' : (isPl ? '95px' : undefined),
+                        minWidth: isActions ? '32px' : (isPl ? '85px' : (col.minWidth || 'auto')),
+                        maxWidth: isActions ? '34px' : undefined
                       }}>
-                        {isActions ? '' : (col.shortLabel !== undefined && col.shortLabel !== '' ? col.shortLabel : col.label)}
+                        {isActions ? '' : (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                            <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: colCfg.dotColor, display: isDark ? 'inline-block' : 'none', flexShrink: 0, boxShadow: `0 0 6px ${colCfg.dotColor}` }} />
+                            {col.shortLabel !== undefined && col.shortLabel !== '' ? col.shortLabel : col.label}
+                          </span>
+                        )}
                       </th>
                     );
                   })
@@ -3118,13 +3328,13 @@ export default function BahrainTasks() {
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={Math.max(1, visibleColumns.length) + (multiSelectMode ? 1 : 0)} style={{ textAlign: 'center', padding: '64px 20px', color: '#94a3b8' }}>
+                  <td colSpan={Math.max(1, visibleColumns.length) + (multiSelectMode ? 1 : 0)} style={{ textAlign: 'center', padding: '64px 20px', color: 'var(--text-tertiary)' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
-                      <div style={{ width: '56px', height: '56px', borderRadius: '16px', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <ListTodo size={28} color="#94a3b8" />
+                      <div style={{ width: '56px', height: '56px', borderRadius: '16px', background: 'var(--bg-tertiary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <ListTodo size={28} color="var(--text-tertiary)" />
                       </div>
-                      <div style={{ fontSize: '15px', fontWeight: 650, color: '#334155' }}>No matching tasks found</div>
-                      <div style={{ fontSize: '13px', color: '#94a3b8' }}>Try adjusting your filters or search keywords</div>
+                      <div style={{ fontSize: '15px', fontWeight: 650, color: 'var(--text-primary)' }}>No matching tasks found</div>
+                      <div style={{ fontSize: '13px', color: 'var(--text-tertiary)' }}>Try adjusting your filters or search keywords</div>
                     </div>
                   </td>
                 </tr>
@@ -3143,11 +3353,11 @@ export default function BahrainTasks() {
 
                 return (
                   <tr key={task.id} style={{
-                    borderBottom: '1px solid rgba(241, 245, 249, 0.9)',
-                    background: isSelected ? 'rgba(239, 246, 255, 0.85)' : 'transparent',
+                    borderBottom: '1px solid var(--border-light)',
+                    background: isSelected ? 'var(--accent-light)' : 'transparent',
                     transition: 'background 0.15s cubic-bezier(0.16, 1, 0.3, 1)'
                   }}
-                    onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = 'rgba(248, 250, 252, 0.85)'; }}
+                    onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = 'var(--bg-tertiary)'; }}
                     onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = 'transparent'; }}>
                     {multiSelectMode && (
                       <td style={{ ...compactCell, textAlign: 'center', width: '38px' }} onClick={e => e.stopPropagation()}>
@@ -3155,7 +3365,7 @@ export default function BahrainTasks() {
                           type="checkbox"
                           checked={isSelected}
                           onChange={() => toggleSelectTask(task.id)}
-                          style={{ cursor: 'pointer', width: '16px', height: '16px', accentColor: '#2563eb' }}
+                          style={{ cursor: 'pointer', width: '16px', height: '16px', accentColor: 'var(--accent)' }}
                         />
                       </td>
                     )}
@@ -3168,7 +3378,7 @@ export default function BahrainTasks() {
                           return (
                             <td
                               key={`pl-${task.id}`}
-                              style={{ ...compactCell, width: '110px', minWidth: '100px', padding: '5px 8px' }}
+                              style={{ ...compactCell, width: '95px', minWidth: '85px', padding: '5px 5px' }}
                               onMouseEnter={() => setHoveredPlTaskId(task.id)}
                               onMouseLeave={() => setHoveredPlTaskId(null)}
                             >
@@ -3187,15 +3397,15 @@ export default function BahrainTasks() {
                                     style={{
                                       padding: '2px 4px',
                                       borderRadius: '6px',
-                                      border: '1.5px solid #2563eb',
-                                      fontSize: '11px',
+                                      border: isDark ? '1.5px solid #818cf8' : '1.5px solid #2563eb',
+                                      fontSize: '10.5px',
                                       fontWeight: 600,
                                       outline: 'none',
-                                      background: '#ffffff',
-                                      color: '#0f172a',
+                                      background: isDark ? 'var(--bg-secondary)' : '#ffffff',
+                                      color: isDark ? 'var(--text-primary)' : '#0f172a',
                                       fontFamily: 'ui-monospace, monospace',
-                                      boxShadow: '0 2px 8px rgba(37,99,235,0.2)',
-                                      maxWidth: '115px'
+                                      boxShadow: isDark ? '0 2px 8px rgba(99, 102, 241, 0.25)' : '0 2px 8px rgba(37,99,235,0.2)',
+                                      maxWidth: '105px'
                                     }}
                                   />
                                   <button
@@ -3206,10 +3416,10 @@ export default function BahrainTasks() {
                                     }}
                                     title="Clear PL Date"
                                     style={{
-                                      background: '#fee2e2',
+                                      background: isDark ? 'rgba(239, 68, 68, 0.15)' : '#fee2e2',
                                       border: 'none',
                                       borderRadius: '4px',
-                                      color: '#dc2626',
+                                      color: isDark ? '#ef4444' : '#dc2626',
                                       cursor: 'pointer',
                                       padding: '3px 4px',
                                       display: 'flex',
@@ -3228,36 +3438,36 @@ export default function BahrainTasks() {
                                   }}
                                   title={`PL Date: ${formatPlDateDisplay(task.pl_date)} (Click to edit)`}
                                   style={{
-                                    padding: '3px 7px',
-                                    borderRadius: '7px',
-                                    border: '1px solid #bfdbfe',
+                                    padding: '2.5px 6px',
+                                    borderRadius: '6px',
+                                    border: isDark ? '1px solid rgba(99, 102, 241, 0.45)' : '1px solid #bfdbfe',
                                     cursor: 'pointer',
-                                    fontSize: '11px',
-                                    fontWeight: 600,
+                                    fontSize: '10.5px',
+                                    fontWeight: 650,
                                     transition: 'all 0.15s ease',
-                                    background: '#eff6ff',
-                                    color: '#1d4ed8',
+                                    background: isDark ? 'rgba(99, 102, 241, 0.15)' : '#eff6ff',
+                                    color: isDark ? '#a5b4fc' : '#1d4ed8',
                                     display: 'inline-flex',
                                     alignItems: 'center',
-                                    gap: '4px',
+                                    gap: '3px',
                                     whiteSpace: 'nowrap',
                                     fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-                                    boxShadow: '0 1px 2px rgba(37,99,235,0.05)'
+                                    boxShadow: isDark ? '0 1px 3px rgba(99, 102, 241, 0.15)' : '0 1px 2px rgba(37,99,235,0.05)'
                                   }}
                                   onMouseEnter={e => {
                                     e.currentTarget.style.transform = 'translateY(-1px)';
-                                    e.currentTarget.style.borderColor = '#3b82f6';
-                                    e.currentTarget.style.boxShadow = '0 3px 8px rgba(37,99,235,0.15)';
+                                    e.currentTarget.style.borderColor = isDark ? '#818cf8' : '#3b82f6';
+                                    e.currentTarget.style.boxShadow = isDark ? '0 3px 8px rgba(99, 102, 241, 0.3)' : '0 3px 8px rgba(37,99,235,0.15)';
                                   }}
                                   onMouseLeave={e => {
                                     e.currentTarget.style.transform = 'none';
-                                    e.currentTarget.style.borderColor = '#bfdbfe';
-                                    e.currentTarget.style.boxShadow = '0 1px 2px rgba(37,99,235,0.05)';
+                                    e.currentTarget.style.borderColor = isDark ? 'rgba(99, 102, 241, 0.45)' : '#bfdbfe';
+                                    e.currentTarget.style.boxShadow = isDark ? '0 1px 3px rgba(99, 102, 241, 0.15)' : '0 1px 2px rgba(37,99,235,0.05)';
                                   }}
                                 >
-                                  <Calendar size={11} color="#2563eb" />
+                                  <Calendar size={10} color={isDark ? '#818cf8' : '#2563eb'} />
                                   <span>{formatPlDateDisplay(task.pl_date)}</span>
-                                  {hoveredPlTaskId === task.id && <Edit2 size={9} color="#3b82f6" style={{ marginLeft: '1px' }} />}
+                                  {hoveredPlTaskId === task.id && <Edit2 size={8} color={isDark ? '#818cf8' : '#3b82f6'} style={{ marginLeft: '1px' }} />}
                                 </button>
                               ) : (
                                 <button
@@ -3268,32 +3478,32 @@ export default function BahrainTasks() {
                                   }}
                                   title="Set Proposal / Engagement Letter Date"
                                   style={{
-                                    padding: '2.5px 6px',
-                                    borderRadius: '6px',
-                                    border: '1px dashed #cbd5e1',
+                                    padding: '2px 5px',
+                                    borderRadius: '5px',
+                                    border: isDark ? '1px dashed rgba(99, 102, 241, 0.4)' : '1px dashed #cbd5e1',
                                     cursor: 'pointer',
-                                    fontSize: '10.5px',
+                                    fontSize: '10px',
                                     fontWeight: 550,
                                     transition: 'all 0.15s ease',
-                                    background: 'transparent',
-                                    color: '#94a3b8',
+                                    background: isDark ? 'rgba(99, 102, 241, 0.08)' : 'transparent',
+                                    color: isDark ? '#818cf8' : '#94a3b8',
                                     display: 'inline-flex',
                                     alignItems: 'center',
-                                    gap: '4px',
+                                    gap: '3px',
                                     whiteSpace: 'nowrap'
                                   }}
                                   onMouseEnter={e => {
-                                    e.currentTarget.style.borderColor = '#3b82f6';
-                                    e.currentTarget.style.color = '#2563eb';
-                                    e.currentTarget.style.background = '#f0f7ff';
+                                    e.currentTarget.style.borderColor = isDark ? '#818cf8' : '#3b82f6';
+                                    e.currentTarget.style.color = isDark ? '#a5b4fc' : '#2563eb';
+                                    e.currentTarget.style.background = isDark ? 'rgba(99, 102, 241, 0.18)' : '#f0f7ff';
                                   }}
                                   onMouseLeave={e => {
-                                    e.currentTarget.style.borderColor = '#cbd5e1';
-                                    e.currentTarget.style.color = '#94a3b8';
-                                    e.currentTarget.style.background = 'transparent';
+                                    e.currentTarget.style.borderColor = isDark ? 'rgba(99, 102, 241, 0.4)' : '#cbd5e1';
+                                    e.currentTarget.style.color = isDark ? '#818cf8' : '#94a3b8';
+                                    e.currentTarget.style.background = isDark ? 'rgba(99, 102, 241, 0.08)' : 'transparent';
                                   }}
                                 >
-                                  <Calendar size={10} />
+                                  <Calendar size={9} />
                                   <span>Set Date</span>
                                 </button>
                               )}
@@ -3308,7 +3518,7 @@ export default function BahrainTasks() {
                           return (
                             <td
                               key={`comp-${task.id}`}
-                              style={{ ...compactCell, minWidth: '130px', maxWidth: '200px' }}
+                              style={{ ...compactCell, minWidth: '105px', maxWidth: '170px' }}
                               onMouseEnter={() => setHoveredCompanyTaskId(task.id)}
                               onMouseLeave={() => setHoveredCompanyTaskId(null)}
                             >
@@ -3322,8 +3532,8 @@ export default function BahrainTasks() {
                                     title={`Open Google Drive for ${company?.company_name || 'Company'}`}
                                     style={{
                                       fontWeight: 650,
-                                      fontSize: '12.5px',
-                                      color: isCompHovered ? '#16a34a' : '#0f172a',
+                                      fontSize: '12px',
+                                      color: isCompHovered ? (isDark ? '#38bdf8' : '#16a34a') : (isDark ? 'var(--text-primary)' : '#0f172a'),
                                       textDecoration: isCompHovered ? 'underline' : 'none',
                                       textUnderlineOffset: '2px',
                                       cursor: 'pointer',
@@ -3331,6 +3541,7 @@ export default function BahrainTasks() {
                                       overflow: 'hidden',
                                       textOverflow: 'ellipsis',
                                       whiteSpace: 'nowrap',
+                                      maxWidth: '135px',
                                       letterSpacing: '-0.01em',
                                       transition: 'all 0.15s ease'
                                     }}
@@ -3341,12 +3552,13 @@ export default function BahrainTasks() {
                                   <span
                                     style={{
                                       fontWeight: 650,
-                                      fontSize: '12.5px',
-                                      color: '#0f172a',
+                                      fontSize: '12px',
+                                      color: isDark ? 'var(--text-primary)' : '#0f172a',
                                       display: 'inline-block',
                                       overflow: 'hidden',
                                       textOverflow: 'ellipsis',
                                       whiteSpace: 'nowrap',
+                                      maxWidth: '145px',
                                       letterSpacing: '-0.01em'
                                     }}
                                     title={company?.company_name || 'Unknown'}
@@ -3355,13 +3567,13 @@ export default function BahrainTasks() {
                                   </span>
                                 )}
 
-                                {hasDrive && isCompHovered && (
+                                {hasDrive && (
                                   <a
                                     href={driveUrl}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     onClick={e => e.stopPropagation()}
-                                    title={`Open Google Drive: ${company?.google_drive_link}`}
+                                    title={`Google Drive: ${company.google_drive_link}`}
                                     style={{
                                       display: 'inline-flex',
                                       alignItems: 'center',
@@ -3369,24 +3581,26 @@ export default function BahrainTasks() {
                                       width: '18px',
                                       height: '18px',
                                       borderRadius: '4px',
-                                      background: '#f0fdf4',
-                                      border: '1px solid #bbf7d0',
-                                      color: '#16a34a',
+                                      background: isDark ? 'rgba(34, 197, 94, 0.15)' : '#f0fdf4',
+                                      border: isDark ? '1px solid rgba(34, 197, 94, 0.45)' : '1px solid #bbf7d0',
+                                      boxShadow: isDark ? '0 1px 3px rgba(22, 163, 74, 0.15)' : '0 1px 3px rgba(22, 163, 74, 0.15)',
                                       flexShrink: 0,
-                                      textDecoration: 'none',
+                                      cursor: 'pointer',
                                       transition: 'all 0.15s ease',
-                                      boxShadow: '0 1px 3px rgba(22, 163, 74, 0.15)'
+                                      padding: '2px'
                                     }}
                                     onMouseEnter={e => {
-                                      e.currentTarget.style.background = '#dcfce7';
                                       e.currentTarget.style.transform = 'scale(1.1)';
+                                      e.currentTarget.style.background = isDark ? 'rgba(34, 197, 94, 0.3)' : '#dcfce7';
+                                      e.currentTarget.style.boxShadow = isDark ? '0 2px 8px rgba(34, 197, 94, 0.4)' : '0 2px 6px rgba(22, 163, 74, 0.25)';
                                     }}
                                     onMouseLeave={e => {
-                                      e.currentTarget.style.background = '#f0fdf4';
                                       e.currentTarget.style.transform = 'scale(1)';
+                                      e.currentTarget.style.background = isDark ? 'rgba(34, 197, 94, 0.15)' : '#f0fdf4';
+                                      e.currentTarget.style.boxShadow = '0 1px 3px rgba(22, 163, 74, 0.15)';
                                     }}
                                   >
-                                    <FolderOpen size={10} color="#16a34a" />
+                                    <GoogleDriveIcon size={11} />
                                   </a>
                                 )}
                               </div>
@@ -3394,10 +3608,14 @@ export default function BahrainTasks() {
                           );
 
                         case 'cr_number':
+                          const hasCrLink = !!(company?.cr_link && company.cr_link.trim() !== '');
+                          const isCrHovered = hoveredCrTaskId === task.id;
+                          const crUrl = hasCrLink ? formatExternalUrl(company.cr_link) : '';
+
                           return (
                             <td
                               key={`cr-${task.id}`}
-                              style={{ ...compactCell, position: 'relative', cursor: (canManageTask(task) && company) ? 'pointer' : 'default' }}
+                              style={{ ...compactCell, minWidth: '85px', maxWidth: '140px', position: 'relative', cursor: (canManageTask(task) && company) ? 'pointer' : 'default' }}
                               onMouseEnter={() => setHoveredCrTaskId(task.id)}
                               onMouseLeave={() => setHoveredCrTaskId(null)}
                             >
@@ -3407,278 +3625,191 @@ export default function BahrainTasks() {
                                   style={{
                                     display: 'flex',
                                     flexDirection: 'column',
-                                    gap: '7px',
-                                    minWidth: '220px',
-                                    maxWidth: '260px',
+                                    gap: '4px',
+                                    minWidth: '190px',
                                     position: 'absolute',
-                                    zIndex: 40,
-                                    background: '#ffffff',
-                                    padding: '10px 12px',
-                                    borderRadius: '10px',
-                                    boxShadow: '0 12px 30px rgba(15, 23, 42, 0.18), 0 0 0 1px rgba(59, 130, 246, 0.25)',
+                                    zIndex: 20,
+                                    background: isDark ? 'var(--bg-card, var(--bg-secondary))' : '#ffffff',
+                                    padding: '8px',
+                                    borderRadius: '8px',
+                                    boxShadow: isDark ? '0 16px 36px rgba(0,0,0,0.45)' : '0 12px 30px rgba(15, 23, 42, 0.18)',
+                                    border: isDark ? '1px solid var(--accent)' : '1px solid #93c5fd',
                                     top: '50%',
                                     transform: 'translateY(-50%)',
-                                    left: '4px'
+                                    left: '6px'
                                   }}
                                 >
-                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #f1f5f9', paddingBottom: '5px' }}>
-                                    <span style={{ fontSize: '11px', fontWeight: 700, color: '#1e293b', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                      <FileSpreadsheet size={12} color="#2563eb" /> CR Details
-                                    </span>
+                                  <div style={{ fontSize: '10.5px', fontWeight: 700, color: isDark ? 'var(--text-primary)' : '#1e293b', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                    <span>Edit CR Number & Link</span>
                                     <button
-                                      type="button"
                                       onClick={() => setInlineEditCrId(null)}
-                                      style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '2px', display: 'flex', alignItems: 'center' }}
-                                      title="Close (Esc)"
+                                      style={{ background: 'none', border: 'none', color: isDark ? 'var(--text-tertiary)' : '#94a3b8', cursor: 'pointer', padding: '1px' }}
                                     >
                                       <X size={12} />
                                     </button>
                                   </div>
-
-                                  <div>
-                                    <label style={{ display: 'block', fontSize: '9.5px', fontWeight: 650, color: '#64748b', marginBottom: '2px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                                      CR Number
-                                    </label>
-                                    <input
-                                      autoFocus
-                                      type="text"
-                                      value={inlineEditCrValue}
-                                      onChange={e => setInlineEditCrValue(e.target.value)}
-                                      placeholder="e.g. 167145-1"
-                                      style={{
-                                        width: '100%',
-                                        padding: '5px 8px',
-                                        fontSize: '11.5px',
-                                        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-                                        borderRadius: '6px',
-                                        border: '1.5px solid #cbd5e1',
-                                        outline: 'none',
-                                        color: '#0f172a',
-                                        background: '#f8fafc',
-                                        boxSizing: 'border-box'
-                                      }}
-                                      onFocus={e => {
-                                        e.target.style.borderColor = '#2563eb';
-                                        e.target.style.background = '#ffffff';
-                                        e.target.style.boxShadow = '0 0 0 3px rgba(37,99,235,0.12)';
-                                      }}
-                                      onBlur={e => {
-                                        e.target.style.borderColor = '#cbd5e1';
-                                        e.target.style.background = '#f8fafc';
-                                        e.target.style.boxShadow = 'none';
-                                      }}
-                                      onKeyDown={e => {
-                                        if (e.key === 'Escape') setInlineEditCrId(null);
-                                        else if (e.key === 'Enter') {
-                                          if (company) saveInlineCrNumber(company.id, task.id);
-                                        }
-                                      }}
-                                    />
-                                  </div>
-
-                                  <div>
-                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2px' }}>
-                                      <label style={{ fontSize: '9.5px', fontWeight: 650, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                                        CR Link / URL
-                                      </label>
-                                      {inlineEditCrLinkValue && (
-                                        <a
-                                          href={formatExternalUrl(inlineEditCrLinkValue)}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          onClick={e => e.stopPropagation()}
-                                          style={{ fontSize: '9.5px', color: '#2563eb', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '2px', fontWeight: 600 }}
-                                          title="Test link in new tab"
-                                        >
-                                          Test <ExternalLink size={9} />
-                                        </a>
-                                      )}
-                                    </div>
-                                    <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                                      <input
-                                        type="url"
-                                        value={inlineEditCrLinkValue}
-                                        onChange={e => setInlineEditCrLinkValue(e.target.value)}
-                                        placeholder="e.g. https://sijilat.bh/..."
-                                        style={{
-                                          width: '100%',
-                                          padding: '5px 8px 5px 24px',
-                                          fontSize: '11.5px',
-                                          borderRadius: '6px',
-                                          border: '1.5px solid #cbd5e1',
-                                          outline: 'none',
-                                          color: '#0f172a',
-                                          background: '#f8fafc',
-                                          boxSizing: 'border-box'
-                                        }}
-                                        onFocus={e => {
-                                          e.target.style.borderColor = '#2563eb';
-                                          e.target.style.background = '#ffffff';
-                                          e.target.style.boxShadow = '0 0 0 3px rgba(37,99,235,0.12)';
-                                        }}
-                                        onBlur={e => {
-                                          e.target.style.borderColor = '#cbd5e1';
-                                          e.target.style.background = '#f8fafc';
-                                          e.target.style.boxShadow = 'none';
-                                        }}
-                                        onKeyDown={e => {
-                                          if (e.key === 'Escape') setInlineEditCrId(null);
-                                          else if (e.key === 'Enter') {
-                                            if (company) saveInlineCrNumber(company.id, task.id);
-                                          }
-                                        }}
-                                      />
-                                      <span style={{ position: 'absolute', left: '7px', color: '#94a3b8', display: 'flex', alignItems: 'center', pointerEvents: 'none' }}>
-                                        <ExternalLink size={11} />
-                                      </span>
-                                    </div>
-                                  </div>
-
-                                  <div style={{ display: 'flex', gap: '5px', justifyContent: 'flex-end', marginTop: '3px' }}>
+                                  <input
+                                    autoFocus
+                                    type="text"
+                                    value={inlineEditCrValue}
+                                    onChange={e => setInlineEditCrValue(e.target.value)}
+                                    placeholder="CR Number (e.g. 12345-1)"
+                                    style={{
+                                      padding: '4px 6px',
+                                      fontSize: '11px',
+                                      borderRadius: '5px',
+                                      border: isDark ? '1px solid var(--border)' : '1px solid #cbd5e1',
+                                      background: isDark ? 'var(--bg-tertiary)' : '#ffffff',
+                                      color: isDark ? 'var(--text-primary)' : '#0f172a',
+                                      outline: 'none',
+                                      fontFamily: 'ui-monospace, monospace'
+                                    }}
+                                    onKeyDown={e => {
+                                      if (e.key === 'Escape') setInlineEditCrId(null);
+                                      if (e.key === 'Enter' && company) saveInlineCrNumber(company.id, task.id);
+                                    }}
+                                  />
+                                  <input
+                                    type="url"
+                                    value={inlineEditCrLinkValue}
+                                    onChange={e => setInlineEditCrLinkValue(e.target.value)}
+                                    placeholder="CR URL (https://...)"
+                                    style={{
+                                      padding: '4px 6px',
+                                      fontSize: '11px',
+                                      borderRadius: '5px',
+                                      border: isDark ? '1px solid var(--border)' : '1px solid #cbd5e1',
+                                      background: isDark ? 'var(--bg-tertiary)' : '#ffffff',
+                                      color: isDark ? 'var(--text-primary)' : '#0f172a',
+                                      outline: 'none'
+                                    }}
+                                    onKeyDown={e => {
+                                      if (e.key === 'Escape') setInlineEditCrId(null);
+                                      if (e.key === 'Enter' && company) saveInlineCrNumber(company.id, task.id);
+                                    }}
+                                  />
+                                  <div style={{ display: 'flex', gap: '4px', justifyContent: 'flex-end', marginTop: '2px' }}>
                                     <button
-                                      type="button"
-                                      onClick={() => setInlineEditCrId(null)}
-                                      style={{
-                                        padding: '4px 8px',
-                                        border: '1px solid #e2e8f0',
-                                        background: '#f8fafc',
-                                        color: '#64748b',
-                                        borderRadius: '6px',
-                                        cursor: 'pointer',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: '3px',
-                                        fontSize: '10.5px',
-                                        fontWeight: 600
-                                      }}
-                                      title="Cancel (Esc)"
-                                    >
-                                      <X size={11} /> Cancel
-                                    </button>
-                                    <button
-                                      type="button"
                                       disabled={savingCrTaskId === task.id}
                                       onClick={() => { if (company) saveInlineCrNumber(company.id, task.id); }}
                                       style={{
-                                        padding: '4px 10px',
-                                        border: 'none',
-                                        background: '#2563eb',
+                                        padding: '3px 8px',
+                                        background: isDark ? 'var(--accent)' : '#2563eb',
                                         color: '#fff',
-                                        borderRadius: '6px',
-                                        cursor: savingCrTaskId === task.id ? 'wait' : 'pointer',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: '3px',
+                                        borderRadius: '5px',
                                         fontSize: '10.5px',
-                                        fontWeight: 600,
-                                        opacity: savingCrTaskId === task.id ? 0.7 : 1,
-                                        boxShadow: '0 2px 6px rgba(37,99,235,0.25)'
+                                        fontWeight: 650,
+                                        border: 'none',
+                                        cursor: 'pointer',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '3px'
                                       }}
-                                      title="Save (Enter)"
                                     >
                                       <Check size={11} /> {savingCrTaskId === task.id ? 'Saving...' : 'Save'}
                                     </button>
                                   </div>
                                 </div>
                               ) : (
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '3px', minHeight: '22px' }}>
+                                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', maxWidth: '100%' }}>
                                   {company?.cr_number ? (
-                                    <span style={{
-                                      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-                                      fontSize: '10px', fontWeight: 600, color: '#334155',
-                                      background: 'linear-gradient(135deg, #f8fafc, #f1f5f9)', padding: '2px 6px', borderRadius: '5px',
-                                      border: '1px solid #cbd5e1', display: 'inline-block',
-                                      maxWidth: '85px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                                      letterSpacing: '0.02em',
-                                    }} title={company.cr_number}>
-                                      {company.cr_number}
-                                    </span>
-                                  ) : (
-                                    <span style={{ fontSize: '11px', color: '#cbd5e1' }}>—</span>
-                                  )}
-
-                                  <div style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '3px',
-                                    flexShrink: 0,
-                                    opacity: hoveredCrTaskId === task.id ? 1 : 0,
-                                    pointerEvents: hoveredCrTaskId === task.id ? 'auto' : 'none',
-                                    transition: 'opacity 0.15s ease, transform 0.15s ease',
-                                  }}>
-                                    {/* CR Hyperlink Icon */}
-                                    {company?.cr_link && (
-                                      <a
-                                        href={formatExternalUrl(company.cr_link)}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        onClick={e => {
-                                          e.stopPropagation();
-                                        }}
-                                        style={{
-                                          background: '#ecfdf5',
-                                          border: '1px solid #a7f3d0',
-                                          borderRadius: '5px',
-                                          cursor: 'pointer',
-                                          padding: '2px',
-                                          display: 'flex',
-                                          alignItems: 'center',
-                                          justifyContent: 'center',
-                                          color: '#059669',
-                                          transition: 'all 0.15s ease',
-                                          width: '19px',
-                                          height: '19px',
-                                          textDecoration: 'none',
-                                          flexShrink: 0,
-                                        }}
-                                        title={`Open CR Link: ${company.cr_link}`}
-                                        onMouseEnter={e => {
-                                          e.currentTarget.style.background = '#d1fae5';
-                                          e.currentTarget.style.borderColor = '#6ee7b7';
-                                          e.currentTarget.style.color = '#047857';
-                                        }}
-                                        onMouseLeave={e => {
-                                          e.currentTarget.style.background = '#ecfdf5';
-                                          e.currentTarget.style.borderColor = '#a7f3d0';
-                                          e.currentTarget.style.color = '#059669';
-                                        }}
-                                      >
-                                        <ExternalLink size={10.5} />
-                                      </a>
-                                    )}
-
-                                    {/* Edit CR Number & Link Button */}
-                                    {canManageTask(task) && company && (
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation();
+                                    <span
+                                      onClick={() => {
+                                        if (canManageTask(task) && company) {
                                           setInlineEditCrId(task.id);
                                           setInlineEditCrValue(company.cr_number || '');
                                           setInlineEditCrLinkValue(company.cr_link || '');
+                                        }
+                                      }}
+                                      title={canManageTask(task) ? `CR: ${company.cr_number} (Click to edit)` : `CR: ${company.cr_number}`}
+                                      style={{
+                                        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+                                        fontSize: '10.5px',
+                                        fontWeight: 650,
+                                        color: isDark ? '#fbbf24' : '#334155',
+                                        background: isDark ? 'rgba(245, 158, 11, 0.14)' : 'linear-gradient(135deg, #f8fafc, #f1f5f9)',
+                                        border: isDark ? '1px solid rgba(245, 158, 11, 0.35)' : '1px solid #cbd5e1',
+                                        padding: '2px 5px',
+                                        borderRadius: '5px',
+                                        letterSpacing: '0.01em',
+                                        whiteSpace: 'nowrap',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '3px'
+                                      }}
+                                    >
+                                      {company.cr_number}
+                                    </span>
+                                  ) : (
+                                    canManageTask(task) && company && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setInlineEditCrId(task.id);
+                                          setInlineEditCrValue('');
+                                          setInlineEditCrLinkValue('');
                                         }}
+                                        title="Add CR Number"
                                         style={{
-                                          background: '#eff6ff',
-                                          border: '1px solid #dbeafe',
+                                          padding: '2px 5px',
                                           borderRadius: '5px',
+                                          border: isDark ? '1px dashed rgba(245, 158, 11, 0.4)' : '1px dashed #cbd5e1',
                                           cursor: 'pointer',
-                                          padding: '2px',
-                                          display: 'flex',
+                                          fontSize: '10px',
+                                          fontWeight: 550,
+                                          background: isDark ? 'rgba(245, 158, 11, 0.08)' : 'transparent',
+                                          color: isDark ? '#fbbf24' : '#94a3b8',
+                                          display: 'inline-flex',
                                           alignItems: 'center',
-                                          justifyContent: 'center',
-                                          color: '#2563eb',
-                                          transition: 'all 0.15s ease',
-                                          width: '19px',
-                                          height: '19px',
-                                          flexShrink: 0,
+                                          gap: '3px',
+                                          whiteSpace: 'nowrap'
                                         }}
-                                        title="Edit CR Number & Link"
-                                        onMouseEnter={e => { e.currentTarget.style.background = '#dbeafe'; }}
-                                        onMouseLeave={e => { e.currentTarget.style.background = '#eff6ff'; }}
                                       >
-                                        <Edit2 size={10} />
+                                        <Plus size={9} /> Set CR
                                       </button>
-                                    )}
-                                  </div>
+                                    )
+                                  )}
+
+                                  {hasCrLink && (
+                                    <a
+                                      href={crUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      onClick={e => e.stopPropagation()}
+                                      title={`CR Link: ${company.cr_link}`}
+                                      style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        width: '18px',
+                                        height: '18px',
+                                        borderRadius: '4px',
+                                        background: isDark ? 'rgba(56, 189, 248, 0.18)' : '#ecfdf5',
+                                        border: isDark ? '1px solid rgba(56, 189, 248, 0.45)' : '1px solid #a7f3d0',
+                                        boxShadow: isDark ? '0 1px 3px rgba(56, 189, 248, 0.15)' : '0 1px 3px rgba(22, 163, 74, 0.15)',
+                                        color: isDark ? '#38bdf8' : '#059669',
+                                        flexShrink: 0,
+                                        cursor: 'pointer',
+                                        transition: 'all 0.15s ease',
+                                        padding: '2px',
+                                        textDecoration: 'none'
+                                      }}
+                                      onMouseEnter={e => {
+                                        e.currentTarget.style.transform = 'scale(1.1)';
+                                        e.currentTarget.style.background = isDark ? 'rgba(56, 189, 248, 0.32)' : '#d1fae5';
+                                        e.currentTarget.style.borderColor = isDark ? 'rgba(56, 189, 248, 0.65)' : '#6ee7b7';
+                                        e.currentTarget.style.color = isDark ? '#38bdf8' : '#047857';
+                                      }}
+                                      onMouseLeave={e => {
+                                        e.currentTarget.style.transform = 'scale(1)';
+                                        e.currentTarget.style.background = isDark ? 'rgba(56, 189, 248, 0.18)' : '#ecfdf5';
+                                        e.currentTarget.style.borderColor = isDark ? 'rgba(56, 189, 248, 0.45)' : '#a7f3d0';
+                                        e.currentTarget.style.color = isDark ? '#38bdf8' : '#059669';
+                                      }}
+                                    >
+                                      <Globe size={11} strokeWidth={2.2} />
+                                    </a>
+                                  )}
                                 </div>
                               )}
                             </td>
@@ -3686,19 +3817,22 @@ export default function BahrainTasks() {
 
                         case 'task_type':
                           return (
-                            <td key={`tt-${task.id}`} style={compactCell}>
+                            <td key={`tt-${task.id}`} style={{ ...compactCell, minWidth: '90px', maxWidth: '140px' }}>
                               {ttNames.length > 0 ? (
-                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px' }}>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2.5px' }}>
                                   {ttNames.map((name, i) => (
                                     <span key={i} style={{
-                                      padding: '2px 6px', borderRadius: '5px', fontSize: '10px',
-                                      fontWeight: 650, background: 'linear-gradient(135deg, #eff6ff, #dbeafe)',
-                                      color: '#1d4ed8', border: '1px solid #bfdbfe', whiteSpace: 'nowrap',
+                                      padding: '1.5px 6px', borderRadius: '5px', fontSize: '10px',
+                                      fontWeight: 650,
+                                      background: isDark ? 'rgba(59, 130, 246, 0.15)' : 'rgba(59, 130, 246, 0.12)',
+                                      color: isDark ? '#60a5fa' : '#2563eb',
+                                      border: isDark ? '1px solid rgba(59, 130, 246, 0.35)' : '1px solid rgba(59, 130, 246, 0.3)',
+                                      whiteSpace: 'nowrap',
                                       letterSpacing: '0.01em',
                                     }}>{name}</span>
                                   ))}
                                 </div>
-                              ) : <span style={{ fontSize: '11px', color: '#cbd5e1' }}>—</span>}
+                              ) : <span style={{ fontSize: '10.5px', color: isDark ? 'var(--text-tertiary)' : '#cbd5e1' }}>—</span>}
                             </td>
                           );
 
@@ -3706,7 +3840,7 @@ export default function BahrainTasks() {
                           return (
                             <td
                               key={`desc-${task.id}`}
-                              style={{ ...compactCell, position: 'relative', cursor: (task.description && inlineEditDescId !== task.id) ? 'pointer' : 'default' }}
+                              style={{ ...compactCell, minWidth: '100px', maxWidth: '160px', position: 'relative', cursor: (task.description && inlineEditDescId !== task.id) ? 'pointer' : 'default' }}
                               onMouseEnter={(e) => {
                                 setHoveredDescTaskId(task.id);
                                 if (task.description && inlineEditDescId !== task.id) {
@@ -3718,7 +3852,7 @@ export default function BahrainTasks() {
                                     return;
                                   }
                                   const rect = e.currentTarget.getBoundingClientRect();
-                                  const tooltipWidth = 330;
+                                  const tooltipWidth = 320;
                                   let left = rect.left + (rect.width / 2) - (tooltipWidth / 2);
                                   if (left < 16) left = 16;
                                   if (left + tooltipWidth > window.innerWidth - 16) {
@@ -3744,23 +3878,24 @@ export default function BahrainTasks() {
                               }}
                             >
                               {inlineEditDescId === task.id ? (
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', minWidth: '200px', position: 'absolute', zIndex: 20, background: '#fff', padding: '10px', borderRadius: '10px', boxShadow: '0 12px 30px rgba(0,0,0,0.15)', border: '1px solid #93c5fd', top: '50%', transform: 'translateY(-50%)', left: '10px' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', minWidth: '200px', position: 'absolute', zIndex: 20, background: isDark ? 'var(--bg-card, var(--bg-secondary))' : '#fff', padding: '8px', borderRadius: '8px', boxShadow: isDark ? '0 16px 36px rgba(0,0,0,0.4)' : '0 12px 30px rgba(0,0,0,0.15)', border: isDark ? '1px solid var(--accent)' : '1px solid #93c5fd', top: '50%', transform: 'translateY(-50%)', left: '6px' }}>
                                   <textarea
                                     autoFocus
                                     value={inlineEditDescValue}
                                     onChange={e => setInlineEditDescValue(e.target.value)}
                                     style={{
                                       width: '100%',
-                                      minHeight: '68px',
-                                      padding: '8px',
-                                      fontSize: '11.5px',
+                                      minHeight: '60px',
+                                      padding: '6px 8px',
+                                      fontSize: '11px',
                                       borderRadius: '6px',
-                                      border: '1.5px solid #2563eb',
+                                      border: isDark ? '1.5px solid var(--accent)' : '1.5px solid #2563eb',
                                       outline: 'none',
                                       resize: 'vertical',
                                       fontFamily: 'inherit',
-                                      color: '#0f172a',
-                                      boxShadow: '0 0 0 3px rgba(37,99,235,0.1)'
+                                      background: isDark ? 'var(--bg-tertiary)' : '#fff',
+                                      color: isDark ? 'var(--text-primary)' : '#0f172a',
+                                      boxShadow: isDark ? '0 0 0 3px rgba(37,99,235,0.15)' : '0 0 0 3px rgba(37,99,235,0.1)'
                                     }}
                                     onKeyDown={e => {
                                       if (e.key === 'Escape') {
@@ -3770,26 +3905,26 @@ export default function BahrainTasks() {
                                       }
                                     }}
                                   />
-                                  <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end', marginTop: '2px' }}>
+                                  <div style={{ display: 'flex', gap: '5px', justifyContent: 'flex-end', marginTop: '2px' }}>
                                     <button
                                       onClick={() => setInlineEditDescId(null)}
-                                      style={{ padding: '4px 9px', border: '1px solid #e2e8f0', background: '#f8fafc', color: '#64748b', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', fontWeight: 600 }}
+                                      style={{ padding: '3px 8px', border: isDark ? '1px solid var(--border)' : '1px solid #e2e8f0', background: isDark ? 'var(--bg-tertiary)' : '#f8fafc', color: isDark ? 'var(--text-secondary)' : '#64748b', borderRadius: '5px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px', fontSize: '10.5px', fontWeight: 600 }}
                                       title="Cancel (Esc)"
                                     >
-                                      <X size={12} /> Cancel
+                                      <X size={11} /> Cancel
                                     </button>
                                     <button
                                       onClick={() => saveInlineDescription(task.id)}
-                                      style={{ padding: '4px 10px', border: 'none', background: '#2563eb', color: '#fff', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', fontWeight: 600 }}
+                                      style={{ padding: '3px 9px', border: 'none', background: isDark ? 'var(--accent)' : '#2563eb', color: '#fff', borderRadius: '5px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px', fontSize: '10.5px', fontWeight: 600 }}
                                       title="Save (Ctrl+Enter)"
                                     >
-                                      <Check size={12} /> Save
+                                      <Check size={11} /> Save
                                     </button>
                                   </div>
                                 </div>
                               ) : (
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '3px', minHeight: '22px' }}>
-                                  <span style={{ fontSize: '11.5px', color: '#475569', maxWidth: '120px', display: 'inline-block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={task.description || ''}>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '3px', minHeight: '20px' }}>
+                                  <span style={{ fontSize: '11px', color: isDark ? 'var(--text-secondary)' : '#475569', maxWidth: '120px', display: 'inline-block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={task.description || ''}>
                                     {task.description || '—'}
                                   </span>
                                   {canManageTask(task) && (
@@ -3801,27 +3936,27 @@ export default function BahrainTasks() {
                                         setActiveTooltipTaskId(null);
                                       }}
                                       style={{
-                                        background: '#eff6ff',
-                                        border: '1px solid #dbeafe',
-                                        borderRadius: '5px',
+                                        background: isDark ? 'rgba(148, 163, 184, 0.15)' : '#eff6ff',
+                                        border: isDark ? '1px solid rgba(148, 163, 184, 0.35)' : '1px solid #dbeafe',
+                                        borderRadius: '4px',
                                         cursor: 'pointer',
                                         padding: '2px',
                                         display: 'flex',
                                         alignItems: 'center',
                                         justifyContent: 'center',
-                                        color: '#2563eb',
+                                        color: isDark ? '#94a3b8' : '#2563eb',
                                         transition: 'all 0.15s ease',
                                         opacity: hoveredDescTaskId === task.id ? 1 : 0,
                                         pointerEvents: hoveredDescTaskId === task.id ? 'auto' as const : 'none' as const,
-                                        width: '19px',
-                                        height: '19px',
+                                        width: '18px',
+                                        height: '18px',
                                         flexShrink: 0,
                                       }}
                                       title="Edit Description"
-                                      onMouseEnter={e => { e.currentTarget.style.background = '#dbeafe'; }}
-                                      onMouseLeave={e => { e.currentTarget.style.background = '#eff6ff'; }}
+                                      onMouseEnter={e => { e.currentTarget.style.background = isDark ? 'rgba(148, 163, 184, 0.28)' : '#dbeafe'; }}
+                                      onMouseLeave={e => { e.currentTarget.style.background = isDark ? 'rgba(148, 163, 184, 0.15)' : '#eff6ff'; }}
                                     >
-                                      <Edit2 size={10} />
+                                      <Edit2 size={9} />
                                     </button>
                                   )}
                                 </div>
@@ -3831,32 +3966,31 @@ export default function BahrainTasks() {
 
                         case 'desc_updated':
                           return (
-                            <td key={`desc_up-${task.id}`} style={compactCell}>
+                            <td key={`desc_up-${task.id}`} style={{ ...compactCell, minWidth: '85px', whiteSpace: 'nowrap' }}>
                               {(() => {
                                 const updateDate = descUpdateMap[task.id] || (task.description ? task.created_at : null);
                                 if (!updateDate || !task.description || task.description.trim() === '') {
-                                  return <span style={{ fontSize: '10.5px', color: '#cbd5e1' }}>—</span>;
+                                  return <span style={{ fontSize: '10.5px', color: isDark ? 'var(--text-tertiary)' : '#cbd5e1' }}>—</span>;
                                 }
                                 const updateTime = new Date(updateDate).getTime();
-                                const isRecent = !isNaN(updateTime) && (currentTime - updateTime < 24 * 60 * 60 * 1000) && (currentTime >= updateTime - 60000);
+                                const isRecent = !isNaN(updateTime) && (currentTime - updateTime < 24 * 60 * 60 * 1000);
                                 return (
                                   <span
                                     title={`Last updated: ${new Date(updateDate).toLocaleString()}`}
                                     style={{
                                       fontSize: '10px',
-                                      color: isRecent ? '#0284c7' : '#64748b',
-                                      fontWeight: isRecent ? 650 : 500,
-                                      whiteSpace: 'nowrap',
+                                      color: isRecent ? (isDark ? '#22d3ee' : '#0284c7') : (isDark ? 'var(--text-tertiary)' : '#64748b'),
+                                      fontWeight: isRecent ? 700 : 500,
                                       display: 'inline-flex',
                                       alignItems: 'center',
                                       gap: '3px',
-                                      background: isRecent ? 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)' : 'transparent',
-                                      padding: isRecent ? '2px 5px' : '0',
-                                      borderRadius: isRecent ? '5px' : '0',
-                                      border: isRecent ? '1px solid #bae6fd' : 'none',
+                                      background: isRecent ? (isDark ? 'rgba(6, 182, 212, 0.15)' : 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)') : 'transparent',
+                                      padding: isRecent ? (isDark ? '1.5px 5px' : '2px 5px') : '0',
+                                      borderRadius: isRecent ? '4px' : '0',
+                                      border: isRecent ? (isDark ? '1px solid rgba(6, 182, 212, 0.35)' : '1px solid #bae6fd') : 'none',
                                     }}
                                   >
-                                    {isRecent && <span style={{ width: '4.5px', height: '4.5px', borderRadius: '50%', background: '#0284c7', boxShadow: '0 0 0 1.5px #bae6fd' }} />}
+                                    {isRecent && <span style={{ width: '4px', height: '4px', borderRadius: '50%', background: isDark ? '#22d3ee' : '#0284c7', boxShadow: isDark ? '0 0 6px #22d3ee' : '0 0 0 1.5px #bae6fd' }} />}
                                     {formatDescDate(updateDate)}
                                   </span>
                                 );
@@ -3866,19 +4000,20 @@ export default function BahrainTasks() {
 
                         case 'priority':
                           return (
-                            <td key={`prio-${task.id}`} style={compactCell}>
+                            <td key={`prio-${task.id}`} style={{ ...compactCell, minWidth: '75px', whiteSpace: 'nowrap' }}>
                               {canUpdateStatus ? (
                                 <select value={task.priority} onChange={e => handlePriorityChange(task.id, e.target.value)}
                                   style={{
-                                    padding: '3px 6px', borderRadius: '7px', border: '1px solid rgba(0,0,0,0.06)',
+                                    padding: '2.5px 6px', borderRadius: '6px',
+                                    border: isDark ? `1px solid ${pc.border || 'rgba(244, 63, 94, 0.35)'}` : '1px solid rgba(0,0,0,0.06)',
                                     background: pc.bg, color: pc.color, fontWeight: 700,
-                                    fontSize: '10.5px', cursor: 'pointer', outline: 'none',
-                                    boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
+                                    fontSize: '10px', cursor: 'pointer', outline: 'none',
+                                    boxShadow: isDark ? '0 1px 3px rgba(0,0,0,0.1)' : '0 1px 2px rgba(0,0,0,0.03)'
                                   }}>
                                   {BAHRAIN_PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
                                 </select>
                               ) : (
-                                <span style={{ padding: '3px 6px', borderRadius: '7px', fontSize: '10px', fontWeight: 700, background: pc.bg, color: pc.color, whiteSpace: 'nowrap' }}>
+                                <span style={{ padding: '2.5px 6px', borderRadius: '6px', fontSize: '9.5px', fontWeight: 700, background: pc.bg, color: pc.color, border: isDark ? `1px solid ${pc.border || 'transparent'}` : 'none', whiteSpace: 'nowrap' }}>
                                   {task.priority}
                                 </span>
                               )}
@@ -3887,91 +4022,283 @@ export default function BahrainTasks() {
 
                         case 'deadline':
                           return (
-                            <td key={`dl-${task.id}`} style={compactCell}>
-                              <span style={{ fontSize: '11px', color: '#475569', fontWeight: 500, whiteSpace: 'nowrap', fontFamily: 'ui-monospace, monospace' }}>
-                                {task.deadline || '—'}
-                              </span>
+                            <td key={`dl-${task.id}`} style={{ ...compactCell, minWidth: '80px', whiteSpace: 'nowrap' }}>
+                              {task.deadline ? (
+                                isDark ? (
+                                  <span style={{
+                                    fontSize: '10px',
+                                    color: '#fb923c',
+                                    background: 'rgba(249, 115, 22, 0.14)',
+                                    border: '1px solid rgba(249, 115, 22, 0.35)',
+                                    padding: '2px 5px',
+                                    borderRadius: '5px',
+                                    fontWeight: 650,
+                                    whiteSpace: 'nowrap',
+                                    fontFamily: 'ui-monospace, monospace',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '3px'
+                                  }}>
+                                    <Calendar size={9} color="#fb923c" />
+                                    {task.deadline}
+                                  </span>
+                                ) : (
+                                  <span style={{ fontSize: '11px', color: '#475569', fontWeight: 500, whiteSpace: 'nowrap', fontFamily: 'ui-monospace, monospace' }}>
+                                    {task.deadline}
+                                  </span>
+                                )
+                              ) : (
+                                <span style={{ fontSize: '10.5px', color: isDark ? 'var(--text-tertiary)' : '#cbd5e1' }}>—</span>
+                              )}
                             </td>
                           );
 
                         case 'status':
+                          const sc = statusColor(task.status);
                           return (
-                            <td key={`stat-${task.id}`} style={compactCell}>
-                              {canUpdateStatus ? (() => {
-                                const sc = statusColor(task.status);
-                                return (
-                                  <select value={task.status} onChange={e => handleStatusChange(task.id, e.target.value)}
+                            <td key={`stat-${task.id}`} style={{ ...compactCell, minWidth: '100px', whiteSpace: 'nowrap' }}>
+                              {canUpdateStatus ? (
+                                isDark ? (
+                                  <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
+                                    <select
+                                      value={task.status}
+                                      onChange={e => handleStatusChange(task.id, e.target.value)}
+                                      style={{
+                                        padding: '3px 8px 3px 18px',
+                                        borderRadius: '7px',
+                                        border: `1.5px solid ${sc.border}`,
+                                        background: sc.bg,
+                                        color: sc.color,
+                                        fontWeight: 800,
+                                        fontSize: '10.5px',
+                                        letterSpacing: '0.01em',
+                                        cursor: 'pointer',
+                                        outline: 'none',
+                                        minWidth: '95px',
+                                        maxWidth: '135px',
+                                        boxShadow: sc.glow,
+                                        transition: 'all 0.15s ease'
+                                      }}
+                                    >
+                                      {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
+                                    </select>
+                                    <span style={{
+                                      position: 'absolute',
+                                      left: '6px',
+                                      width: '6px',
+                                      height: '6px',
+                                      borderRadius: '50%',
+                                      background: sc.dot,
+                                      boxShadow: `0 0 8px ${sc.dot}`,
+                                      pointerEvents: 'none'
+                                    }} />
+                                  </div>
+                                ) : (
+                                  <select
+                                    value={task.status}
+                                    onChange={e => handleStatusChange(task.id, e.target.value)}
                                     style={{
-                                      padding: '3.5px 6px', borderRadius: '7px',
-                                      border: `1px solid ${sc.border}`, background: sc.bg,
-                                      color: sc.color, fontWeight: 650, fontSize: '10.5px',
-                                      cursor: 'pointer', outline: 'none', minWidth: '95px', maxWidth: '125px',
+                                      padding: '3.5px 6px',
+                                      borderRadius: '7px',
+                                      border: `1px solid ${sc.border}`,
+                                      background: sc.bg,
+                                      color: sc.color,
+                                      fontWeight: 650,
+                                      fontSize: '10.5px',
+                                      cursor: 'pointer',
+                                      outline: 'none',
+                                      minWidth: '95px',
+                                      maxWidth: '125px',
                                       boxShadow: '0 1px 2px rgba(0,0,0,0.02)'
-                                    }}>
+                                    }}
+                                  >
                                     {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
                                   </select>
-                                );
-                              })() : (() => {
-                                const sc = statusColor(task.status);
-                                return (
+                                )
+                              ) : (
+                                isDark ? (
                                   <span style={{
-                                    padding: '2.5px 6px', borderRadius: '6px', fontSize: '10.5px',
-                                    fontWeight: 650, background: sc.bg, color: sc.color,
-                                    border: `1px solid ${sc.border}`, whiteSpace: 'nowrap'
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px',
+                                    padding: '3px 7px',
+                                    borderRadius: '7px',
+                                    fontSize: '10.5px',
+                                    fontWeight: 800,
+                                    background: sc.bg,
+                                    color: sc.color,
+                                    border: `1.5px solid ${sc.border}`,
+                                    whiteSpace: 'nowrap',
+                                    boxShadow: sc.glow
+                                  }}>
+                                    <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: sc.dot, boxShadow: `0 0 8px ${sc.dot}` }} />
+                                    {task.status}
+                                  </span>
+                                ) : (
+                                  <span style={{
+                                    padding: '2.5px 6px',
+                                    borderRadius: '6px',
+                                    fontSize: '10.5px',
+                                    fontWeight: 650,
+                                    background: sc.bg,
+                                    color: sc.color,
+                                    border: `1px solid ${sc.border}`,
+                                    whiteSpace: 'nowrap'
                                   }}>
                                     {task.status}
                                   </span>
-                                );
-                              })()}
+                                )
+                              )}
                             </td>
                           );
 
                         case 'auditor':
                           return (
-                            <td key={`aud-${task.id}`} style={compactCell}>
+                            <td key={`aud-${task.id}`} style={{ ...compactCell, minWidth: '85px', whiteSpace: 'nowrap' }}>
                               {isAdminUser ? (
                                 <select value={task.auditor_id || ''} onChange={e => handleAssignAuditor(task.id, e.target.value)}
                                   style={{
-                                    padding: '3.5px 6px', borderRadius: '7px', border: '1px solid #e2e8f0',
-                                    background: '#f8fafc', fontSize: '10.5px', color: '#1e293b',
-                                    minWidth: '85px', maxWidth: '115px', cursor: 'pointer', outline: 'none', fontWeight: 500,
+                                    padding: '3px 6px', borderRadius: '6px',
+                                    border: isDark ? (task.auditor_id ? '1px solid rgba(168, 85, 247, 0.45)' : '1px solid var(--border)') : '1px solid #e2e8f0',
+                                    background: isDark ? (task.auditor_id ? 'rgba(168, 85, 247, 0.14)' : 'var(--bg-tertiary)') : '#f8fafc',
+                                    color: isDark ? (task.auditor_id ? '#c084fc' : 'var(--text-secondary)') : '#1e293b',
+                                    fontSize: '10px', fontWeight: isDark ? 650 : 500, minWidth: '80px', maxWidth: '110px',
+                                    cursor: 'pointer', outline: 'none',
                                     boxShadow: '0 1px 2px rgba(0,0,0,0.02)'
                                   }}>
                                   <option value="">No Auditor</option>
                                   {auditors.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                                 </select>
                               ) : (
-                                <span style={{ fontSize: '11px', color: '#475569', fontWeight: 500 }}>
-                                  {auditors.find(a => a.id === task.auditor_id)?.name || '—'}
-                                </span>
+                                isDark ? (
+                                  <span style={{
+                                    fontSize: '10px',
+                                    color: task.auditor_id ? '#c084fc' : 'var(--text-tertiary)',
+                                    background: task.auditor_id ? 'rgba(168, 85, 247, 0.14)' : 'transparent',
+                                    border: task.auditor_id ? '1px solid rgba(168, 85, 247, 0.35)' : 'none',
+                                    padding: task.auditor_id ? '2px 6px' : '0',
+                                    borderRadius: '5px',
+                                    fontWeight: 650,
+                                    whiteSpace: 'nowrap'
+                                  }}>
+                                    {auditors.find(a => a.id === task.auditor_id)?.name || '—'}
+                                  </span>
+                                ) : (
+                                  <span style={{ fontSize: '11px', color: '#475569', fontWeight: 500 }}>
+                                    {auditors.find(a => a.id === task.auditor_id)?.name || '—'}
+                                  </span>
+                                )
                               )}
                             </td>
                           );
 
                         case 'assigned_to':
+                          const activePartnerIds = task.assigned_partners && task.assigned_partners.length > 0 
+                            ? task.assigned_partners 
+                            : (task.assigned_to ? [task.assigned_to] : []);
+                          const activePartnerObjects = activePartnerIds.map((id: string) => partners.find((p: any) => p.id === id)).filter((p): p is typeof partners[number] => Boolean(p));
+
                           return (
-                            <td key={`ass-${task.id}`} style={compactCell}>
+                            <td key={`ass-${task.id}`} style={{ ...compactCell, minWidth: '95px', whiteSpace: 'nowrap' }}>
                               {isAdminUser ? (
-                                <select value={task.assigned_to || ''} onChange={e => handleAssign(task.id, e.target.value)}
-                                  style={{
-                                    padding: '3.5px 6px', borderRadius: '7px', border: '1px solid #e2e8f0',
-                                    background: '#f8fafc', fontSize: '10.5px', color: '#1e293b',
-                                    minWidth: '85px', maxWidth: '115px', cursor: 'pointer', outline: 'none', fontWeight: 500,
-                                    boxShadow: '0 1px 2px rgba(0,0,0,0.02)'
-                                  }}>
-                                  <option value="">Unassigned</option>
-                                  {partners.map(p => <option key={p.id} value={p.id}>{p.username}</option>)}
-                                </select>
+                                isDark ? (() => {
+                                  const selectedPartner = partners.find(p => p.id === task.assigned_to);
+                                  const pCol = getPartnerColor(selectedPartner?.username || selectedPartner?.id);
+                                  return (
+                                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                      {selectedPartner && (
+                                        <div style={{
+                                          width: '16px', height: '16px', borderRadius: '50%',
+                                          background: pCol.avatarBg,
+                                          color: '#ffffff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                          fontSize: '8.5px', fontWeight: 800, flexShrink: 0,
+                                          boxShadow: `0 0 6px ${pCol.border}`
+                                        }}>
+                                          {selectedPartner.username.substring(0, 1).toUpperCase()}
+                                        </div>
+                                      )}
+                                      <select
+                                        value={task.assigned_to || ''}
+                                        onChange={e => handleAssign(task.id, e.target.value)}
+                                        style={{
+                                          padding: '3px 6px',
+                                          borderRadius: '6px',
+                                          border: task.assigned_to ? `1.5px solid ${pCol.border}` : '1px solid var(--border)',
+                                          background: task.assigned_to ? pCol.bg : 'var(--bg-tertiary)',
+                                          color: task.assigned_to ? pCol.text : 'var(--text-secondary)',
+                                          fontSize: '10.5px',
+                                          fontWeight: 750,
+                                          minWidth: '85px',
+                                          maxWidth: '115px',
+                                          cursor: 'pointer',
+                                          outline: 'none',
+                                          boxShadow: task.assigned_to ? `0 0 6px ${pCol.bg}` : 'none'
+                                        }}
+                                      >
+                                        <option value="">👤 Unassigned</option>
+                                        {partners.map(p => <option key={p.id} value={p.id}>{p.username}</option>)}
+                                      </select>
+                                    </div>
+                                  );
+                                })() : (
+                                  <select value={task.assigned_to || ''} onChange={e => handleAssign(task.id, e.target.value)}
+                                    style={{
+                                      padding: '3.5px 6px', borderRadius: '7px', border: '1px solid #e2e8f0',
+                                      background: '#f8fafc', fontSize: '10.5px', color: '#1e293b',
+                                      minWidth: '85px', maxWidth: '115px', cursor: 'pointer', outline: 'none', fontWeight: 500,
+                                      boxShadow: '0 1px 2px rgba(0,0,0,0.02)'
+                                    }}>
+                                    <option value="">Unassigned</option>
+                                    {partners.map(p => <option key={p.id} value={p.id}>{p.username}</option>)}
+                                  </select>
+                                )
                               ) : (
-                                <span style={{ fontSize: '11px', color: '#1e293b', fontWeight: 500 }}>
-                                  {(() => {
-                                    const activePartnerIds = task.assigned_partners && task.assigned_partners.length > 0 
-                                      ? task.assigned_partners 
-                                      : (task.assigned_to ? [task.assigned_to] : []);
-                                    const allNames = activePartnerIds.map((id: string) => partners.find((p: any) => p.id === id)?.username).filter(Boolean);
-                                    return allNames.length > 0 ? allNames.join(', ') : 'Unassigned';
-                                  })()}
-                                </span>
+                                isDark ? (
+                                  activePartnerObjects.length > 0 ? (
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px', alignItems: 'center' }}>
+                                      {activePartnerObjects.map(p => {
+                                        const pCol = getPartnerColor(p.username || p.id);
+                                        return (
+                                          <span
+                                            key={p.id}
+                                            style={{
+                                              display: 'inline-flex',
+                                              alignItems: 'center',
+                                              gap: '4px',
+                                              fontSize: '10px',
+                                              fontWeight: 750,
+                                              color: pCol.text,
+                                              background: pCol.bg,
+                                              border: `1px solid ${pCol.border}`,
+                                              padding: '2px 6px',
+                                              borderRadius: '5px',
+                                              whiteSpace: 'nowrap',
+                                              boxShadow: `0 0 6px ${pCol.bg}`
+                                            }}
+                                            title={p.username}
+                                          >
+                                            <span style={{
+                                              width: '13px', height: '13px', borderRadius: '50%',
+                                              background: pCol.avatarBg, color: '#ffffff',
+                                              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                              fontSize: '7.5px', fontWeight: 800, flexShrink: 0
+                                            }}>
+                                              {p.username.substring(0, 1).toUpperCase()}
+                                            </span>
+                                            {p.username}
+                                          </span>
+                                        );
+                                      })}
+                                    </div>
+                                  ) : <span style={{ fontSize: '10.5px', color: 'var(--text-tertiary)' }}>Unassigned</span>
+                                ) : (
+                                  <span style={{ fontSize: '11px', color: '#1e293b', fontWeight: 500 }}>
+                                    {(() => {
+                                      const allNames = activePartnerObjects.map((p: any) => p.username).filter(Boolean);
+                                      return allNames.length > 0 ? allNames.join(', ') : 'Unassigned';
+                                    })()}
+                                  </span>
+                                )
                               )}
                             </td>
                           );
@@ -4009,7 +4336,7 @@ export default function BahrainTasks() {
                                 }
                               }}
                                 style={{
-                                  background: isMenuOpen ? '#eff6ff' : 'transparent',
+                                  background: isMenuOpen ? 'var(--accent-light)' : 'transparent',
                                   border: 'none',
                                   cursor: 'pointer',
                                   borderRadius: '6px',
@@ -4023,22 +4350,22 @@ export default function BahrainTasks() {
                                   height: '26px',
                                   margin: '0 auto'
                                 }}
-                                onMouseEnter={e => { e.currentTarget.style.background = '#f1f5f9'; }}
+                                onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-tertiary)'; }}
                                 onMouseLeave={e => { if (!isMenuOpen) { e.currentTarget.style.background = 'transparent'; } }}>
-                                <MoreHorizontal size={16} color="#64748b" />
+                                <MoreHorizontal size={16} color="var(--text-secondary)" />
                               </button>
                               {isMenuOpen && typeof window !== 'undefined' && createPortal(
-                                <div style={{ position: 'fixed', top: menuPos.top, bottom: menuPos.bottom, right: menuPos.right, maxHeight: menuPos.maxHeight || 'none', overflowY: 'auto', background: '#fff', borderRadius: '12px', boxShadow: '0 8px 30px rgba(0,0,0,0.12)', border: '1px solid #e2e8f0', zIndex: 9999, minWidth: '165px' }}
+                                <div style={{ position: 'fixed', top: menuPos.top, bottom: menuPos.bottom, right: menuPos.right, maxHeight: menuPos.maxHeight || 'none', overflowY: 'auto', background: 'var(--bg-card, var(--bg-secondary))', borderRadius: '12px', boxShadow: '0 16px 36px rgba(0,0,0,0.45)', border: '1px solid var(--border)', zIndex: 9999, minWidth: '165px' }}
                                   onClick={e => e.stopPropagation()}>
                                   <button onClick={() => { viewDetail(task.id); setOpenMenuId(null); }} style={menuItemStyle}>
-                                    <Eye size={14} color="#3b82f6" /> View Details
+                                    <Eye size={14} color="var(--accent)" /> View Details
                                   </button>
                                   {canManageTask(task) && (<>
                                     <button onClick={() => { openEditTask(task); setOpenMenuId(null); }} style={menuItemStyle}>
                                       <Edit2 size={14} color="#f59e0b" /> Edit Task
                                     </button>
                                   </>)}
-                                  <div style={{ height: '1px', background: '#f1f5f9', margin: '2px 0' }} />
+                                  <div style={{ height: '1px', background: 'var(--border)', margin: '2px 0' }} />
                                   <button
                                     onClick={() => {
                                       const comp = companies.find(c => c.id === task.company_id);
@@ -4065,7 +4392,7 @@ export default function BahrainTasks() {
                                       setOpenMenuId(null);
                                     }}
                                     style={menuItemStyle}
-                                    onMouseEnter={e => e.currentTarget.style.background = '#f0fdf4'}
+                                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(34, 197, 94, 0.15)'}
                                     onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                                   >
                                     <svg width="14" height="14" viewBox="0 0 24 24" fill="#25D366" style={{ flexShrink: 0 }}>
@@ -4074,7 +4401,7 @@ export default function BahrainTasks() {
                                     <span style={{ color: '#25D366', fontWeight: 600 }}>WhatsApp</span>
                                   </button>
                                   {canManageTask(task) && (<>
-                                    <div style={{ height: '1px', background: '#f1f5f9', margin: '2px 0' }} />
+                                    <div style={{ height: '1px', background: 'var(--border)', margin: '2px 0' }} />
                                     <button onClick={() => { deleteTask(task.id); setOpenMenuId(null); }} style={{ ...menuItemStyle, color: '#ef4444' }}>
                                       <Trash2 size={14} color="#ef4444" /> Delete
                                     </button>
@@ -4101,14 +4428,14 @@ export default function BahrainTasks() {
       <div className="mobile-task-view">
         {filtered.length === 0 ? (
           <div style={{
-            background: '#ffffff', borderRadius: '16px', padding: '40px 20px',
-            textAlign: 'center', border: '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(0,0,0,0.03)'
+            background: 'var(--bg-card, var(--bg-secondary))', borderRadius: '16px', padding: '40px 20px',
+            textAlign: 'center', border: '1px solid var(--border)', boxShadow: 'var(--card-shadow)'
           }}>
-            <div style={{ width: '48px', height: '48px', borderRadius: '14px', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 10px' }}>
-              <ListTodo size={24} color="#94a3b8" />
+            <div style={{ width: '48px', height: '48px', borderRadius: '14px', background: 'var(--bg-tertiary)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 10px' }}>
+              <ListTodo size={24} color="var(--text-tertiary)" />
             </div>
-            <div style={{ fontSize: '15px', fontWeight: 650, color: '#334155' }}>No matching tasks found</div>
-            <div style={{ fontSize: '12.5px', color: '#94a3b8', marginTop: '4px' }}>Try adjusting your filters or keywords</div>
+            <div style={{ fontSize: '15px', fontWeight: 650, color: 'var(--text-primary)' }}>No matching tasks found</div>
+            <div style={{ fontSize: '12.5px', color: 'var(--text-tertiary)', marginTop: '4px' }}>Try adjusting your filters or keywords</div>
           </div>
         ) : (
           paginatedTasks.map(task => {
@@ -4128,11 +4455,11 @@ export default function BahrainTasks() {
               <div
                 key={`mobile-card-${task.id}`}
                 style={{
-                  background: isSelected ? '#eff6ff' : '#ffffff',
-                  border: isSelected ? '1.5px solid #3b82f6' : '1px solid #e2e8f0',
+                  background: isSelected ? 'var(--accent-light)' : 'var(--bg-card, var(--bg-secondary))',
+                  border: isSelected ? '1.5px solid var(--accent)' : '1px solid var(--border)',
                   borderRadius: '14px',
                   padding: '12px 14px',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.02)',
+                  boxShadow: 'var(--card-shadow)',
                   display: 'flex',
                   flexDirection: 'column',
                   gap: '8px',
@@ -4148,7 +4475,7 @@ export default function BahrainTasks() {
                         type="checkbox"
                         checked={isSelected}
                         onChange={() => toggleSelectTask(task.id)}
-                        style={{ cursor: 'pointer', width: '17px', height: '17px', accentColor: '#2563eb', flexShrink: 0, marginTop: '2px' }}
+                        style={{ cursor: 'pointer', width: '17px', height: '17px', accentColor: 'var(--accent)', flexShrink: 0, marginTop: '2px' }}
                       />
                     )}
                     <div style={{ minWidth: 0, flex: 1 }}>
@@ -4162,27 +4489,41 @@ export default function BahrainTasks() {
                             style={{
                               fontWeight: 700,
                               fontSize: '15px',
-                              color: '#0f172a',
+                              color: 'var(--text-primary)',
                               letterSpacing: '-0.2px',
                               textDecoration: 'none',
                               display: 'inline-flex',
                               alignItems: 'center',
-                              gap: '4px'
+                              gap: '6px'
                             }}
                             title={`Open Google Drive: ${company.google_drive_link}`}
                           >
                             <span>{company?.company_name || 'Unknown Company'}</span>
-                            <FolderOpen size={13} color="#16a34a" />
+                            <span style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              width: '20px',
+                              height: '20px',
+                              borderRadius: '5px',
+                              background: 'var(--bg-tertiary)',
+                              border: '1px solid rgba(34, 197, 94, 0.45)',
+                              boxShadow: '0 1px 3px rgba(22, 163, 74, 0.18)',
+                              flexShrink: 0,
+                              padding: '2px'
+                            }}>
+                              <GoogleDriveIcon size={12} />
+                            </span>
                           </a>
                         ) : (
-                          <span style={{ fontWeight: 700, fontSize: '15px', color: '#0f172a', letterSpacing: '-0.2px' }}>
+                          <span style={{ fontWeight: 700, fontSize: '15px', color: 'var(--text-primary)', letterSpacing: '-0.2px' }}>
                             {company?.company_name || 'Unknown Company'}
                           </span>
                         )}
                         {ttNames.map((name, i) => (
                           <span key={i} style={{
                             padding: '1px 6px', borderRadius: '5px', fontSize: '10px',
-                            fontWeight: 600, background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe'
+                            fontWeight: 600, background: 'rgba(59, 130, 246, 0.12)', color: 'var(--accent)', border: '1px solid rgba(59, 130, 246, 0.3)'
                           }}>
                             {name}
                           </span>
@@ -4196,21 +4537,32 @@ export default function BahrainTasks() {
                     {canUpdateStatus ? (() => {
                       const sc = statusColor(task.status);
                       return (
-                        <div style={{ position: 'relative', display: 'inline-block' }}>
+                        <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
                           <select
                             value={task.status}
                             onChange={e => handleStatusChange(task.id, e.target.value)}
                             style={{
-                              padding: '3px 8px', borderRadius: '12px',
-                              border: `1px solid ${sc.border}`, background: sc.bg,
-                              color: sc.color, fontWeight: 700, fontSize: '11px',
+                              padding: '3.5px 8px 3.5px 18px', borderRadius: '12px',
+                              border: `1.5px solid ${sc.border}`, background: sc.bg,
+                              color: sc.color, fontWeight: 800, fontSize: '11px',
                               cursor: 'pointer', outline: 'none', appearance: 'none',
                               WebkitAppearance: 'none', paddingRight: '18px',
-                              textAlign: 'left', maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
+                              textAlign: 'left', maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                              boxShadow: sc.glow
                             }}
                           >
                             {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
                           </select>
+                          <span style={{
+                            position: 'absolute',
+                            left: '6px',
+                            width: '6px',
+                            height: '6px',
+                            borderRadius: '50%',
+                            background: sc.dot,
+                            boxShadow: `0 0 6px ${sc.dot}`,
+                            pointerEvents: 'none'
+                          }} />
                           <ChevronDown size={10} style={{ position: 'absolute', right: '6px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: sc.color }} />
                         </div>
                       );
@@ -4218,10 +4570,13 @@ export default function BahrainTasks() {
                       const sc = statusColor(task.status);
                       return (
                         <span style={{
+                          display: 'inline-flex', alignItems: 'center', gap: '4px',
                           padding: '3px 8px', borderRadius: '12px', fontSize: '11px',
-                          fontWeight: 700, background: sc.bg, color: sc.color,
-                          border: `1px solid ${sc.border}`, maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
+                          fontWeight: 800, background: sc.bg, color: sc.color,
+                          border: `1.5px solid ${sc.border}`, maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                          boxShadow: sc.glow
                         }}>
+                          <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: sc.dot, boxShadow: `0 0 6px ${sc.dot}` }} />
                           {task.status}
                         </span>
                       );
@@ -4247,25 +4602,25 @@ export default function BahrainTasks() {
                         }
                       }}
                       style={{
-                        width: '26px', height: '26px', borderRadius: '6px', border: '1px solid #e2e8f0',
-                        background: '#f8fafc', color: '#64748b', display: 'flex', alignItems: 'center',
+                        width: '26px', height: '26px', borderRadius: '6px', border: '1px solid var(--border)',
+                        background: 'var(--bg-tertiary)', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center',
                         justifyContent: 'center', cursor: 'pointer'
                       }}
                     >
                       <MoreHorizontal size={14} />
                     </button>
                     {isMenuOpen && typeof window !== 'undefined' && createPortal(
-                      <div style={{ position: 'fixed', top: menuPos.top, bottom: menuPos.bottom, right: menuPos.right, maxHeight: menuPos.maxHeight || 'none', overflowY: 'auto', background: '#fff', borderRadius: '12px', boxShadow: '0 8px 30px rgba(0,0,0,0.18)', border: '1px solid #e2e8f0', zIndex: 9999, minWidth: '175px' }}
+                      <div style={{ position: 'fixed', top: menuPos.top, bottom: menuPos.bottom, right: menuPos.right, maxHeight: menuPos.maxHeight || 'none', overflowY: 'auto', background: 'var(--bg-card, var(--bg-secondary))', borderRadius: '12px', boxShadow: '0 16px 36px rgba(0,0,0,0.45)', border: '1px solid var(--border)', zIndex: 9999, minWidth: '175px' }}
                         onClick={e => e.stopPropagation()}>
                         <button onClick={() => { viewDetail(task.id); setOpenMenuId(null); }} style={menuItemStyle}>
-                          <Eye size={14} color="#3b82f6" /> View Details
+                          <Eye size={14} color="var(--accent)" /> View Details
                         </button>
                         {canManageTask(task) && (
                           <button onClick={() => { openEditTask(task); setOpenMenuId(null); }} style={menuItemStyle}>
                             <Edit2 size={14} color="#f59e0b" /> Edit Task
                           </button>
                         )}
-                        <div style={{ height: '1px', background: '#f1f5f9', margin: '2px 0' }} />
+                        <div style={{ height: '1px', background: 'var(--border)', margin: '2px 0' }} />
                         <button
                           onClick={() => {
                             const comp = companies.find(c => c.id === task.company_id);
@@ -4301,7 +4656,7 @@ export default function BahrainTasks() {
                         </button>
                         {isAdminUser && (
                           <>
-                            <div style={{ height: '1px', background: '#f1f5f9', margin: '2px 0' }} />
+                            <div style={{ height: '1px', background: 'var(--border)', margin: '2px 0' }} />
                             <button onClick={() => { deleteTask(task.id); setOpenMenuId(null); }} style={{ ...menuItemStyle, color: '#ef4444' }}>
                               <Trash2 size={14} color="#ef4444" /> Delete
                             </button>
@@ -4322,7 +4677,7 @@ export default function BahrainTasks() {
                         value={task.priority}
                         onChange={e => handlePriorityChange(task.id, e.target.value)}
                         style={{
-                          padding: '2px 7px', borderRadius: '6px', border: '1px solid #e2e8f0',
+                          padding: '2px 7px', borderRadius: '6px', border: `1px solid ${pc.border || 'var(--border)'}`,
                           background: pc.bg, color: pc.color, fontWeight: 700,
                           fontSize: '10.5px', cursor: 'pointer', outline: 'none',
                           appearance: 'none', WebkitAppearance: 'none', paddingRight: '16px'
@@ -4333,7 +4688,7 @@ export default function BahrainTasks() {
                       <ChevronDown size={9} style={{ position: 'absolute', right: '5px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: pc.color }} />
                     </div>
                   ) : (
-                    <span style={{ padding: '2px 7px', borderRadius: '6px', fontSize: '10.5px', fontWeight: 700, background: pc.bg, color: pc.color }}>
+                    <span style={{ padding: '2px 7px', borderRadius: '6px', fontSize: '10.5px', fontWeight: 700, background: pc.bg, color: pc.color, border: `1px solid ${pc.border || 'transparent'}` }}>
                       {task.priority}
                     </span>
                   )}
@@ -4349,19 +4704,19 @@ export default function BahrainTasks() {
                       style={{
                         padding: '2.5px 7px',
                         borderRadius: '7px',
-                        border: '1px solid #bfdbfe',
+                        border: '1px solid rgba(99, 102, 241, 0.45)',
                         cursor: 'pointer',
                         fontSize: '10.5px',
                         fontWeight: 650,
-                        background: '#eff6ff',
-                        color: '#1d4ed8',
+                        background: 'rgba(99, 102, 241, 0.15)',
+                        color: '#a5b4fc',
                         display: 'inline-flex',
                         alignItems: 'center',
                         gap: '4px',
                         fontFamily: 'ui-monospace, monospace'
                       }}
                     >
-                      <Calendar size={11} color="#2563eb" />
+                      <Calendar size={11} color="#818cf8" />
                       <span>PL: {formatPlDateDisplay(task.pl_date)}</span>
                     </button>
                   ) : (
@@ -4374,12 +4729,12 @@ export default function BahrainTasks() {
                       style={{
                         padding: '2.5px 7px',
                         borderRadius: '7px',
-                        border: '1px dashed #cbd5e1',
+                        border: '1px dashed rgba(99, 102, 241, 0.4)',
                         cursor: 'pointer',
                         fontSize: '10.5px',
                         fontWeight: 600,
-                        background: 'transparent',
-                        color: '#94a3b8',
+                        background: 'rgba(99, 102, 241, 0.08)',
+                        color: '#818cf8',
                         display: 'inline-flex',
                         alignItems: 'center',
                         gap: '4px'
@@ -4394,9 +4749,9 @@ export default function BahrainTasks() {
                   {company?.cr_number ? (
                     <span style={{
                       fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-                      fontSize: '10.5px', fontWeight: 600, color: '#334155',
-                      background: '#f8fafc', padding: '2px 6px', borderRadius: '5px',
-                      border: '1px solid #cbd5e1', display: 'inline-flex', alignItems: 'center', gap: '4px'
+                      fontSize: '10.5px', fontWeight: 650, color: '#fbbf24',
+                      background: 'rgba(245, 158, 11, 0.14)', padding: '2px 6px', borderRadius: '5px',
+                      border: '1px solid rgba(245, 158, 11, 0.38)', display: 'inline-flex', alignItems: 'center', gap: '4px'
                     }}>
                       CR: {company.cr_number}
                     </span>
@@ -4410,12 +4765,14 @@ export default function BahrainTasks() {
                       rel="noopener noreferrer"
                       onClick={e => e.stopPropagation()}
                       style={{
-                        fontSize: '10.5px', color: '#059669', background: '#ecfdf5',
-                        border: '1px solid #a7f3d0', padding: '2px 6px', borderRadius: '5px',
-                        display: 'inline-flex', alignItems: 'center', gap: '2px', textDecoration: 'none', fontWeight: 600
+                        fontSize: '10.5px', color: '#38bdf8', background: 'rgba(56, 189, 248, 0.16)',
+                        border: '1px solid rgba(56, 189, 248, 0.45)', padding: '2px 6px', borderRadius: '5px',
+                        display: 'inline-flex', alignItems: 'center', gap: '3px', textDecoration: 'none', fontWeight: 600,
+                        boxShadow: '0 1px 2px rgba(56, 189, 248, 0.15)'
                       }}
+                      title={`Open CR Link: ${company.cr_link}`}
                     >
-                      <ExternalLink size={10} /> Link
+                      <Globe size={11} strokeWidth={2.2} /> CR Link
                     </a>
                   )}
 
@@ -4428,8 +4785,8 @@ export default function BahrainTasks() {
                         setInlineEditCrLinkValue(company.cr_link || '');
                       }}
                       style={{
-                        fontSize: '10px', color: '#2563eb', background: '#eff6ff',
-                        border: '1px solid #dbeafe', padding: '2px 5px', borderRadius: '4px',
+                        fontSize: '10px', color: '#fbbf24', background: 'rgba(245, 158, 11, 0.15)',
+                        border: '1px solid rgba(245, 158, 11, 0.35)', padding: '2px 5px', borderRadius: '4px',
                         cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '2px'
                       }}
                     >
@@ -4442,11 +4799,11 @@ export default function BahrainTasks() {
                 {inlineEditCrId === task.id && (
                   <div
                     onClick={e => e.stopPropagation()}
-                    style={{ background: '#f0f9ff', padding: '8px', borderRadius: '8px', border: '1px solid #bae6fd', display: 'flex', flexDirection: 'column', gap: '6px' }}
+                    style={{ background: 'var(--bg-tertiary)', padding: '8px', borderRadius: '8px', border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: '6px' }}
                   >
-                    <div style={{ fontSize: '11px', fontWeight: 700, color: '#0369a1', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <span>Edit CR Details</span>
-                      <button onClick={() => setInlineEditCrId(null)} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}><X size={12} /></button>
+                      <button onClick={() => setInlineEditCrId(null)} style={{ background: 'none', border: 'none', color: 'var(--text-tertiary)', cursor: 'pointer' }}><X size={12} /></button>
                     </div>
                     <input
                       autoFocus
@@ -4454,7 +4811,7 @@ export default function BahrainTasks() {
                       value={inlineEditCrValue}
                       onChange={e => setInlineEditCrValue(e.target.value)}
                       placeholder="CR Number"
-                      style={{ width: '100%', padding: '6px', fontSize: '12px', borderRadius: '6px', border: '1px solid #bae6fd' }}
+                      style={{ width: '100%', padding: '6px', fontSize: '12px', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}
                       onKeyDown={e => { if (e.key === 'Enter' && company) saveInlineCrNumber(company.id, task.id); }}
                     />
                     <input
@@ -4462,13 +4819,13 @@ export default function BahrainTasks() {
                       value={inlineEditCrLinkValue}
                       onChange={e => setInlineEditCrLinkValue(e.target.value)}
                       placeholder="CR Link"
-                      style={{ width: '100%', padding: '6px', fontSize: '12px', borderRadius: '6px', border: '1px solid #bae6fd' }}
+                      style={{ width: '100%', padding: '6px', fontSize: '12px', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}
                       onKeyDown={e => { if (e.key === 'Enter' && company) saveInlineCrNumber(company.id, task.id); }}
                     />
                     <button
                       disabled={savingCrTaskId === task.id}
                       onClick={() => { if (company) saveInlineCrNumber(company.id, task.id); }}
-                      style={{ padding: '6px', background: '#2563eb', color: '#fff', borderRadius: '6px', fontSize: '11px', fontWeight: 600, border: 'none', cursor: 'pointer' }}
+                      style={{ padding: '6px', background: 'var(--accent)', color: '#fff', borderRadius: '6px', fontSize: '11px', fontWeight: 600, border: 'none', cursor: 'pointer' }}
                     >
                       {savingCrTaskId === task.id ? 'Saving...' : 'Save'}
                     </button>
@@ -4485,8 +4842,8 @@ export default function BahrainTasks() {
                       }
                     }}
                     style={{
-                      background: '#f8fafc', padding: '6px 10px', borderRadius: '8px',
-                      border: '1px solid #f1f5f9', fontSize: '12px', color: '#334155',
+                      background: 'var(--bg-tertiary)', padding: '6px 10px', borderRadius: '8px',
+                      border: '1px solid var(--border)', fontSize: '12px', color: 'var(--text-primary)',
                       lineHeight: 1.4, cursor: canManageTask(task) ? 'pointer' : 'default',
                       position: 'relative'
                     }}
@@ -4502,7 +4859,7 @@ export default function BahrainTasks() {
                             setInlineEditDescId(task.id);
                             setInlineEditDescValue(task.description || '');
                           }}
-                          style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '2px', display: 'flex', flexShrink: 0 }}
+                          style={{ background: 'none', border: 'none', color: 'var(--text-tertiary)', cursor: 'pointer', padding: '2px', display: 'flex', flexShrink: 0 }}
                         >
                           <Edit2 size={11} />
                         </button>
@@ -4515,7 +4872,7 @@ export default function BahrainTasks() {
                       const updateTime = new Date(updateDate).getTime();
                       const isRecent = !isNaN(updateTime) && (currentTime - updateTime < 24 * 60 * 60 * 1000);
                       return (
-                        <div style={{ fontSize: '10px', color: isRecent ? '#0284c7' : '#94a3b8', marginTop: '3px', fontWeight: isRecent ? 600 : 400 }}>
+                        <div style={{ fontSize: '10px', color: isRecent ? '#22d3ee' : 'var(--text-tertiary)', marginTop: '3px', fontWeight: isRecent ? 650 : 400 }}>
                           Updated: {formatDescDate(updateDate)} {isRecent ? '• Recent' : ''}
                         </div>
                       );
@@ -4529,8 +4886,8 @@ export default function BahrainTasks() {
                         setInlineEditDescValue('');
                       }}
                       style={{
-                        background: 'transparent', border: '1px dashed #cbd5e1', borderRadius: '6px',
-                        padding: '4px 8px', fontSize: '11px', color: '#94a3b8', cursor: 'pointer',
+                        background: 'transparent', border: '1px dashed var(--border)', borderRadius: '6px',
+                        padding: '4px 8px', fontSize: '11px', color: 'var(--text-tertiary)', cursor: 'pointer',
                         display: 'inline-flex', alignItems: 'center', gap: '4px', alignSelf: 'flex-start'
                       }}
                     >
@@ -4541,17 +4898,17 @@ export default function BahrainTasks() {
 
                 {/* Inline description editor */}
                 {inlineEditDescId === task.id && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', background: '#f8fafc', padding: '8px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', background: 'var(--bg-tertiary)', padding: '8px', borderRadius: '8px', border: '1px solid var(--border)' }}>
                     <textarea
                       autoFocus
                       value={inlineEditDescValue}
                       onChange={e => setInlineEditDescValue(e.target.value)}
                       placeholder="Enter task description..."
-                      style={{ width: '100%', minHeight: '52px', padding: '6px 8px', fontSize: '12px', borderRadius: '6px', border: '1.5px solid #2563eb', background: '#fff', outline: 'none', fontFamily: 'inherit' }}
+                      style={{ width: '100%', minHeight: '52px', padding: '6px 8px', fontSize: '12px', borderRadius: '6px', border: '1.5px solid var(--accent)', background: 'var(--bg-secondary)', color: 'var(--text-primary)', outline: 'none', fontFamily: 'inherit' }}
                     />
                     <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
-                      <button onClick={() => setInlineEditDescId(null)} style={{ padding: '3px 8px', border: '1px solid #cbd5e1', background: '#fff', borderRadius: '5px', fontSize: '11px', fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
-                      <button onClick={() => saveInlineDescription(task.id)} style={{ padding: '3px 10px', border: 'none', background: '#2563eb', color: '#fff', borderRadius: '5px', fontSize: '11px', fontWeight: 600, cursor: 'pointer' }}>Save</button>
+                      <button onClick={() => setInlineEditDescId(null)} style={{ padding: '3px 8px', border: '1px solid var(--border)', background: 'var(--bg-secondary)', color: 'var(--text-secondary)', borderRadius: '5px', fontSize: '11px', fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
+                      <button onClick={() => saveInlineDescription(task.id)} style={{ padding: '3px 10px', border: 'none', background: 'var(--accent)', color: '#fff', borderRadius: '5px', fontSize: '11px', fontWeight: 600, cursor: 'pointer' }}>Save</button>
                     </div>
                   </div>
                 )}
@@ -4559,36 +4916,91 @@ export default function BahrainTasks() {
                 {/* Row 4: Single-Line Meta Strip: Assignee, Auditor, Due Date */}
                 <div style={{
                   display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  paddingTop: '6px', borderTop: '1px solid #f1f5f9', fontSize: '11.5px', color: '#64748b', gap: '8px'
+                  paddingTop: '6px', borderTop: '1px solid var(--border-light)', fontSize: '11.5px', color: 'var(--text-secondary)', gap: '8px'
                 }}>
                   {/* Left: Assignee + Auditor */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: 0, overflow: 'hidden' }}>
                     {/* Assignee */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '4px', minWidth: 0 }}>
-                      {isAdminUser ? (
-                        <select
-                          value={task.assigned_to || ''}
-                          onChange={e => handleAssign(task.id, e.target.value)}
-                          style={{
-                            fontSize: '11px', color: '#0f172a', fontWeight: 600,
-                            background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '6px',
-                            padding: '2px 5px', outline: 'none', cursor: 'pointer', maxWidth: '105px'
-                          }}
-                        >
-                          <option value="">👤 Unassigned</option>
-                          {partners.map(p => <option key={p.id} value={p.id}>{p.username}</option>)}
-                        </select>
-                      ) : (
-                        <span style={{ fontWeight: 600, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          👤 {(() => {
-                            const activePartnerIds = task.assigned_partners && task.assigned_partners.length > 0 
-                              ? task.assigned_partners 
-                              : (task.assigned_to ? [task.assigned_to] : []);
-                            const allNames = activePartnerIds.map((id: string) => partners.find((p: any) => p.id === id)?.username).filter(Boolean);
-                            return allNames.length > 0 ? allNames.join(', ') : 'Unassigned';
-                          })()}
-                        </span>
-                      )}
+                      {isAdminUser ? (() => {
+                        const selectedPartner = partners.find(p => p.id === task.assigned_to);
+                        const pCol = getPartnerColor(selectedPartner?.username || selectedPartner?.id);
+                        return (
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                            {selectedPartner && (
+                              <div style={{
+                                width: '15px', height: '15px', borderRadius: '50%',
+                                background: pCol.avatarBg,
+                                color: '#ffffff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                fontSize: '8px', fontWeight: 800, flexShrink: 0
+                              }}>
+                                {selectedPartner.username.substring(0, 1).toUpperCase()}
+                              </div>
+                            )}
+                            <select
+                              value={task.assigned_to || ''}
+                              onChange={e => handleAssign(task.id, e.target.value)}
+                              style={{
+                                fontSize: '11px', color: task.assigned_to ? pCol.text : 'var(--text-secondary)',
+                                fontWeight: 750,
+                                background: task.assigned_to ? pCol.bg : 'var(--bg-tertiary)',
+                                border: task.assigned_to ? `1px solid ${pCol.border}` : '1px solid var(--border)',
+                                borderRadius: '6px',
+                                padding: '2px 5px', outline: 'none', cursor: 'pointer', maxWidth: '105px',
+                                boxShadow: (task.assigned_to && isDark) ? `0 0 6px ${pCol.bg}` : 'none'
+                              }}
+                            >
+                              <option value="">👤 Unassigned</option>
+                              {partners.map(p => <option key={p.id} value={p.id}>{p.username}</option>)}
+                            </select>
+                          </div>
+                        );
+                      })() : (() => {
+                        const activePartnerIds = task.assigned_partners && task.assigned_partners.length > 0 
+                          ? task.assigned_partners 
+                          : (task.assigned_to ? [task.assigned_to] : []);
+                        const activePartnerObjects = activePartnerIds.map((id: string) => partners.find((p: any) => p.id === id)).filter((p): p is typeof partners[number] => Boolean(p));
+                        
+                        if (activePartnerObjects.length === 0) {
+                          return <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>👤 Unassigned</span>;
+                        }
+
+                        return (
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
+                            {activePartnerObjects.map(p => {
+                              const pCol = getPartnerColor(p.username || p.id);
+                              return (
+                                <span
+                                  key={p.id}
+                                  style={{
+                                    fontWeight: 750,
+                                    fontSize: '11px',
+                                    color: pCol.text,
+                                    background: pCol.bg,
+                                    border: `1px solid ${pCol.border}`,
+                                    padding: '1.5px 6px',
+                                    borderRadius: '5px',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '3px',
+                                    boxShadow: isDark ? `0 0 6px ${pCol.bg}` : 'none'
+                                  }}
+                                >
+                                  <span style={{
+                                    width: '12px', height: '12px', borderRadius: '50%',
+                                    background: pCol.avatarBg, color: '#ffffff',
+                                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                    fontSize: '7.5px', fontWeight: 800, flexShrink: 0
+                                  }}>
+                                    {p.username.substring(0, 1).toUpperCase()}
+                                  </span>
+                                  {p.username}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        );
+                      })()}
                     </div>
 
                     {/* Auditor */}
@@ -4597,8 +5009,12 @@ export default function BahrainTasks() {
                         value={task.auditor_id || ''}
                         onChange={e => handleAssignAuditor(task.id, e.target.value)}
                         style={{
-                          fontSize: '11px', color: '#475569', fontWeight: 500,
-                          background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '6px',
+                          fontSize: '11px',
+                          color: task.auditor_id ? (isDark ? '#c084fc' : '#6b21a8') : 'var(--text-secondary)',
+                          fontWeight: 650,
+                          background: task.auditor_id ? (isDark ? 'rgba(168, 85, 247, 0.14)' : '#faf5ff') : 'var(--bg-tertiary)',
+                          border: task.auditor_id ? (isDark ? '1px solid rgba(168, 85, 247, 0.35)' : '1px solid #e9d5ff') : '1px solid var(--border)',
+                          borderRadius: '6px',
                           padding: '2px 5px', outline: 'none', cursor: 'pointer', maxWidth: '95px'
                         }}
                       >
@@ -4607,7 +5023,7 @@ export default function BahrainTasks() {
                       </select>
                     ) : (
                       task.auditor_id && (
-                        <span style={{ color: '#475569', fontSize: '11px' }}>
+                        <span style={{ color: '#c084fc', fontSize: '11px', fontWeight: 600 }}>
                           🏛️ {auditors.find(a => a.id === task.auditor_id)?.name}
                         </span>
                       )
@@ -4615,7 +5031,7 @@ export default function BahrainTasks() {
                   </div>
 
                   {/* Right: Due Date */}
-                  <div style={{ flexShrink: 0, fontWeight: 600, fontSize: '11px', color: task.deadline ? '#334155' : '#94a3b8', fontFamily: 'ui-monospace, monospace' }}>
+                  <div style={{ flexShrink: 0, fontWeight: 650, fontSize: '11px', color: task.deadline ? '#fb923c' : 'var(--text-tertiary)', fontFamily: 'ui-monospace, monospace' }}>
                     📅 {task.deadline || 'No date'}
                   </div>
                 </div>
@@ -4636,18 +5052,17 @@ export default function BahrainTasks() {
           marginTop: '20px',
           marginBottom: '28px',
           padding: '14px 18px',
-          background: 'rgba(255, 255, 255, 0.85)',
-          backdropFilter: 'blur(10px)',
+          background: 'var(--bg-card, var(--bg-secondary))',
           borderRadius: '16px',
-          border: '1px solid rgba(226, 232, 240, 0.9)',
-          boxShadow: '0 2px 10px rgba(0,0,0,0.02)'
+          border: '1px solid var(--border)',
+          boxShadow: 'var(--card-shadow)'
         }}>
           {/* Left Side: Showing Range & Total Results */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
-            <div style={{ fontSize: '13px', color: '#475569', fontWeight: 600 }}>
-              Showing <strong style={{ color: '#0f172a' }}>{startIndex + 1}</strong>–<strong style={{ color: '#0f172a' }}>{endIndex}</strong> of <strong style={{ color: '#2563eb' }}>{totalCount}</strong> tasks
+            <div style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 600 }}>
+              Showing <strong style={{ color: 'var(--text-primary)' }}>{startIndex + 1}</strong>–<strong style={{ color: 'var(--text-primary)' }}>{endIndex}</strong> of <strong style={{ color: 'var(--accent)' }}>{totalCount}</strong> tasks
               {totalCount !== tasks.length && (
-                <span style={{ fontSize: '12px', color: '#94a3b8', marginLeft: '6px' }}>
+                <span style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginLeft: '6px' }}>
                   (filtered from {tasks.length} total)
                 </span>
               )}
@@ -4655,13 +5070,13 @@ export default function BahrainTasks() {
 
             {/* Rows Per Page Options: 25, 50, 100, All */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 600 }}>Rows per page:</span>
+              <span style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 600 }}>Rows per page:</span>
               <div style={{
                 display: 'inline-flex',
-                background: '#f1f5f9',
+                background: 'var(--bg-tertiary)',
                 padding: '2px',
                 borderRadius: '8px',
-                border: '1px solid #e2e8f0'
+                border: '1px solid var(--border)'
               }}>
                 {([25, 50, 100, 'all'] as const).map(option => {
                   const isSelected = pageSize === option;
@@ -4674,12 +5089,12 @@ export default function BahrainTasks() {
                         padding: '3px 10px',
                         borderRadius: '6px',
                         border: 'none',
-                        background: isSelected ? '#ffffff' : 'transparent',
-                        color: isSelected ? '#2563eb' : '#64748b',
+                        background: isSelected ? 'var(--accent)' : 'transparent',
+                        color: isSelected ? '#ffffff' : 'var(--text-secondary)',
                         fontSize: '11.5px',
                         fontWeight: isSelected ? 750 : 600,
                         cursor: 'pointer',
-                        boxShadow: isSelected ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                        boxShadow: isSelected ? '0 1px 4px rgba(37,99,235,0.3)' : 'none',
                         transition: 'all 0.15s ease'
                       }}
                     >
@@ -4701,9 +5116,9 @@ export default function BahrainTasks() {
                 style={{
                   padding: '6px 12px',
                   borderRadius: '8px',
-                  border: '1px solid #e2e8f0',
-                  background: safeCurrentPage <= 1 ? '#f8fafc' : '#ffffff',
-                  color: safeCurrentPage <= 1 ? '#cbd5e1' : '#334155',
+                  border: '1px solid var(--border)',
+                  background: safeCurrentPage <= 1 ? 'var(--bg-tertiary)' : 'var(--bg-secondary)',
+                  color: safeCurrentPage <= 1 ? 'var(--text-tertiary)' : 'var(--text-primary)',
                   fontSize: '12px',
                   fontWeight: 650,
                   cursor: safeCurrentPage <= 1 ? 'not-allowed' : 'pointer',
@@ -4733,7 +5148,7 @@ export default function BahrainTasks() {
                 return pageNumbers.map((p, idx) => {
                   if (p === '...') {
                     return (
-                      <span key={`dots-${idx}`} style={{ padding: '0 4px', color: '#94a3b8', fontSize: '13px', fontWeight: 600 }}>
+                      <span key={`dots-${idx}`} style={{ padding: '0 4px', color: 'var(--text-tertiary)', fontSize: '13px', fontWeight: 600 }}>
                         …
                       </span>
                     );
@@ -4752,9 +5167,9 @@ export default function BahrainTasks() {
                         height: '32px',
                         padding: '0 6px',
                         borderRadius: '8px',
-                        border: isCurrent ? 'none' : '1px solid #e2e8f0',
-                        background: isCurrent ? '#2563eb' : '#ffffff',
-                        color: isCurrent ? '#ffffff' : '#334155',
+                        border: isCurrent ? 'none' : '1px solid var(--border)',
+                        background: isCurrent ? 'var(--accent)' : 'var(--bg-secondary)',
+                        color: isCurrent ? '#ffffff' : 'var(--text-primary)',
                         fontSize: '12px',
                         fontWeight: isCurrent ? 750 : 600,
                         cursor: isCurrent ? 'default' : 'pointer',
@@ -4775,9 +5190,9 @@ export default function BahrainTasks() {
                 style={{
                   padding: '6px 12px',
                   borderRadius: '8px',
-                  border: '1px solid #e2e8f0',
-                  background: safeCurrentPage >= totalPages ? '#f8fafc' : '#ffffff',
-                  color: safeCurrentPage >= totalPages ? '#cbd5e1' : '#334155',
+                  border: '1px solid var(--border)',
+                  background: safeCurrentPage >= totalPages ? 'var(--bg-tertiary)' : 'var(--bg-secondary)',
+                  color: safeCurrentPage >= totalPages ? 'var(--text-tertiary)' : 'var(--text-primary)',
                   fontSize: '12px',
                   fontWeight: 650,
                   cursor: safeCurrentPage >= totalPages ? 'not-allowed' : 'pointer',
@@ -4947,19 +5362,19 @@ export default function BahrainTasks() {
                     marginLeft: '8px',
                     display: 'inline-flex',
                     alignItems: 'center',
-                    gap: '4px',
+                    gap: '5px',
                     color: '#16a34a',
                     fontSize: '12px',
                     textDecoration: 'none',
                     fontWeight: 600,
                     background: '#f0fdf4',
-                    padding: '2px 8px',
-                    borderRadius: '5px',
+                    padding: '3px 8px',
+                    borderRadius: '6px',
                     border: '1px solid #bbf7d0'
                   }}
                   title={`Open Google Drive: ${detailCompany.google_drive_link}`}
                 >
-                  <FolderOpen size={12} /> Open Drive
+                  <GoogleDriveIcon size={13} /> Open Drive
                 </a>
               )}
             </div>
@@ -4974,7 +5389,7 @@ export default function BahrainTasks() {
                     marginLeft: '8px',
                     display: 'inline-flex',
                     alignItems: 'center',
-                    gap: '3px',
+                    gap: '4px',
                     color: '#2563eb',
                     fontSize: '12px',
                     textDecoration: 'none',
@@ -4984,9 +5399,9 @@ export default function BahrainTasks() {
                     borderRadius: '5px',
                     border: '1px solid #bfdbfe'
                   }}
-                  title={`Open: ${detailCompany.cr_link}`}
+                  title={`Open CR Link: ${detailCompany.cr_link}`}
                 >
-                  <ExternalLink size={12} /> Open CR Link
+                  <Globe size={12} strokeWidth={2.2} /> Open CR Link
                 </a>
               )}
             </div>
@@ -5579,19 +5994,19 @@ function MultiSelect({ options, selected, onChange, placeholder }: { options: { 
   return (
     <div style={{ position: 'relative' }} ref={dropdownRef}>
       <div onClick={() => setOpen(!open)} style={{
-        padding: '8px 12px', border: open ? '1.5px solid #2563eb' : '1px solid #e2e8f0',
+        padding: '8px 12px', border: open ? '1.5px solid var(--accent)' : '1px solid var(--border)',
         borderRadius: '10px', fontSize: '13px', width: '100%',
-        background: '#ffffff', color: '#0f172a', cursor: 'pointer',
+        background: 'var(--bg-secondary)', color: 'var(--text-primary)', cursor: 'pointer',
         display: 'flex', flexWrap: 'wrap', gap: '5px', minHeight: '40px',
         alignItems: 'center', transition: 'all 0.15s ease',
-        boxShadow: open ? '0 0 0 3px rgba(37,99,235,0.1)' : 'none'
+        boxShadow: open ? '0 0 0 3px rgba(37,99,235,0.15)' : 'none'
       }}>
-        {selected.length === 0 ? <span style={{ color: '#94a3b8' }}>{placeholder}</span> :
+        {selected.length === 0 ? <span style={{ color: 'var(--text-tertiary)' }}>{placeholder}</span> :
           selected.map(s => {
             const opt = options.find(o => o.id === s);
             return (
               <span key={s} style={{
-                background: '#eff6ff', color: '#1d4ed8', border: '1px solid #dbeafe',
+                background: 'var(--accent-light)', color: 'var(--accent)', border: '1px solid rgba(59, 130, 246, 0.35)',
                 padding: '3px 8px', borderRadius: '6px', fontSize: '11.5px',
                 fontWeight: 600, display: 'flex', alignItems: 'center', gap: '5px'
               }}>
@@ -5605,22 +6020,22 @@ function MultiSelect({ options, selected, onChange, placeholder }: { options: { 
       {open && (
         <div style={{
           position: 'absolute', top: '100%', left: 0, right: 0,
-          background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '10px',
+          background: 'var(--bg-card, var(--bg-secondary))', border: '1px solid var(--border)', borderRadius: '10px',
           marginTop: '6px', zIndex: 100, maxHeight: '220px', overflowY: 'auto',
-          boxShadow: '0 10px 25px rgba(0,0,0,0.08)'
+          boxShadow: '0 16px 36px rgba(0,0,0,0.35)'
         }}>
           {options.map(opt => (
             <div key={opt.id} onClick={(e) => toggle(opt.id, e)} style={{
               padding: '9px 12px', cursor: 'pointer', display: 'flex',
               alignItems: 'center', gap: '9px',
-              background: selected.includes(opt.id) ? '#eff6ff' : 'transparent',
-              borderBottom: '1px solid #f8fafc', transition: 'background 0.1s ease'
+              background: selected.includes(opt.id) ? 'var(--accent-light)' : 'transparent',
+              borderBottom: '1px solid var(--border-light)', transition: 'background 0.1s ease'
             }}
-              onMouseEnter={e => { if (!selected.includes(opt.id)) e.currentTarget.style.background = '#f8fafc'; }}
+              onMouseEnter={e => { if (!selected.includes(opt.id)) e.currentTarget.style.background = 'var(--bg-tertiary)'; }}
               onMouseLeave={e => { if (!selected.includes(opt.id)) e.currentTarget.style.background = 'transparent'; }}
             >
-              <input type="checkbox" checked={selected.includes(opt.id)} readOnly style={{ cursor: 'pointer', accentColor: '#2563eb' }} />
-              <span style={{ color: selected.includes(opt.id) ? '#1d4ed8' : '#334155', fontSize: '13px', fontWeight: selected.includes(opt.id) ? 600 : 400 }}>{opt.label}</span>
+              <input type="checkbox" checked={selected.includes(opt.id)} readOnly style={{ cursor: 'pointer', accentColor: 'var(--accent)' }} />
+              <span style={{ color: selected.includes(opt.id) ? 'var(--accent)' : 'var(--text-primary)', fontSize: '13px', fontWeight: selected.includes(opt.id) ? 600 : 400 }}>{opt.label}</span>
             </div>
           ))}
         </div>
@@ -5633,29 +6048,29 @@ function Modal({ title, children, onClose }: { title: string; children: React.Re
   return (
     <div className="stat-modal-overlay" style={{
       position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
-      background: 'rgba(15,23,42,0.5)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
+      background: 'rgba(15,23,42,0.65)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       zIndex: 1000, padding: '16px', animation: 'fadeIn 0.15s ease-out',
     }} onClick={onClose}>
       <div style={{
-        background: '#ffffff', borderRadius: '18px', maxWidth: '820px', width: '100%',
-        maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.18)',
-        animation: 'scaleIn 0.2s ease-out', border: '1px solid #e2e8f0',
+        background: 'var(--bg-card, var(--bg-secondary))', borderRadius: '18px', maxWidth: '820px', width: '100%',
+        maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 24px 64px rgba(0,0,0,0.45)',
+        animation: 'scaleIn 0.2s ease-out', border: '1px solid var(--border)',
       }} onClick={e => e.stopPropagation()}>
         <div style={{
-          padding: '16px 20px', borderBottom: '1px solid #f1f5f9',
+          padding: '16px 20px', borderBottom: '1px solid var(--border)',
           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-          background: '#ffffff',
+          background: 'var(--bg-card, var(--bg-secondary))',
           borderRadius: '18px 18px 0 0',
         }}>
-          <h2 style={{ fontSize: '16px', color: '#0f172a', fontWeight: 700, letterSpacing: '-0.01em', margin: 0, lineHeight: 1.3 }}>{title}</h2>
+          <h2 style={{ fontSize: '16px', color: 'var(--text-primary)', fontWeight: 700, letterSpacing: '-0.01em', margin: 0, lineHeight: 1.3 }}>{title}</h2>
           <button onClick={onClose} style={{
-            background: '#f8fafc', border: '1px solid #e2e8f0', cursor: 'pointer', color: '#64748b',
+            background: 'var(--bg-tertiary)', border: '1px solid var(--border)', cursor: 'pointer', color: 'var(--text-secondary)',
             width: '32px', height: '32px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center',
             transition: 'all 0.15s ease'
           }}
-            onMouseEnter={e => { e.currentTarget.style.background = '#fee2e2'; e.currentTarget.style.color = '#dc2626'; e.currentTarget.style.borderColor = '#fecaca'; }}
-            onMouseLeave={e => { e.currentTarget.style.background = '#f8fafc'; e.currentTarget.style.color = '#64748b'; e.currentTarget.style.borderColor = '#e2e8f0'; }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239, 68, 68, 0.15)'; e.currentTarget.style.color = '#ef4444'; e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.3)'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'var(--bg-tertiary)'; e.currentTarget.style.color = 'var(--text-secondary)'; e.currentTarget.style.borderColor = 'var(--border)'; }}
           >
             <X size={15} />
           </button>
@@ -5690,42 +6105,42 @@ function getStatusesForTask(
 function FormField({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', marginBottom: '8px' }}>
-      <label style={{ fontWeight: 600, marginBottom: '6px', color: '#334155', fontSize: '12.5px', letterSpacing: '0.01em', display: 'flex', alignItems: 'center', gap: '4px' }}>{label}</label>
+      <label style={{ fontWeight: 600, marginBottom: '6px', color: 'var(--text-secondary)', fontSize: '12.5px', letterSpacing: '0.01em', display: 'flex', alignItems: 'center', gap: '4px' }}>{label}</label>
       {children}
     </div>
   );
 }
 
 const filterStyle: React.CSSProperties = {
-  padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '12px',
-  background: '#ffffff', color: '#1e293b', outline: 'none', transition: 'all 0.15s ease',
-  boxShadow: '0 1px 2px rgba(0,0,0,0.02)', fontWeight: 500, flex: '1 1 120px', minWidth: '115px'
+  padding: '8px 12px', border: '1px solid var(--border)', borderRadius: '10px', fontSize: '12px',
+  background: 'var(--bg-secondary)', color: 'var(--text-primary)', outline: 'none', transition: 'all 0.15s ease',
+  boxShadow: 'var(--card-shadow)', fontWeight: 500, flex: '1 1 120px', minWidth: '115px'
 };
 
 const compactCell: React.CSSProperties = {
-  padding: '9px 7px', fontSize: '12px', verticalAlign: 'middle', color: '#334155',
+  padding: '7px 5px', fontSize: '11.5px', verticalAlign: 'middle', color: 'var(--text-primary)', boxSizing: 'border-box'
 };
 
 const cellStyle: React.CSSProperties = {
-  padding: '9px 7px', fontSize: '12px', verticalAlign: 'middle', color: '#334155',
+  padding: '7px 5px', fontSize: '11.5px', verticalAlign: 'middle', color: 'var(--text-primary)', boxSizing: 'border-box'
 };
 
 const dropdownStyle: React.CSSProperties = {
-  padding: '4px 7px', border: '1px solid #e2e8f0', borderRadius: '7px', fontSize: '11px',
-  width: '100%', minWidth: '100px', cursor: 'pointer', background: '#f8fafc', color: '#1e293b', outline: 'none',
+  padding: '4px 7px', border: '1px solid var(--border)', borderRadius: '7px', fontSize: '11px',
+  width: '100%', minWidth: '100px', cursor: 'pointer', background: 'var(--bg-tertiary)', color: 'var(--text-primary)', outline: 'none',
   transition: 'all 0.15s ease', fontWeight: 500,
 };
 
 const inputStyle: React.CSSProperties = {
-  padding: '10px 14px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '13px',
-  width: '100%', background: '#ffffff', color: '#0f172a', outline: 'none',
+  padding: '10px 14px', border: '1px solid var(--border)', borderRadius: '10px', fontSize: '13px',
+  width: '100%', background: 'var(--bg-secondary)', color: 'var(--text-primary)', outline: 'none',
   transition: 'border-color 0.15s ease, box-shadow 0.15s ease', fontWeight: 500,
 };
 
 const menuItemStyle: React.CSSProperties = {
   display: 'flex', alignItems: 'center', gap: '10px', width: '100%', padding: '9px 14px',
   background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '12.5px',
-  color: '#334155', fontWeight: 500, transition: 'background 0.1s ease', textAlign: 'left',
+  color: 'var(--text-primary)', fontWeight: 500, transition: 'background 0.1s ease', textAlign: 'left',
 };
 
 function btnSmStyle(bg: string): React.CSSProperties {

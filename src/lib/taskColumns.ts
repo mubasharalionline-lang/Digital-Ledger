@@ -30,7 +30,7 @@ export const DEFAULT_TASK_COLUMNS: TaskColumnConfig[] = [
     description: 'Proposal / Engagement Letter Date',
     align: 'left',
     visible: true,
-    minWidth: '95px'
+    minWidth: '85px'
   },
   {
     id: 'company',
@@ -39,7 +39,7 @@ export const DEFAULT_TASK_COLUMNS: TaskColumnConfig[] = [
     description: 'Registered company name',
     align: 'left',
     visible: true,
-    minWidth: '130px'
+    minWidth: '105px'
   },
   {
     id: 'cr_number',
@@ -48,7 +48,7 @@ export const DEFAULT_TASK_COLUMNS: TaskColumnConfig[] = [
     description: 'Commercial registration number and verification link',
     align: 'left',
     visible: true,
-    minWidth: '100px'
+    minWidth: '85px'
   },
   {
     id: 'task_type',
@@ -57,7 +57,7 @@ export const DEFAULT_TASK_COLUMNS: TaskColumnConfig[] = [
     description: 'Audit & task classification categories',
     align: 'left',
     visible: true,
-    minWidth: '110px'
+    minWidth: '90px'
   },
   {
     id: 'description',
@@ -66,7 +66,7 @@ export const DEFAULT_TASK_COLUMNS: TaskColumnConfig[] = [
     description: 'Detailed task notes & inline edit',
     align: 'left',
     visible: true,
-    minWidth: '130px'
+    minWidth: '100px'
   },
   {
     id: 'desc_updated',
@@ -75,7 +75,7 @@ export const DEFAULT_TASK_COLUMNS: TaskColumnConfig[] = [
     description: 'Timestamp of the latest description change',
     align: 'left',
     visible: true,
-    minWidth: '100px'
+    minWidth: '85px'
   },
   {
     id: 'priority',
@@ -84,7 +84,7 @@ export const DEFAULT_TASK_COLUMNS: TaskColumnConfig[] = [
     description: 'Urgency level (Urgent, High, Medium, Low)',
     align: 'left',
     visible: true,
-    minWidth: '90px'
+    minWidth: '75px'
   },
   {
     id: 'deadline',
@@ -93,7 +93,7 @@ export const DEFAULT_TASK_COLUMNS: TaskColumnConfig[] = [
     description: 'Scheduled completion deadline',
     align: 'left',
     visible: true,
-    minWidth: '95px'
+    minWidth: '80px'
   },
   {
     id: 'status',
@@ -102,7 +102,7 @@ export const DEFAULT_TASK_COLUMNS: TaskColumnConfig[] = [
     description: 'Current workflow stage dropdown & indicator',
     align: 'left',
     visible: true,
-    minWidth: '115px'
+    minWidth: '100px'
   },
   {
     id: 'auditor',
@@ -111,7 +111,7 @@ export const DEFAULT_TASK_COLUMNS: TaskColumnConfig[] = [
     description: 'Assigned audit controller',
     align: 'left',
     visible: true,
-    minWidth: '105px'
+    minWidth: '85px'
   },
   {
     id: 'assigned_to',
@@ -120,7 +120,7 @@ export const DEFAULT_TASK_COLUMNS: TaskColumnConfig[] = [
     description: 'Assigned partners and team members',
     align: 'left',
     visible: true,
-    minWidth: '115px'
+    minWidth: '95px'
   },
   {
     id: 'actions',
@@ -129,7 +129,7 @@ export const DEFAULT_TASK_COLUMNS: TaskColumnConfig[] = [
     description: 'Quick actions (View Details, Edit, WhatsApp, Delete)',
     align: 'center',
     visible: true,
-    minWidth: '36px'
+    minWidth: '32px'
   }
 ];
 

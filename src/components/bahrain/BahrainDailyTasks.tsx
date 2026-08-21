@@ -82,67 +82,164 @@ export default function BahrainDailyTasks() {
 
   const dataCountry = getDataCountry();
 
+  const [isDark, setIsDark] = useState(() => {
+    if (typeof document !== 'undefined') {
+      return document.documentElement.getAttribute('data-theme') === 'dark' || document.documentElement.classList.contains('dark');
+    }
+    return false;
+  });
+
+  useEffect(() => {
+    const checkTheme = () => {
+      const isDarkTheme = document.documentElement.getAttribute('data-theme') === 'dark' || document.documentElement.classList.contains('dark');
+      setIsDark(isDarkTheme);
+    };
+    checkTheme();
+    window.addEventListener('app-theme-changed', checkTheme);
+    const observer = new MutationObserver(checkTheme);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'class'] });
+    return () => {
+      window.removeEventListener('app-theme-changed', checkTheme);
+      observer.disconnect();
+    };
+  }, []);
+
   const priorityColor = (p: string) => {
+    if (!isDark) {
+      switch (p) {
+        case 'Urgent':
+        case 'Critical': return { bg: '#E74C3C', color: '#fff' };
+        case 'High': return { bg: '#F39C12', color: '#fff' };
+        case 'Medium': return { bg: '#3498DB', color: '#fff' };
+        case 'Low': return { bg: '#95A5A6', color: '#fff' };
+        default: return { bg: '#95A5A6', color: '#fff' };
+      }
+    }
     switch (p) {
       case 'Urgent':
-      case 'Critical': return { bg: '#E74C3C', color: '#fff' };
-      case 'High': return { bg: '#F39C12', color: '#fff' };
-      case 'Medium': return { bg: '#3498DB', color: '#fff' };
-      case 'Low': return { bg: '#95A5A6', color: '#fff' };
-      default: return { bg: '#95A5A6', color: '#fff' };
+      case 'Critical': return { bg: 'rgba(239, 68, 68, 0.18)', color: '#f87171', border: 'rgba(239, 68, 68, 0.45)' };
+      case 'High': return { bg: 'rgba(245, 158, 11, 0.18)', color: '#fbbf24', border: 'rgba(245, 158, 11, 0.45)' };
+      case 'Medium': return { bg: 'rgba(59, 130, 246, 0.18)', color: '#60a5fa', border: 'rgba(59, 130, 246, 0.45)' };
+      case 'Low': return { bg: 'rgba(148, 163, 184, 0.15)', color: '#94a3b8', border: 'rgba(148, 163, 184, 0.35)' };
+      default: return { bg: 'rgba(148, 163, 184, 0.15)', color: '#94a3b8', border: 'rgba(148, 163, 184, 0.35)' };
     }
   };
 
+  const DARK_PARTNER_PALETTES = [
+    { text: '#38bdf8', bg: 'rgba(56, 189, 248, 0.22)', border: 'rgba(56, 189, 248, 0.55)', avatarBg: 'linear-gradient(135deg, #0284c7, #38bdf8)' },
+    { text: '#c084fc', bg: 'rgba(192, 132, 252, 0.22)', border: 'rgba(192, 132, 252, 0.55)', avatarBg: 'linear-gradient(135deg, #7e22ce, #c084fc)' },
+    { text: '#34d399', bg: 'rgba(52, 211, 153, 0.22)', border: 'rgba(52, 211, 153, 0.55)', avatarBg: 'linear-gradient(135deg, #059669, #34d399)' },
+    { text: '#fbbf24', bg: 'rgba(251, 191, 36, 0.22)', border: 'rgba(251, 191, 36, 0.55)', avatarBg: 'linear-gradient(135deg, #d97706, #fbbf24)' },
+    { text: '#f472b6', bg: 'rgba(244, 114, 182, 0.22)', border: 'rgba(244, 114, 182, 0.55)', avatarBg: 'linear-gradient(135deg, #db2777, #f472b6)' },
+    { text: '#818cf8', bg: 'rgba(129, 140, 248, 0.22)', border: 'rgba(129, 140, 248, 0.55)', avatarBg: 'linear-gradient(135deg, #4f46e5, #818cf8)' },
+    { text: '#2dd4bf', bg: 'rgba(45, 212, 191, 0.22)', border: 'rgba(45, 212, 191, 0.55)', avatarBg: 'linear-gradient(135deg, #0d9488, #2dd4bf)' },
+    { text: '#fb923c', bg: 'rgba(249, 115, 22, 0.22)', border: 'rgba(249, 115, 22, 0.55)', avatarBg: 'linear-gradient(135deg, #ea580c, #fb923c)' },
+    { text: '#a78bfa', bg: 'rgba(167, 139, 250, 0.22)', border: 'rgba(167, 139, 250, 0.55)', avatarBg: 'linear-gradient(135deg, #6d28d9, #a78bfa)' },
+    { text: '#4ade80', bg: 'rgba(74, 222, 128, 0.22)', border: 'rgba(74, 222, 128, 0.55)', avatarBg: 'linear-gradient(135deg, #16a34a, #4ade80)' },
+  ];
+
+  const LIGHT_PARTNER_PALETTES = [
+    { text: '#0284c7', bg: '#f0f9ff', border: '#bae6fd', avatarBg: 'linear-gradient(135deg, #0284c7, #38bdf8)' },
+    { text: '#7e22ce', bg: '#faf5ff', border: '#e9d5ff', avatarBg: 'linear-gradient(135deg, #7e22ce, #c084fc)' },
+    { text: '#059669', bg: '#ecfdf5', border: '#a7f3d0', avatarBg: 'linear-gradient(135deg, #059669, #34d399)' },
+    { text: '#d97706', bg: '#fffbeb', border: '#fde68a', avatarBg: 'linear-gradient(135deg, #d97706, #fbbf24)' },
+    { text: '#db2777', bg: '#fdf2f8', border: '#fbcfe8', avatarBg: 'linear-gradient(135deg, #db2777, #f472b6)' },
+    { text: '#4f46e5', bg: '#eef2ff', border: '#c7d2fe', avatarBg: 'linear-gradient(135deg, #4f46e5, #818cf8)' },
+    { text: '#0d9488', bg: '#f0fdfa', border: '#99f6e4', avatarBg: 'linear-gradient(135deg, #0d9488, #2dd4bf)' },
+    { text: '#ea580c', bg: '#fff7ed', border: '#fed7aa', avatarBg: 'linear-gradient(135deg, #ea580c, #fb923c)' },
+    { text: '#6d28d9', bg: '#f5f3ff', border: '#ddd6fe', avatarBg: 'linear-gradient(135deg, #6d28d9, #a78bfa)' },
+    { text: '#16a34a', bg: '#f0fdf4', border: '#bbf7d0', avatarBg: 'linear-gradient(135deg, #16a34a, #4ade80)' },
+  ];
+
+  const getPartnerColor = (identifier?: string | null) => {
+    if (!identifier || identifier.trim() === '') {
+      return {
+        text: 'var(--text-secondary, #64748b)',
+        bg: 'var(--bg-tertiary, #f1f5f9)',
+        border: 'var(--border, #e2e8f0)',
+        avatarBg: 'linear-gradient(135deg, #64748b, #94a3b8)'
+      };
+    }
+    let hash = 0;
+    for (let i = 0; i < identifier.length; i++) {
+      hash = identifier.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const palettes = isDark ? DARK_PARTNER_PALETTES : LIGHT_PARTNER_PALETTES;
+    const index = Math.abs(hash) % palettes.length;
+    return palettes[index];
+  };
+
   const statusColor = (s: string) => {
-    if (!s) return { bg: '#47556912', color: '#475569', border: '#47556924' };
+    if (!isDark) {
+      if (!s) return { bg: 'var(--bg-tertiary, #f1f5f9)', color: 'var(--text-secondary, #64748b)', border: 'var(--border, #e2e8f0)', dot: '#94a3b8', glow: 'none' };
+      const sl = s.trim().toLowerCase();
+      if (sl === 'completed' || sl === 'done' || sl.includes('submitted')) return { bg: '#ecfdf5', color: '#065f46', border: '#a7f3d0', dot: '#10b981', glow: 'none' };
+      if (sl === 'closed') return { bg: '#f0fdf4', color: '#166534', border: '#bbf7d0', dot: '#16a34a', glow: 'none' };
+      if (sl === 'filed' || sl.includes('file')) return { bg: '#ecfeff', color: '#0e7490', border: '#a5f3fc', dot: '#06b6d4', glow: 'none' };
+      if (sl.includes('received') || sl.includes('accepted')) return { bg: '#f0fdf4', color: '#15803d', border: '#bbf7d0', dot: '#22c55e', glow: 'none' };
+      if (sl.includes('query') || sl.includes('info') || sl.includes('question') || sl.includes('letter') || sl.includes('confirmation')) return { bg: '#fefce8', color: '#854d0e', border: '#fef08a', dot: '#eab308', glow: 'none' };
+      if (sl.includes('review') || sl.includes('auditor') || sl.includes('approval') || sl.includes('validation')) return { bg: '#faf5ff', color: '#6b21a8', border: '#e9d5ff', dot: '#a855f7', glow: 'none' };
+      if (sl.includes('payment') || sl.includes('financial') || sl.includes('billing') || sl.includes('invoice') || sl.includes('xero')) return { bg: '#eef2ff', color: '#3730a3', border: '#c7d2fe', dot: '#6366f1', glow: 'none' };
+      if (sl === 'in progress' || sl === 'progress' || sl.includes('progress') || sl.includes('progess') || sl === 'active' || sl === 'started' || sl === 'running') return { bg: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe', dot: '#3b82f6', glow: 'none' };
+      if (sl.includes('checklist')) return { bg: '#f0fdfa', color: '#115e59', border: '#99f6e4', dot: '#14b8a6', glow: 'none' };
+      if (sl === 'overdue' || sl === 'urgent' || sl === 'high' || sl === 'rework' || sl === 'blocked' || sl.includes('reject')) return { bg: '#fef2f2', color: '#991b1b', border: '#fecaca', dot: '#ef4444', glow: 'none' };
+      if (sl === 'pending' || sl.includes('yet to start') || sl.includes('not started') || sl.includes('hold') || sl.includes('waiting') || sl.includes('awaited')) return { bg: '#fffbeb', color: '#b45309', border: '#fde68a', dot: '#f59e0b', glow: 'none' };
+      if (sl === 'new' || sl === 'created') return { bg: '#eff6ff', color: '#2563eb', border: '#bfdbfe', dot: '#3b82f6', glow: 'none' };
+      return { bg: 'var(--bg-tertiary, #f1f5f9)', color: 'var(--text-secondary, #64748b)', border: 'var(--border, #e2e8f0)', dot: '#94a3b8', glow: 'none' };
+    }
+
+    if (!s) return { bg: 'rgba(148, 163, 184, 0.12)', color: 'var(--text-tertiary, #94a3b8)', border: 'var(--border, rgba(148, 163, 184, 0.24))', dot: '#94a3b8', glow: 'none' };
     const sl = s.trim().toLowerCase();
-    let hex = '#475569'; // Default Slate 700
+    let hex = '#60a5fa';
+    let rgb = '96, 165, 250';
 
-    // 1. Success / Completed / Done / Submitted (Emerald / Teal / Cyan / Green)
-    if (sl === 'completed' || sl === 'done' || sl.includes('submitted')) hex = '#047857'; // Emerald 700
-    else if (sl === 'closed') hex = '#065f46';    // Emerald 800
-    else if (sl === 'filed' || sl.includes('file')) hex = '#0e7490';     // Cyan 700
-    else if (sl.includes('received')) hex = '#16a34a'; // Green 600
+    // 1. Success / Completed / Done / Submitted
+    if (sl === 'completed' || sl === 'done' || sl.includes('submitted')) { hex = '#34d399'; rgb = '52, 211, 153'; }
+    else if (sl === 'closed') { hex = '#10b981'; rgb = '16, 185, 129'; }
+    else if (sl === 'filed' || sl.includes('file')) { hex = '#22d3ee'; rgb = '34, 211, 238'; }
+    else if (sl.includes('received') || sl.includes('accepted')) { hex = '#4ade80'; rgb = '74, 222, 128'; }
 
-    // 2. Query / Info / Ask (Yellow / Gold)
-    else if (sl.includes('query') || sl.includes('info') || sl.includes('question') || sl.includes('letter') || sl.includes('confirmation')) hex = '#a16207'; // Yellow 700
+    // 2. Query / Info / Ask
+    else if (sl.includes('query') || sl.includes('info') || sl.includes('question') || sl.includes('letter') || sl.includes('confirmation')) { hex = '#facc15'; rgb = '250, 204, 21'; }
 
-    // 3. Review / Verification / Auditor / Approval (Purple / Violet)
-    else if (sl.includes('review') || sl.includes('auditor') || sl.includes('approval') || sl.includes('validation')) hex = '#6d28d9'; // Purple 700
+    // 3. Review / Verification / Auditor / Approval
+    else if (sl.includes('review') || sl.includes('auditor') || sl.includes('approval') || sl.includes('validation')) { hex = '#c084fc'; rgb = '192, 132, 252'; }
 
-    // 4. Financials / Billing / Accounting (Indigo / Violet)
-    else if (sl.includes('payment') || sl.includes('financial') || sl.includes('billing') || sl.includes('invoice') || sl.includes('xero')) hex = '#4338ca'; // Indigo 700
+    // 4. Financials / Billing / Accounting
+    else if (sl.includes('payment') || sl.includes('financial') || sl.includes('billing') || sl.includes('invoice') || sl.includes('xero')) { hex = '#818cf8'; rgb = '129, 140, 248'; }
 
-    // 5. Active / Work / In Progress (Blue / Sky)
-    else if (sl === 'in progress' || sl === 'progress' || sl.includes('progress') || sl.includes('progess')) hex = '#1d4ed8'; // Blue 700
-    else if (sl === 'active' || sl === 'started' || sl === 'running') hex = '#1e40af'; // Blue 800
-    else if (sl.includes('checklist')) hex = '#0369a1'; // Sky 700
+    // 5. Active / Work / In Progress
+    else if (sl === 'in progress' || sl === 'progress' || sl.includes('progress') || sl.includes('progess')) { hex = '#38bdf8'; rgb = '56, 189, 248'; }
+    else if (sl === 'active' || sl === 'started' || sl === 'running') { hex = '#60a5fa'; rgb = '96, 165, 250'; }
+    else if (sl.includes('checklist')) { hex = '#2dd4bf'; rgb = '45, 212, 191'; }
 
-    // 6. Danger / Alerts (Red / Rose)
-    else if (sl === 'overdue') hex = '#b91c1c';   // Red 700
-    else if (sl === 'urgent' || sl === 'high') hex = '#991b1b'; // Red 800
-    else if (sl === 'rework' || sl === 'blocked') hex = '#be123c'; // Rose 700
+    // 6. Danger / Alerts
+    else if (sl === 'overdue' || sl === 'urgent' || sl === 'high') { hex = '#f87171'; rgb = '248, 113, 113'; }
+    else if (sl === 'rework' || sl === 'blocked' || sl.includes('reject')) { hex = '#fb7185'; rgb = '251, 113, 133'; }
 
-    // 7. Pending / Deferred / Awaiting (Amber / Orange)
-    else if (sl === 'pending' || sl.includes('yet to start') || sl.includes('not started')) hex = '#b45309';   // Amber 700
-    else if (sl.includes('hold') || sl.includes('waiting') || sl.includes('awaited') || sl.includes('pending')) hex = '#c2410c'; // Orange 700
+    // 7. Pending / Deferred / Awaiting
+    else if (sl === 'pending' || sl.includes('yet to start') || sl.includes('not started')) { hex = '#fbbf24'; rgb = '251, 191, 36'; }
+    else if (sl.includes('hold') || sl.includes('waiting') || sl.includes('awaited')) { hex = '#fb923c'; rgb = '251, 146, 60'; }
 
     // 8. Info / Draft / Default
-    else if (sl === 'new' || sl === 'created') hex = '#0369a1'; // Sky 700
-    else if (sl === 'draft' || sl === 'memo') hex = '#475569'; // Slate 700
+    else if (sl === 'new' || sl === 'created') { hex = '#38bdf8'; rgb = '56, 189, 248'; }
+    else if (sl === 'draft' || sl === 'memo') { hex = '#94a3b8'; rgb = '148, 163, 184'; }
 
     // Broad Fallbacks
-    else if (sl.includes('completed') || sl.includes('closed') || sl.includes('done') || sl.includes('filed')) hex = '#047857';
-    else if (sl.includes('review') || sl.includes('waiting') || sl.includes('draft') || sl.includes('auditor')) hex = '#6d28d9';
-    else if (sl.includes('progress') || sl.includes('active') || sl.includes('started')) hex = '#1d4ed8';
-    else if (sl.includes('urgent') || sl.includes('overdue') || sl.includes('rework') || sl.includes('block')) hex = '#b91c1c';
-    else if (sl.includes('query') || s.includes('info') || s.includes('question')) hex = '#a16207';
-    else if (sl.includes('financial') || sl.includes('billing') || sl.includes('invoice')) hex = '#4338ca';
+    else if (sl.includes('completed') || sl.includes('closed') || sl.includes('done') || sl.includes('filed')) { hex = '#34d399'; rgb = '52, 211, 153'; }
+    else if (sl.includes('review') || sl.includes('waiting') || sl.includes('draft') || sl.includes('auditor')) { hex = '#c084fc'; rgb = '192, 132, 252'; }
+    else if (sl.includes('progress') || sl.includes('active') || sl.includes('started')) { hex = '#38bdf8'; rgb = '56, 189, 248'; }
+    else if (sl.includes('urgent') || sl.includes('overdue') || sl.includes('rework') || sl.includes('block')) { hex = '#f87171'; rgb = '248, 113, 113'; }
+    else if (sl.includes('query') || sl.includes('info') || sl.includes('question')) { hex = '#facc15'; rgb = '250, 204, 21'; }
+    else if (sl.includes('financial') || sl.includes('billing') || sl.includes('invoice')) { hex = '#818cf8'; rgb = '129, 140, 248'; }
+    else { hex = '#94a3b8'; rgb = '148, 163, 184'; }
 
     return {
-      bg: `${hex}12`,
+      bg: `rgba(${rgb}, 0.22)`,
       color: hex,
-      border: `${hex}24`
+      border: `rgba(${rgb}, 0.55)`,
+      dot: hex,
+      glow: `0 0 10px rgba(${rgb}, 0.25)`
     };
   };
 
@@ -694,42 +791,135 @@ export default function BahrainDailyTasks() {
                     const sc = statusColor(task.status);
                     return (
                       <select value={task.status} onChange={e => handleStatusChange(task.id, e.target.value)}
-                        style={{ padding: '5px 6px', borderRadius: '8px', border: `1px solid ${sc.border}`, background: sc.bg, color: sc.color, fontWeight: 600, fontSize: '11px', cursor: 'pointer', outline: 'none', minWidth: '120px' }}>
+                        style={{
+                          padding: '4px 10px',
+                          borderRadius: '8px',
+                          border: `1.5px solid ${sc.border}`,
+                          background: sc.bg,
+                          color: sc.color,
+                          fontWeight: 800,
+                          fontSize: '11px',
+                          cursor: 'pointer',
+                          outline: 'none',
+                          minWidth: '115px',
+                          boxShadow: isDark ? sc.glow : 'none'
+                        }}
+                      >
                         {dynamicStatuses.map(s => <option key={s} value={s}>{s}</option>)}
                       </select>
                     );
                   })() : (() => {
                     const sc = statusColor(task.status);
-                    return <span style={{ padding: '3px 8px', borderRadius: '20px', fontSize: '11px', fontWeight: 600, background: sc.bg, color: sc.color, border: `1px solid ${sc.border}`, whiteSpace: 'nowrap' }}>{task.status}</span>;
+                    return (
+                      <span style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '5px',
+                        padding: '4px 9px',
+                        borderRadius: '8px',
+                        fontSize: '11px',
+                        fontWeight: 800,
+                        background: sc.bg,
+                        color: sc.color,
+                        border: `1.5px solid ${sc.border}`,
+                        whiteSpace: 'nowrap',
+                        boxShadow: isDark ? sc.glow : 'none'
+                      }}>
+                        <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: sc.dot, boxShadow: isDark ? `0 0 8px ${sc.dot}` : 'none' }} />
+                        {task.status}
+                      </span>
+                    );
                   })()}
                 </td>
-                <td style={compactCell}><span style={{ fontSize: '12px', color: '#475569', whiteSpace: 'nowrap' }}>{task.deadline || '—'}</span></td>
+                <td style={compactCell}><span style={{ fontSize: '12px', color: isDark ? '#fb923c' : '#c2410c', fontWeight: 650, whiteSpace: 'nowrap' }}>{task.deadline || '—'}</span></td>
                 <td style={compactCell}>
                   {(() => {
                     const allAssignedIds = task.assigned_partners && task.assigned_partners.length > 0 
                       ? task.assigned_partners 
                       : (task.assigned_to ? [task.assigned_to] : []);
-                    if (allAssignedIds.length > 1) {
-                      return (
-                        <span style={{ fontSize: '12px', color: '#334155', fontWeight: 500 }}>
-                          {allAssignedIds.map(id => partners.find(p => p.id === id)?.username).filter(Boolean).join(', ')}
-                        </span>
-                      );
-                    }
+                    const assignedPartners = allAssignedIds.map(id => partners.find(p => p.id === id)).filter((p): p is typeof partners[number] => Boolean(p));
+
                     if (isAdminUser) {
+                      const selectedPartner = partners.find(p => p.id === task.assigned_to);
+                      const pCol = getPartnerColor(selectedPartner?.username || selectedPartner?.id);
                       return (
-                        <select value={task.assigned_to || ''} onChange={e => handleAssign(task.id, e.target.value)}
-                          style={{ padding: '5px 6px', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#f8fafc', fontSize: '11px', color: '#334155', minWidth: '110px', cursor: 'pointer', outline: 'none', fontWeight: 500 }}>
-                          <option value="">Unassigned</option>
-                          {partners.map(p => <option key={p.id} value={p.id}>{p.username}</option>)}
-                        </select>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                          {selectedPartner && (
+                            <div style={{
+                              width: '18px', height: '18px', borderRadius: '50%',
+                              background: pCol.avatarBg,
+                              color: '#ffffff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                              fontSize: '9.5px', fontWeight: 800, flexShrink: 0,
+                              boxShadow: isDark ? `0 0 8px ${pCol.border}` : 'none'
+                            }}>
+                              {selectedPartner.username.substring(0, 1).toUpperCase()}
+                            </div>
+                          )}
+                          <select
+                            value={task.assigned_to || ''}
+                            onChange={e => handleAssign(task.id, e.target.value)}
+                            style={{
+                              padding: '4px 8px',
+                              borderRadius: '8px',
+                              border: task.assigned_to ? `1.5px solid ${pCol.border}` : '1px solid var(--border)',
+                              background: task.assigned_to ? pCol.bg : 'var(--bg-tertiary)',
+                              color: task.assigned_to ? pCol.text : 'var(--text-secondary)',
+                              fontSize: '11.5px',
+                              fontWeight: 750,
+                              cursor: 'pointer',
+                              outline: 'none',
+                              minWidth: '115px',
+                              boxShadow: (task.assigned_to && isDark) ? `0 0 8px ${pCol.bg}` : 'none'
+                            }}
+                          >
+                            <option value="">👤 Unassigned</option>
+                            {partners.map(p => <option key={p.id} value={p.id}>{p.username}</option>)}
+                          </select>
+                        </div>
                       );
                     }
-                    return (
-                      <span style={{ fontSize: '12px', color: '#334155', fontWeight: 500 }}>
-                        {partners.find(p => p.id === task.assigned_to)?.username || 'Unassigned'}
-                      </span>
-                    );
+
+                    if (assignedPartners.length > 0) {
+                      return (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', alignItems: 'center' }}>
+                          {assignedPartners.map(p => {
+                            const pCol = getPartnerColor(p.username || p.id);
+                            return (
+                              <span
+                                key={p.id}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '5px',
+                                  fontSize: '11px',
+                                  fontWeight: 750,
+                                  color: pCol.text,
+                                  background: pCol.bg,
+                                  border: `1.5px solid ${pCol.border}`,
+                                  padding: '3px 8px',
+                                  borderRadius: '7px',
+                                  whiteSpace: 'nowrap',
+                                  boxShadow: isDark ? `0 0 8px ${pCol.bg}` : 'none'
+                                }}
+                                title={p.username}
+                              >
+                                <span style={{
+                                  width: '14px', height: '14px', borderRadius: '50%',
+                                  background: pCol.avatarBg, color: '#ffffff',
+                                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                  fontSize: '8.5px', fontWeight: 800, flexShrink: 0
+                                }}>
+                                  {p.username.substring(0, 1).toUpperCase()}
+                                </span>
+                                {p.username}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      );
+                    }
+
+                    return <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>Unassigned</span>;
                   })()}
                 </td>
                 <td style={{ ...compactCell, position: 'relative', width: '40px' }}>

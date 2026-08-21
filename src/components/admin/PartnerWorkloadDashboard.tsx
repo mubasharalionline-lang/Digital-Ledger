@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { supabase } from '@/lib/supabase';
 import type { User, Task } from '@/lib/supabase';
 import CountryFlag, { getCountryCode, getCanonicalCountryName } from '@/components/CountryFlag';
@@ -90,6 +91,30 @@ function getStatusTheme(statusName: string) {
   return { bg: '#f8fafc', text: '#475569', border: '#e2e8f0', dot: '#64748b', bar: '#94a3b8' };
 }
 
+// Calculate clean, rounded Y-axis limits and tick marks (multiples of 5, 10, 20, 25, 50, etc.)
+function getNiceYAxis(max: number, targetTicks = 4) {
+  if (max <= 5) return { max: 5, ticks: [0, 1, 2, 3, 4, 5] };
+  if (max <= 10) return { max: 10, ticks: [0, 2, 4, 6, 8, 10] };
+  if (max <= 20) return { max: 20, ticks: [0, 5, 10, 15, 20] };
+
+  const rawStep = (max * 1.18) / targetTicks;
+  const magnitude = Math.pow(10, Math.floor(Math.log10(rawStep)));
+  const residual = rawStep / magnitude;
+  let niceStep: number;
+  if (residual <= 1) niceStep = 1 * magnitude;
+  else if (residual <= 2) niceStep = 2 * magnitude;
+  else if (residual <= 2.5) niceStep = 2.5 * magnitude;
+  else if (residual <= 5) niceStep = 5 * magnitude;
+  else niceStep = 10 * magnitude;
+
+  const niceMax = niceStep * targetTicks;
+  const ticks: number[] = [];
+  for (let i = 0; i <= targetTicks; i++) {
+    ticks.push(i * niceStep);
+  }
+  return { max: niceMax, ticks };
+}
+
 // Avatar gradient generator
 const getAvatarGradient = (name: string, index: number) => {
   const gradients = [
@@ -141,6 +166,21 @@ export default function PartnerWorkloadDashboard({ isEmbedded = false }: Partner
   const [drilldownPartner, setDrilldownPartner] = useState<{ partner: User; countryName: string } | null>(null);
   const [modalSearch, setModalSearch] = useState<string>('');
   const [modalStatusFilter, setModalStatusFilter] = useState<string>('all');
+  const [mounted, setMounted] = useState<boolean>(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && drilldownPartner) {
+        setDrilldownPartner(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [drilldownPartner]);
 
   // Graph display toggle: show only partners with tasks (> 0) vs all partners
   const [graphShowActiveOnly, setGraphShowActiveOnly] = useState<boolean>(true);
@@ -1937,32 +1977,56 @@ export default function PartnerWorkloadDashboard({ isEmbedded = false }: Partner
                     </table>
                   </div>
                 ) : currentView === 'graphs' ? (
-                  /* ─── VIEW 2: Interactive SVG Line Chart Graphs ─── */
+                  /* ─── VIEW 2: Interactive Modern Neon Line Graphs ─── */
                   <div style={{ padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
-                    {/* Line Chart 1: Partner Workload & Task Progression Multi-Line Chart */}
+                    {/* Line Chart 1: Partner Workload & Task Progression Neon Multi-Line Chart */}
                     <div style={{
-                      background: 'var(--bg-primary)',
-                      border: '1px solid var(--border)',
-                      borderRadius: '16px',
-                      padding: '20px 22px',
-                      boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
+                      background: 'linear-gradient(145deg, #090e1a 0%, #0c1427 50%, #080c18 100%)',
+                      border: '1px solid rgba(56, 189, 248, 0.22)',
+                      borderRadius: '18px',
+                      padding: '22px 24px',
+                      boxShadow: '0 16px 40px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06)',
+                      position: 'relative',
+                      overflow: 'hidden'
                     }}>
-                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '14px', marginBottom: '18px' }}>
+                      {/* Ambient Neon Mesh Glows in background */}
+                      <div style={{
+                        position: 'absolute',
+                        top: '-60px',
+                        left: '10%',
+                        width: '280px',
+                        height: '280px',
+                        background: 'radial-gradient(circle, rgba(0, 242, 254, 0.09) 0%, transparent 70%)',
+                        pointerEvents: 'none'
+                      }} />
+                      <div style={{
+                        position: 'absolute',
+                        bottom: '-60px',
+                        right: '10%',
+                        width: '280px',
+                        height: '280px',
+                        background: 'radial-gradient(circle, rgba(0, 245, 160, 0.08) 0%, transparent 70%)',
+                        pointerEvents: 'none'
+                      }} />
+
+                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '14px', marginBottom: '20px', position: 'relative', zIndex: 2 }}>
                         <div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                             <div style={{
-                              width: '32px', height: '32px', borderRadius: '8px',
-                              background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)',
-                              border: '1px solid #bfdbfe', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                              width: '34px', height: '34px', borderRadius: '9px',
+                              background: 'rgba(0, 242, 254, 0.12)',
+                              border: '1px solid rgba(0, 242, 254, 0.4)',
+                              boxShadow: '0 0 16px rgba(0, 242, 254, 0.3)',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center'
                             }}>
-                              <TrendingUp size={17} color="#2563eb" />
+                              <TrendingUp size={18} color="#00f2fe" />
                             </div>
-                            <h4 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: 'var(--text-primary)' }}>
-                              Partner Workload & Performance Line Graph
+                            <h4 style={{ margin: 0, fontSize: '16.5px', fontWeight: 800, color: '#ffffff', letterSpacing: '-0.01em' }}>
+                              Partner Workload & Performance Neon Graph
                             </h4>
                           </div>
-                          <p style={{ margin: '4px 0 0 0', fontSize: '12.5px', color: 'var(--text-secondary)' }}>
-                            Multi-series trend curve comparing total task volume, completed tasks, active pending load, and urgent bottlenecks across partners in {cData.country.name}.
+                          <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#94a3b8' }}>
+                            Multi-series neon trend curve comparing total task volume, completed tasks, active pending load, and urgent bottlenecks in {cData.country.name}.
                           </p>
                         </div>
 
@@ -1971,25 +2035,25 @@ export default function PartnerWorkloadDashboard({ isEmbedded = false }: Partner
                           {/* Filter Toggle: Active Only vs All Partners */}
                           <div style={{
                             display: 'flex',
-                            background: 'var(--bg-secondary)',
+                            background: 'rgba(15, 23, 42, 0.75)',
                             padding: '3px',
                             borderRadius: '8px',
-                            border: '1px solid var(--border)'
+                            border: '1px solid rgba(56, 189, 248, 0.2)'
                           }}>
                             <button
                               type="button"
                               onClick={() => setGraphShowActiveOnly(true)}
                               style={{
-                                padding: '4px 10px',
+                                padding: '4px 11px',
                                 fontSize: '11.5px',
-                                fontWeight: 700,
+                                fontWeight: 750,
                                 borderRadius: '6px',
-                                border: 'none',
-                                background: graphShowActiveOnly ? 'var(--bg-primary)' : 'transparent',
-                                color: graphShowActiveOnly ? 'var(--accent)' : 'var(--text-secondary)',
-                                boxShadow: graphShowActiveOnly ? '0 1px 3px rgba(0,0,0,0.06)' : 'none',
+                                border: graphShowActiveOnly ? '1px solid #00f2fe' : '1px solid transparent',
+                                background: graphShowActiveOnly ? 'rgba(0, 242, 254, 0.18)' : 'transparent',
+                                color: graphShowActiveOnly ? '#00f2fe' : '#94a3b8',
+                                boxShadow: graphShowActiveOnly ? '0 0 12px rgba(0, 242, 254, 0.35)' : 'none',
                                 cursor: 'pointer',
-                                transition: 'all 0.12s ease'
+                                transition: 'all 0.15s ease'
                               }}
                             >
                               Active Partners ({cData.partners.filter(p => p.totalTasks > 0).length})
@@ -1998,39 +2062,39 @@ export default function PartnerWorkloadDashboard({ isEmbedded = false }: Partner
                               type="button"
                               onClick={() => setGraphShowActiveOnly(false)}
                               style={{
-                                padding: '4px 10px',
+                                padding: '4px 11px',
                                 fontSize: '11.5px',
-                                fontWeight: 700,
+                                fontWeight: 750,
                                 borderRadius: '6px',
-                                border: 'none',
-                                background: !graphShowActiveOnly ? 'var(--bg-primary)' : 'transparent',
-                                color: !graphShowActiveOnly ? 'var(--accent)' : 'var(--text-secondary)',
-                                boxShadow: !graphShowActiveOnly ? '0 1px 3px rgba(0,0,0,0.06)' : 'none',
+                                border: !graphShowActiveOnly ? '1px solid #00f2fe' : '1px solid transparent',
+                                background: !graphShowActiveOnly ? 'rgba(0, 242, 254, 0.18)' : 'transparent',
+                                color: !graphShowActiveOnly ? '#00f2fe' : '#94a3b8',
+                                boxShadow: !graphShowActiveOnly ? '0 0 12px rgba(0, 242, 254, 0.35)' : 'none',
                                 cursor: 'pointer',
-                                transition: 'all 0.12s ease'
+                                transition: 'all 0.15s ease'
                               }}
                             >
                               All ({cData.partners.length})
                             </button>
                           </div>
 
-                          {/* Chart Legend */}
+                          {/* Chart Neon Legend */}
                           <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap', fontSize: '12px', fontWeight: 650 }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                              <span style={{ width: '16px', height: '3.5px', borderRadius: '2px', background: '#3b82f6' }} />
-                              <span style={{ color: 'var(--text-primary)' }}>Total Workload</span>
+                              <span style={{ width: '14px', height: '3.5px', borderRadius: '2px', background: '#00f2fe', boxShadow: '0 0 8px #00f2fe' }} />
+                              <span style={{ color: '#f8fafc' }}>Total Workload</span>
                             </div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                              <span style={{ width: '16px', height: '3.5px', borderRadius: '2px', background: '#10b981' }} />
-                              <span style={{ color: 'var(--text-primary)' }}>Completed</span>
+                              <span style={{ width: '14px', height: '3.5px', borderRadius: '2px', background: '#00f5a0', boxShadow: '0 0 8px #00f5a0' }} />
+                              <span style={{ color: '#f8fafc' }}>Completed</span>
                             </div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                              <span style={{ width: '16px', height: '3.5px', borderRadius: '2px', background: '#f59e0b' }} />
-                              <span style={{ color: 'var(--text-primary)' }}>Active Pending</span>
+                              <span style={{ width: '14px', height: '3.5px', borderRadius: '2px', background: '#fbbf24', boxShadow: '0 0 8px #fbbf24' }} />
+                              <span style={{ color: '#f8fafc' }}>Active Pending</span>
                             </div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                              <span style={{ width: '16px', height: '3.5px', borderRadius: '2px', background: '#ef4444' }} />
-                              <span style={{ color: 'var(--text-primary)' }}>Urgent / High</span>
+                              <span style={{ width: '14px', height: '3.5px', borderRadius: '2px', background: '#ff007f', boxShadow: '0 0 8px #ff007f' }} />
+                              <span style={{ color: '#f8fafc' }}>Urgent / High</span>
                             </div>
                           </div>
                         </div>
@@ -2045,18 +2109,18 @@ export default function PartnerWorkloadDashboard({ isEmbedded = false }: Partner
 
                         if (partners.length === 0) {
                           return (
-                            <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '13px' }}>
+                            <div style={{ padding: '40px', textAlign: 'center', color: '#64748b', fontSize: '13px' }}>
                               No partners with assigned tasks found.
                             </div>
                           );
                         }
 
                         const colWidth = Math.max(90, 860 / Math.max(partners.length, 1));
-                        const paddingLeft = 65;
-                        const paddingRight = 55;
-                        const paddingTop = 35;
-                        const paddingBottom = 95; // Plenty of room for angled labels
-                        const plotWidth = Math.max(760, (partners.length - 1) * colWidth);
+                        const paddingLeft = 55;
+                        const paddingRight = 45;
+                        const paddingTop = 45;
+                        const paddingBottom = 75; // Balanced room for sleek angled labels
+                        const plotWidth = Math.max(740, (partners.length - 1) * colWidth);
                         const svgWidth = plotWidth + paddingLeft + paddingRight;
                         const svgHeight = 350;
                         const plotHeight = svgHeight - paddingTop - paddingBottom;
@@ -2065,7 +2129,7 @@ export default function PartnerWorkloadDashboard({ isEmbedded = false }: Partner
                           ...partners.map(p => Math.max(p.totalTasks, p.completedCount, p.pendingCount, p.highUrgentCount)),
                           10
                         );
-                        const yMax = Math.ceil(maxVal / 10) * 10 || 10;
+                        const { max: yMax, ticks: yTicks } = getNiceYAxis(maxVal, 4);
 
                         const getX = (index: number) => {
                           if (partners.length === 1) return paddingLeft + plotWidth / 2;
@@ -2114,24 +2178,66 @@ export default function PartnerWorkloadDashboard({ isEmbedded = false }: Partner
                           ? `${totalPath} L ${totalPoints[totalPoints.length - 1].x} ${baseY} L ${totalPoints[0].x} ${baseY} Z`
                           : '';
 
-                        // Grid steps
-                        const yTicks = [0, Math.round(yMax * 0.25), Math.round(yMax * 0.5), Math.round(yMax * 0.75), yMax];
-
                         return (
                           <div style={{ width: '100%', overflowX: 'auto', paddingBottom: '8px' }}>
                             <svg viewBox={`0 0 ${svgWidth} ${svgHeight}`} style={{ width: `${Math.max(100, (svgWidth / 860) * 100)}%`, height: 'auto', minWidth: `${svgWidth}px`, display: 'block' }}>
                               <defs>
-                                <linearGradient id="totalAreaGrad" x1="0" y1="0" x2="0" y2="1">
-                                  <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.22" />
-                                  <stop offset="100%" stopColor="#3b82f6" stopOpacity="0.0" />
+                                {/* Neon Glow Filter Cyan */}
+                                <filter id="neonGlowCyan" x="-40%" y="-40%" width="180%" height="180%">
+                                  <feGaussianBlur stdDeviation="3.5" result="blur" />
+                                  <feMerge>
+                                    <feMergeNode in="blur" />
+                                    <feMergeNode in="blur" />
+                                    <feMergeNode in="SourceGraphic" />
+                                  </feMerge>
+                                </filter>
+
+                                {/* Neon Glow Filter Mint */}
+                                <filter id="neonGlowMint" x="-40%" y="-40%" width="180%" height="180%">
+                                  <feGaussianBlur stdDeviation="3.5" result="blur" />
+                                  <feMerge>
+                                    <feMergeNode in="blur" />
+                                    <feMergeNode in="blur" />
+                                    <feMergeNode in="SourceGraphic" />
+                                  </feMerge>
+                                </filter>
+
+                                {/* Neon Glow Filter Amber */}
+                                <filter id="neonGlowAmber" x="-40%" y="-40%" width="180%" height="180%">
+                                  <feGaussianBlur stdDeviation="3" result="blur" />
+                                  <feMerge>
+                                    <feMergeNode in="blur" />
+                                    <feMergeNode in="blur" />
+                                    <feMergeNode in="SourceGraphic" />
+                                  </feMerge>
+                                </filter>
+
+                                {/* Neon Glow Filter Rose */}
+                                <filter id="neonGlowRose" x="-40%" y="-40%" width="180%" height="180%">
+                                  <feGaussianBlur stdDeviation="3.5" result="blur" />
+                                  <feMerge>
+                                    <feMergeNode in="blur" />
+                                    <feMergeNode in="blur" />
+                                    <feMergeNode in="SourceGraphic" />
+                                  </feMerge>
+                                </filter>
+
+                                {/* Neon Cyan Area Gradient */}
+                                <linearGradient id="neonTotalGrad" x1="0" y1="0" x2="0" y2="1">
+                                  <stop offset="0%" stopColor="#00f2fe" stopOpacity="0.32" />
+                                  <stop offset="60%" stopColor="#00f2fe" stopOpacity="0.08" />
+                                  <stop offset="100%" stopColor="#00f2fe" stopOpacity="0.0" />
                                 </linearGradient>
-                                <linearGradient id="completedAreaGrad" x1="0" y1="0" x2="0" y2="1">
-                                  <stop offset="0%" stopColor="#10b981" stopOpacity="0.18" />
-                                  <stop offset="100%" stopColor="#10b981" stopOpacity="0.0" />
+
+                                {/* Neon Mint Area Gradient */}
+                                <linearGradient id="neonMintGrad" x1="0" y1="0" x2="0" y2="1">
+                                  <stop offset="0%" stopColor="#00f5a0" stopOpacity="0.26" />
+                                  <stop offset="60%" stopColor="#00f5a0" stopOpacity="0.06" />
+                                  <stop offset="100%" stopColor="#00f5a0" stopOpacity="0.0" />
                                 </linearGradient>
                               </defs>
 
-                              {/* Horizontal Gridlines & Y-Axis Labels */}
+                              {/* Horizontal Cyber Gridlines & Y-Axis Labels */}
                               {yTicks.map(tVal => {
                                 const yPos = getY(tVal);
                                 return (
@@ -2141,18 +2247,17 @@ export default function PartnerWorkloadDashboard({ isEmbedded = false }: Partner
                                       y1={yPos}
                                       x2={svgWidth - paddingRight}
                                       y2={yPos}
-                                      stroke="var(--border)"
-                                      strokeDasharray="4 4"
+                                      stroke="rgba(148, 163, 184, 0.12)"
+                                      strokeDasharray="3 4"
                                       strokeWidth="1"
-                                      opacity="0.8"
                                     />
                                     <text
                                       x={paddingLeft - 12}
-                                      y={yPos + 4}
+                                      y={yPos + 3.5}
                                       textAnchor="end"
-                                      fontSize="11.5"
-                                      fill="var(--text-tertiary)"
-                                      fontWeight="650"
+                                      fontSize="11"
+                                      fill="#94a3b8"
+                                      fontWeight="600"
                                     >
                                       {tVal}
                                     </text>
@@ -2160,49 +2265,99 @@ export default function PartnerWorkloadDashboard({ isEmbedded = false }: Partner
                                 );
                               })}
 
-                              {/* Gradient Area below Total Workload curve */}
+                              {/* Gradient Glow Area below Total Workload curve */}
                               {totalAreaPath && (
-                                <path d={totalAreaPath} fill="url(#totalAreaGrad)" />
+                                <path d={totalAreaPath} fill="url(#neonTotalGrad)" />
                               )}
 
-                              {/* Curve Lines */}
-                              {/* 1. Total Workload Line */}
+                              {/* ─── NEON GLOW PATHS (Layer 1: Ambient Glow Aura) ─── */}
+                              {/* 1. Total Workload Glow Aura */}
                               <path
                                 d={totalPath}
                                 fill="none"
-                                stroke="#3b82f6"
-                                strokeWidth="3"
+                                stroke="#00f2fe"
+                                strokeWidth="6"
+                                opacity="0.35"
+                                filter="url(#neonGlowCyan)"
                                 strokeLinecap="round"
                                 strokeLinejoin="round"
                               />
 
-                              {/* 2. Completed Line */}
+                              {/* 2. Completed Glow Aura */}
                               <path
                                 d={completedPath}
                                 fill="none"
-                                stroke="#10b981"
-                                strokeWidth="2.5"
+                                stroke="#00f5a0"
+                                strokeWidth="5"
+                                opacity="0.3"
+                                filter="url(#neonGlowMint)"
                                 strokeLinecap="round"
                                 strokeLinejoin="round"
                               />
 
-                              {/* 3. Active Pending Line */}
+                              {/* 3. Active Pending Glow Aura */}
                               <path
                                 d={pendingPath}
                                 fill="none"
-                                stroke="#f59e0b"
-                                strokeWidth="2.5"
+                                stroke="#fbbf24"
+                                strokeWidth="5"
+                                opacity="0.25"
+                                filter="url(#neonGlowAmber)"
                                 strokeLinecap="round"
                                 strokeLinejoin="round"
                               />
 
-                              {/* 4. Urgent / High Line */}
+                              {/* 4. Urgent / High Glow Aura */}
                               <path
                                 d={urgentPath}
                                 fill="none"
-                                stroke="#ef4444"
-                                strokeWidth="2"
-                                strokeDasharray="3 3"
+                                stroke="#ff007f"
+                                strokeWidth="4.5"
+                                opacity="0.35"
+                                filter="url(#neonGlowRose)"
+                                strokeDasharray="4 4"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+
+                              {/* ─── NEON CORE PATHS (Layer 2: Vivid Sharp Line) ─── */}
+                              {/* 1. Total Workload Vivid Line */}
+                              <path
+                                d={totalPath}
+                                fill="none"
+                                stroke="#00f2fe"
+                                strokeWidth="2.8"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+
+                              {/* 2. Completed Vivid Line */}
+                              <path
+                                d={completedPath}
+                                fill="none"
+                                stroke="#00f5a0"
+                                strokeWidth="2.2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+
+                              {/* 3. Active Pending Vivid Line */}
+                              <path
+                                d={pendingPath}
+                                fill="none"
+                                stroke="#fbbf24"
+                                strokeWidth="2.2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+
+                              {/* 4. Urgent / High Vivid Line */}
+                              <path
+                                d={urgentPath}
+                                fill="none"
+                                stroke="#ff007f"
+                                strokeWidth="1.8"
+                                strokeDasharray="4 4"
                                 strokeLinecap="round"
                                 strokeLinejoin="round"
                               />
@@ -2216,54 +2371,80 @@ export default function PartnerWorkloadDashboard({ isEmbedded = false }: Partner
                                 const yUrg = getY(p.highUrgentCount);
 
                                 return (
-                                  <g key={p.partner.id} style={{ cursor: 'pointer' }} onClick={() => {
-                                    setModalSearch('');
-                                    setModalStatusFilter('all');
-                                    setDrilldownPartner({ partner: p.partner, countryName: cData.country.name });
-                                  }}>
-                                    {/* Vertical Column Hover Guide */}
+                                  <g
+                                    key={p.partner.id}
+                                    style={{ cursor: 'pointer' }}
+                                    onClick={() => {
+                                      setModalSearch('');
+                                      setModalStatusFilter('all');
+                                      setDrilldownPartner({ partner: p.partner, countryName: cData.country.name });
+                                    }}
+                                  >
+                                    <title>{`${p.partner.username}\nTotal Workload: ${p.totalTasks}\nCompleted: ${p.completedCount} (${p.completedPercentage}%)\nActive Pending: ${p.pendingCount}\nUrgent/High: ${p.highUrgentCount}\n(Click to view tasks)`}</title>
+
+                                    {/* Vertical Column Cyber Guide */}
                                     <line
                                       x1={x}
                                       y1={paddingTop}
                                       x2={x}
                                       y2={baseY}
-                                      stroke="var(--border)"
+                                      stroke="rgba(0, 242, 254, 0.12)"
+                                      strokeDasharray="2 4"
                                       strokeWidth="1"
-                                      opacity="0.5"
                                     />
 
-                                    {/* Total Point */}
-                                    <circle cx={x} cy={yTotal} r="5" fill="#3b82f6" stroke="#ffffff" strokeWidth="2" />
-                                    {/* Completed Point */}
+                                    {/* Total Glowing Node */}
+                                    <circle cx={x} cy={yTotal} r="8" fill="rgba(0, 242, 254, 0.22)" />
+                                    <circle cx={x} cy={yTotal} r="4.5" fill="#0284c7" stroke="#00f2fe" strokeWidth="2" filter="url(#neonGlowCyan)" />
+                                    <circle cx={x} cy={yTotal} r="2" fill="#ffffff" />
+
+                                    {/* Completed Node */}
                                     {p.completedCount > 0 && (
-                                      <circle cx={x} cy={yComp} r="4" fill="#10b981" stroke="#ffffff" strokeWidth="1.5" />
+                                      <>
+                                        <circle cx={x} cy={yComp} r="6.5" fill="rgba(0, 245, 160, 0.2)" />
+                                        <circle cx={x} cy={yComp} r="3.5" fill="#059669" stroke="#00f5a0" strokeWidth="1.5" />
+                                        <circle cx={x} cy={yComp} r="1.5" fill="#ffffff" />
+                                      </>
                                     )}
-                                    {/* Pending Point */}
+
+                                    {/* Pending Node */}
                                     {p.pendingCount > 0 && (
-                                      <circle cx={x} cy={yPend} r="4" fill="#f59e0b" stroke="#ffffff" strokeWidth="1.5" />
+                                      <>
+                                        <circle cx={x} cy={yPend} r="6.5" fill="rgba(251, 191, 36, 0.2)" />
+                                        <circle cx={x} cy={yPend} r="3.5" fill="#d97706" stroke="#fbbf24" strokeWidth="1.5" />
+                                        <circle cx={x} cy={yPend} r="1.5" fill="#ffffff" />
+                                      </>
                                     )}
-                                    {/* Urgent Point */}
+
+                                    {/* Urgent Node */}
                                     {p.highUrgentCount > 0 && (
-                                      <circle cx={x} cy={yUrg} r="4" fill="#ef4444" stroke="#ffffff" strokeWidth="1.5" />
+                                      <>
+                                        <circle cx={x} cy={yUrg} r="6.5" fill="rgba(255, 0, 127, 0.25)" />
+                                        <circle cx={x} cy={yUrg} r="3.5" fill="#be123c" stroke="#ff007f" strokeWidth="1.5" />
+                                        <circle cx={x} cy={yUrg} r="1.5" fill="#ffffff" />
+                                      </>
                                     )}
 
                                     {/* Total Value Pill Label on Top Node (Only show if > 0) */}
                                     {p.totalTasks > 0 && (
-                                      <g transform={`translate(${x}, ${yTotal - 14})`}>
+                                      <g transform={`translate(${x}, ${yTotal - 13})`}>
                                         <rect
-                                          x="-14"
-                                          y="-10"
-                                          width="28"
-                                          height="17"
-                                          rx="5"
-                                          fill="#2563eb"
+                                          x={p.totalTasks >= 100 ? "-13" : "-11"}
+                                          y="-8"
+                                          width={p.totalTasks >= 100 ? "26" : "22"}
+                                          height="15"
+                                          rx="4"
+                                          fill="rgba(11, 18, 38, 0.92)"
+                                          stroke="#00f2fe"
+                                          strokeWidth="1.2"
+                                          filter="url(#neonGlowCyan)"
                                         />
                                         <text
                                           x="0"
-                                          y="2.5"
+                                          y="3"
                                           textAnchor="middle"
-                                          fill="#ffffff"
-                                          fontSize="10.5"
+                                          fill="#00f2fe"
+                                          fontSize="9.5"
                                           fontWeight="800"
                                         >
                                           {p.totalTasks}
@@ -2271,25 +2452,26 @@ export default function PartnerWorkloadDashboard({ isEmbedded = false }: Partner
                                       </g>
                                     )}
 
-                                    {/* Angled X-Axis Partner Name & Status Labels - 100% Crisp & Non-Overlapping */}
-                                    <g transform={`translate(${x}, ${baseY + 16}) rotate(-40)`}>
+                                    {/* Angled X-Axis Partner Name & Status Labels */}
+                                    <g transform={`translate(${x}, ${baseY + 14}) rotate(-30)`}>
                                       <text
                                         x="0"
                                         y="0"
                                         textAnchor="end"
-                                        fontSize="12.5"
-                                        fontWeight="750"
-                                        fill="var(--text-primary)"
+                                        fontSize="11"
+                                        fontWeight="650"
+                                        fill="#f8fafc"
+                                        letterSpacing="-0.01em"
                                       >
                                         {p.partner.username}
                                       </text>
                                       <text
                                         x="0"
-                                        y="14"
+                                        y="12"
                                         textAnchor="end"
-                                        fontSize="11"
+                                        fontSize="9"
                                         fontWeight="600"
-                                        fill={p.completedPercentage > 70 ? '#059669' : 'var(--text-tertiary)'}
+                                        fill={p.completedPercentage > 75 ? '#00f5a0' : '#64748b'}
                                       >
                                         {p.completedPercentage}% done
                                       </text>
@@ -2303,22 +2485,43 @@ export default function PartnerWorkloadDashboard({ isEmbedded = false }: Partner
                       })()}
                     </div>
 
-                    {/* Line Chart 2: Team Completion Velocity Curve (%) */}
+                    {/* Line Chart 2: Team Completion Velocity Neon Wave Curve (%) */}
                     <div style={{
-                      background: 'var(--bg-primary)',
-                      border: '1px solid var(--border)',
-                      borderRadius: '16px',
-                      padding: '18px 20px',
-                      boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
+                      background: 'linear-gradient(145deg, #090e1a 0%, #0c1427 50%, #080c18 100%)',
+                      border: '1px solid rgba(0, 245, 160, 0.22)',
+                      borderRadius: '18px',
+                      padding: '20px 22px',
+                      boxShadow: '0 16px 40px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06)',
+                      position: 'relative',
+                      overflow: 'hidden'
                     }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
-                        <CheckCircle2 size={16} color="#059669" />
+                      {/* Ambient Neon Mesh Glow */}
+                      <div style={{
+                        position: 'absolute',
+                        top: '-60px',
+                        right: '15%',
+                        width: '260px',
+                        height: '260px',
+                        background: 'radial-gradient(circle, rgba(0, 245, 160, 0.08) 0%, transparent 70%)',
+                        pointerEvents: 'none'
+                      }} />
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px', position: 'relative', zIndex: 2 }}>
+                        <div style={{
+                          width: '32px', height: '32px', borderRadius: '8px',
+                          background: 'rgba(0, 245, 160, 0.12)',
+                          border: '1px solid rgba(0, 245, 160, 0.4)',
+                          boxShadow: '0 0 16px rgba(0, 245, 160, 0.3)',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center'
+                        }}>
+                          <CheckCircle2 size={17} color="#00f5a0" />
+                        </div>
                         <div>
-                          <h4 style={{ margin: 0, fontSize: '14.5px', fontWeight: 750, color: 'var(--text-primary)' }}>
-                            Partner Completion Velocity (%)
+                          <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 800, color: '#ffffff', letterSpacing: '-0.01em' }}>
+                            Partner Completion Velocity Neon Wave (%)
                           </h4>
-                          <p style={{ margin: '1px 0 0 0', fontSize: '11.5px', color: 'var(--text-secondary)' }}>
-                            Target performance curve vs 75% benchmark
+                          <p style={{ margin: '2px 0 0 0', fontSize: '11.5px', color: '#94a3b8' }}>
+                            Target velocity curve vs 75% benchmark
                           </p>
                         </div>
                       </div>
@@ -2333,13 +2536,13 @@ export default function PartnerWorkloadDashboard({ isEmbedded = false }: Partner
                         if (partners.length === 0) return null;
 
                         const colWidth = Math.max(90, 860 / Math.max(partners.length, 1));
-                        const pLeft = 65;
-                        const pRight = 55;
-                        const pTop = 20;
-                        const pBottom = 85;
-                        const plotWidth = Math.max(760, (partners.length - 1) * colWidth);
+                        const pLeft = 55;
+                        const pRight = 45;
+                        const pTop = 32;
+                        const pBottom = 70;
+                        const plotWidth = Math.max(740, (partners.length - 1) * colWidth);
                         const vWidth = plotWidth + pLeft + pRight;
-                        const vHeight = 250;
+                        const vHeight = 230;
                         const pHeight = vHeight - pTop - pBottom;
 
                         const getX = (idx: number) => {
@@ -2375,40 +2578,61 @@ export default function PartnerWorkloadDashboard({ isEmbedded = false }: Partner
                         return (
                           <div style={{ width: '100%', overflowX: 'auto', paddingBottom: '8px' }}>
                             <svg viewBox={`0 0 ${vWidth} ${vHeight}`} style={{ width: `${Math.max(100, (vWidth / 860) * 100)}%`, height: 'auto', minWidth: `${vWidth}px`, display: 'block' }}>
-                              <defs>
-                                <linearGradient id="emeraldLineGrad" x1="0" y1="0" x2="0" y2="1">
-                                  <stop offset="0%" stopColor="#10b981" stopOpacity="0.22" />
-                                  <stop offset="100%" stopColor="#10b981" stopOpacity="0.0" />
-                                </linearGradient>
-                              </defs>
-
                               {/* Benchmark Line at 75% */}
-                              <line x1={pLeft} y1={benchmarkY} x2={vWidth - pRight} y2={benchmarkY} stroke="#10b981" strokeDasharray="3 3" strokeWidth="1.5" opacity="0.6" />
-                              <text x={vWidth - pRight + 5} y={benchmarkY + 3} fontSize="9.5" fill="#059669" fontWeight="750">75% Target</text>
+                              <line x1={pLeft} y1={benchmarkY} x2={vWidth - pRight} y2={benchmarkY} stroke="rgba(0, 242, 254, 0.7)" strokeDasharray="4 4" strokeWidth="1.5" />
+                              <text x={vWidth - pRight + 5} y={benchmarkY + 3} fontSize="9.5" fill="#00f2fe" fontWeight="750">75% Target</text>
 
                               {/* Y-Axis grid lines */}
-                              {[0, 50, 100].map(pct => {
+                              {[0, 25, 50, 75, 100].map(pct => {
                                 const y = getY(pct);
                                 return (
                                   <g key={pct}>
-                                    <line x1={pLeft} y1={y} x2={vWidth - pRight} y2={y} stroke="var(--border)" strokeDasharray="3 3" strokeWidth="1" opacity="0.5" />
-                                    <text x={pLeft - 10} y={y + 3} textAnchor="end" fontSize="10.5" fill="var(--text-tertiary)" fontWeight="650">{pct}%</text>
+                                    <line x1={pLeft} y1={y} x2={vWidth - pRight} y2={y} stroke="rgba(148, 163, 184, 0.12)" strokeDasharray="3 4" strokeWidth="1" />
+                                    <text x={pLeft - 12} y={y + 3} textAnchor="end" fontSize="10.5" fill="#94a3b8" fontWeight="600">{pct}%</text>
                                   </g>
                                 );
                               })}
 
-                              {vArea && <path d={vArea} fill="url(#emeraldLineGrad)" />}
-                              <path d={vPath} fill="none" stroke="#10b981" strokeWidth="2.5" strokeLinecap="round" />
+                              {vArea && <path d={vArea} fill="url(#neonMintGrad)" />}
+
+                              {/* Neon Glow Mint Aura */}
+                              <path d={vPath} fill="none" stroke="#00f5a0" strokeWidth="5" opacity="0.3" filter="url(#neonGlowMint)" strokeLinecap="round" />
+                              {/* Neon Vivid Core */}
+                              <path d={vPath} fill="none" stroke="#00f5a0" strokeWidth="2.4" strokeLinecap="round" />
 
                               {vPoints.map(pt => (
-                                <g key={pt.partner.partner.id}>
-                                  <circle cx={pt.x} cy={pt.y} r="4.5" fill="#10b981" stroke="#ffffff" strokeWidth="1.5" />
-                                  <text x={pt.x} y={pt.y - 7} textAnchor="middle" fontSize="10.5" fontWeight="800" fill="#059669">
-                                    {pt.pct}%
-                                  </text>
+                                <g
+                                  key={pt.partner.partner.id}
+                                  style={{ cursor: 'pointer' }}
+                                  onClick={() => {
+                                    setModalSearch('');
+                                    setModalStatusFilter('all');
+                                    setDrilldownPartner({ partner: pt.partner.partner, countryName: cData.country.name });
+                                  }}
+                                >
+                                  <title>{`${pt.partner.partner.username}: ${pt.pct}% completed (${pt.partner.completedCount}/${pt.partner.totalTasks} tasks)`}</title>
+                                  <circle cx={pt.x} cy={pt.y} r="6.5" fill="rgba(0, 245, 160, 0.22)" />
+                                  <circle cx={pt.x} cy={pt.y} r="3.5" fill="#059669" stroke="#00f5a0" strokeWidth="1.5" />
+                                  <circle cx={pt.x} cy={pt.y} r="1.5" fill="#ffffff" />
+                                  <g transform={`translate(${pt.x}, ${pt.y - 10})`}>
+                                    <rect
+                                      x="-14"
+                                      y="-7"
+                                      width="28"
+                                      height="13"
+                                      rx="3.5"
+                                      fill="rgba(11, 18, 38, 0.92)"
+                                      stroke="#00f5a0"
+                                      strokeWidth="1"
+                                      filter="url(#neonGlowMint)"
+                                    />
+                                    <text x="0" y="2.5" textAnchor="middle" fontSize="8.5" fontWeight="800" fill="#00f5a0">
+                                      {pt.pct}%
+                                    </text>
+                                  </g>
                                   {/* Angled Partner Name */}
-                                  <g transform={`translate(${pt.x}, ${vBaseY + 16}) rotate(-40)`}>
-                                    <text x="0" y="0" textAnchor="end" fontSize="12" fontWeight="700" fill="var(--text-primary)">
+                                  <g transform={`translate(${pt.x}, ${vBaseY + 14}) rotate(-30)`}>
+                                    <text x="0" y="0" textAnchor="end" fontSize="11" fontWeight="650" fill="#f8fafc" letterSpacing="-0.01em">
                                       {pt.partner.partner.username}
                                     </text>
                                   </g>
@@ -2565,31 +2789,43 @@ export default function PartnerWorkloadDashboard({ isEmbedded = false }: Partner
         )}
       </div>
 
-      {/* ─── Task Drilldown Modal ─── */}
-      {drilldownPartner && (
-        <div style={{
-          position: 'fixed',
-          inset: 0,
-          background: 'rgba(0,0,0,0.45)',
-          backdropFilter: 'blur(6px)',
-          zIndex: 100,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: '20px'
-        }}>
-          <div style={{
-            background: 'var(--bg-secondary)',
-            border: '1px solid var(--border)',
-            borderRadius: '16px',
-            width: '100%',
-            maxWidth: '840px',
-            maxHeight: '85vh',
+      {/* ─── Task Drilldown Modal (Portaled to document.body) ─── */}
+      {mounted && drilldownPartner && createPortal(
+        <div
+          onClick={() => setDrilldownPartner(null)}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            width: '100vw',
+            height: '100vh',
+            background: 'rgba(0,0,0,0.55)',
+            backdropFilter: 'blur(6px)',
+            zIndex: 9999,
             display: 'flex',
-            flexDirection: 'column',
-            boxShadow: '0 20px 45px rgba(0,0,0,0.25)',
-            overflow: 'hidden'
-          }}>
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '20px',
+            boxSizing: 'border-box'
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: 'var(--bg-secondary)',
+              border: '1px solid var(--border)',
+              borderRadius: '16px',
+              width: '100%',
+              maxWidth: '840px',
+              maxHeight: '85vh',
+              display: 'flex',
+              flexDirection: 'column',
+              boxShadow: '0 25px 60px rgba(0,0,0,0.3)',
+              overflow: 'hidden'
+            }}
+          >
             {/* Modal Header */}
             <div style={{
               padding: '18px 22px',
@@ -2800,7 +3036,8 @@ export default function PartnerWorkloadDashboard({ isEmbedded = false }: Partner
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

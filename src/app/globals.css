@@ -83,22 +83,45 @@ html.dark .select:focus {
   box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25);
 }
 
+[data-theme="dark"] table,
+html.dark table {
+  background-color: var(--bg-secondary) !important;
+  color: var(--text-primary) !important;
+}
+
+[data-theme="dark"] table thead tr,
+html.dark table thead tr {
+  background: var(--bg-tertiary) !important;
+}
+
 [data-theme="dark"] table th,
 html.dark table th {
-  background: #1a2333 !important;
-  border-bottom-color: #1e293b !important;
-  color: #94a3b8 !important;
+  background: var(--bg-tertiary) !important;
+  border-bottom-color: var(--border) !important;
+  color: var(--text-secondary) !important;
+}
+
+[data-theme="dark"] table tbody tr,
+html.dark table tbody tr {
+  background-color: transparent;
 }
 
 [data-theme="dark"] table td,
 html.dark table td {
-  border-bottom-color: #162032 !important;
-  color: #f8fafc !important;
+  border-bottom-color: var(--border-light) !important;
+  color: var(--text-primary) !important;
 }
 
 [data-theme="dark"] table tr:hover td,
 html.dark table tr:hover td {
-  background: rgba(255, 255, 255, 0.03) !important;
+  background: rgba(255, 255, 255, 0.04) !important;
+}
+
+[data-theme="dark"] .task-filters,
+html.dark .task-filters {
+  background: var(--bg-secondary) !important;
+  border-color: var(--border) !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25) !important;
 }
 
 [data-theme="dark"] .modal-content,
@@ -788,10 +811,56 @@ tr:hover td {
 /* Desktop vs Mobile display toggles */
 .desktop-task-view {
   display: block;
+  width: 100%;
+  max-width: 100%;
+}
+
+.task-table-wrap {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  box-sizing: border-box;
+}
+
+.task-table-wrap table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: auto;
+}
+
+/* Tablet & Smaller Desktop Auto-Fit Scaling (769px - 1280px) */
+@media (min-width: 769px) and (max-width: 1280px) {
+  .desktop-task-view th {
+    padding: 8px 4px !important;
+    font-size: 9.5px !important;
+    letter-spacing: 0.02em !important;
+  }
+  .desktop-task-view td {
+    padding: 6px 4px !important;
+    font-size: 11px !important;
+  }
+  .desktop-task-view select {
+    font-size: 10px !important;
+    padding: 2.5px 5px !important;
+  }
+}
+
+/* Ultra-wide / Large Desktop optimization */
+@media (min-width: 1600px) {
+  .desktop-task-view th {
+    padding: 11px 8px !important;
+    font-size: 11px !important;
+  }
+  .desktop-task-view td {
+    padding: 8px 8px !important;
+    font-size: 12px !important;
+  }
 }
 
 .mobile-task-view {
   display: none;
+  width: 100%;
+  max-width: 100%;
 }
 
 @media (max-width: 768px) {
