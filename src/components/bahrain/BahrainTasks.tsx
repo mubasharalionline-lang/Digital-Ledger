@@ -3917,14 +3917,12 @@ export default function BahrainTasks() {
                               }}
                               onMouseEnter={(e) => {
                                 setHoveredDescTaskId(task.id);
+                                if (tooltipTimeoutRef.current) {
+                                  clearTimeout(tooltipTimeoutRef.current);
+                                  tooltipTimeoutRef.current = null;
+                                }
                                 if (task.description && !isEditingDesc) {
-                                  if (tooltipTimeoutRef.current) {
-                                    clearTimeout(tooltipTimeoutRef.current);
-                                    tooltipTimeoutRef.current = null;
-                                  }
-                                  if (activeTooltipRef.current === task.id) {
-                                    return;
-                                  }
+                                  if (activeTooltipRef.current === task.id) return;
                                   const rect = e.currentTarget.getBoundingClientRect();
                                   const tooltipWidth = 320;
                                   let left = rect.left + (rect.width / 2) - (tooltipWidth / 2);
@@ -3937,6 +3935,9 @@ export default function BahrainTasks() {
                                   activeTooltipRef.current = task.id;
                                   setTooltipPos({ x: left, y: top, align });
                                   setActiveTooltipTaskId(task.id);
+                                } else {
+                                  activeTooltipRef.current = null;
+                                  setActiveTooltipTaskId(null);
                                 }
                               }}
                               onMouseLeave={() => {
@@ -3945,10 +3946,8 @@ export default function BahrainTasks() {
                                   clearTimeout(tooltipTimeoutRef.current);
                                   tooltipTimeoutRef.current = null;
                                 }
-                                tooltipTimeoutRef.current = setTimeout(() => {
-                                  activeTooltipRef.current = null;
-                                  setActiveTooltipTaskId(null);
-                                }, 200);
+                                activeTooltipRef.current = null;
+                                setActiveTooltipTaskId(null);
                               }}
                             >
                               {isEditingDesc ? (
@@ -4076,6 +4075,8 @@ export default function BahrainTasks() {
                                         justifyContent: 'center',
                                         color: isDark ? '#94a3b8' : '#475569',
                                         transition: 'all 0.15s ease',
+                                        opacity: hoveredDescTaskId === task.id ? 1 : 0,
+                                        pointerEvents: hoveredDescTaskId === task.id ? 'auto' : 'none',
                                         height: '19px',
                                         flexShrink: 0,
                                       }}
@@ -4167,19 +4168,19 @@ export default function BahrainTasks() {
                               {task.deadline ? (
                                 <span style={{
                                   fontSize: '11px',
-                                  color: isOverdue ? '#ef4444' : (isDark ? '#fb923c' : '#334155'),
-                                  background: isOverdue ? (isDark ? 'rgba(239, 68, 68, 0.18)' : '#fef2f2') : (isDark ? 'rgba(249, 115, 22, 0.14)' : '#f8fafc'),
-                                  border: isOverdue ? (isDark ? '1px solid rgba(239, 68, 68, 0.45)' : '1px solid #fecaca') : (isDark ? '1px solid rgba(249, 115, 22, 0.35)' : '1px solid #e2e8f0'),
+                                  color: isOverdue ? (isDark ? '#fbbf24' : '#b45309') : (isDark ? '#cbd5e1' : '#475569'),
+                                  background: isOverdue ? (isDark ? 'rgba(245, 158, 11, 0.12)' : '#fffbeb') : (isDark ? 'rgba(255, 255, 255, 0.05)' : '#f8fafc'),
+                                  border: isOverdue ? (isDark ? '1px solid rgba(245, 158, 11, 0.35)' : '1px solid #fde68a') : (isDark ? '1px solid rgba(255, 255, 255, 0.1)' : '1px solid #e2e8f0'),
                                   padding: '2px 5px',
                                   borderRadius: '5px',
-                                  fontWeight: isOverdue ? 700 : 600,
+                                  fontWeight: isOverdue ? 650 : 550,
                                   whiteSpace: 'nowrap',
                                   fontFamily: 'ui-monospace, monospace',
                                   display: 'inline-flex',
                                   alignItems: 'center',
                                   gap: '3px'
                                 }}>
-                                  <Calendar size={10} color={isOverdue ? '#ef4444' : (isDark ? '#fb923c' : '#64748b')} style={{ flexShrink: 0 }} />
+                                  <Calendar size={10} color={isOverdue ? (isDark ? '#fbbf24' : '#d97706') : (isDark ? '#94a3b8' : '#64748b')} style={{ flexShrink: 0 }} />
                                   <span style={{ whiteSpace: 'nowrap' }}>{task.deadline}</span>
                                 </span>
                               ) : (
@@ -5612,7 +5613,7 @@ export default function BahrainTasks() {
             marginTop: tooltipPos.align === 'bottom' ? '-6px' : '0px',
             marginBottom: tooltipPos.align === 'top' ? '-6px' : '0px',
             transform: tooltipPos.align === 'top' ? 'translateY(-100%)' : 'none',
-            pointerEvents: 'auto',
+            pointerEvents: 'none',
           }}
         >
           <div
