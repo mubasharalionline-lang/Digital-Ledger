@@ -30,7 +30,7 @@ export const DEFAULT_TASK_COLUMNS: TaskColumnConfig[] = [
     description: 'Proposal / Engagement Letter Date',
     align: 'left',
     visible: true,
-    minWidth: '85px'
+    minWidth: '95px'
   },
   {
     id: 'company',
@@ -39,7 +39,7 @@ export const DEFAULT_TASK_COLUMNS: TaskColumnConfig[] = [
     description: 'Registered company name',
     align: 'left',
     visible: true,
-    minWidth: '105px'
+    minWidth: '115px'
   },
   {
     id: 'cr_number',
@@ -66,7 +66,7 @@ export const DEFAULT_TASK_COLUMNS: TaskColumnConfig[] = [
     description: 'Detailed task notes & inline edit',
     align: 'left',
     visible: true,
-    minWidth: '100px'
+    minWidth: '130px'
   },
   {
     id: 'desc_updated',
@@ -84,7 +84,7 @@ export const DEFAULT_TASK_COLUMNS: TaskColumnConfig[] = [
     description: 'Urgency level (Urgent, High, Medium, Low)',
     align: 'left',
     visible: true,
-    minWidth: '75px'
+    minWidth: '72px'
   },
   {
     id: 'deadline',
@@ -93,7 +93,7 @@ export const DEFAULT_TASK_COLUMNS: TaskColumnConfig[] = [
     description: 'Scheduled completion deadline',
     align: 'left',
     visible: true,
-    minWidth: '80px'
+    minWidth: '90px'
   },
   {
     id: 'status',
@@ -111,7 +111,7 @@ export const DEFAULT_TASK_COLUMNS: TaskColumnConfig[] = [
     description: 'Assigned audit controller',
     align: 'left',
     visible: true,
-    minWidth: '85px'
+    minWidth: '80px'
   },
   {
     id: 'assigned_to',
@@ -129,7 +129,7 @@ export const DEFAULT_TASK_COLUMNS: TaskColumnConfig[] = [
     description: 'Quick actions (View Details, Edit, WhatsApp, Delete)',
     align: 'center',
     visible: true,
-    minWidth: '32px'
+    minWidth: '36px'
   }
 ];
 

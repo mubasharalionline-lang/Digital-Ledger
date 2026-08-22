@@ -1,4 +1,3 @@
-import * as XLSX from 'xlsx';
 import type { Task, Company, User, TaskType } from './supabase';
 
 interface ExportCtx {
@@ -97,7 +96,8 @@ export function filterTasks(tasks: Task[], filter: {
   });
 }
 
-export function exportExcel(filteredTasks: Task[], ctx: ExportCtx, label: string) {
+export async function exportExcel(filteredTasks: Task[], ctx: ExportCtx, label: string) {
+  const XLSX = await import('xlsx');
   const rows = filteredTasks.map(t => resolveTask(t, ctx)).sort((a, b) => a.Company.localeCompare(b.Company));
   const wb = XLSX.utils.book_new();
   const ws = XLSX.utils.json_to_sheet(rows);
@@ -142,7 +142,8 @@ export function exportFullJson(ctx: ExportCtx) {
   URL.revokeObjectURL(url);
 }
 
-export function exportFullExcel(ctx: ExportCtx) {
+export async function exportFullExcel(ctx: ExportCtx) {
+  const XLSX = await import('xlsx');
   const wb = XLSX.utils.book_new();
   // Tasks
   const taskRows = ctx.tasks.map(t => resolveTask(t, ctx));
@@ -175,11 +176,12 @@ export interface TaskMgmtExportCtx extends ExportCtx {
   descUpdateMap?: Record<string, string>;
 }
 
-export function exportTaskManagementExcel(
+export async function exportTaskManagementExcel(
   taskList: Task[],
   ctx: TaskMgmtExportCtx,
   options?: { title?: string; filenamePrefix?: string }
 ) {
+  const XLSX = await import('xlsx');
   const title = options?.title || 'Task Management';
   const prefix = options?.filenamePrefix || 'Task_Management';
 

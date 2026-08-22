@@ -388,14 +388,11 @@ export default function InviteSignupPage({ params }: { params: Promise<{ token: 
                 {invite.permissions?.can_view_companies && (
                   <span style={permBadge}>✓ View Companies</span>
                 )}
-                {invite.permissions?.can_message && (
-                  <span style={permBadge}>✓ Messaging</span>
-                )}
                 {invite.permissions?.auditor_access?.length > 0 && (
                   <span style={permBadge}>✓ {invite.permissions.auditor_access.length} Auditor(s)</span>
                 )}
                 {!invite.permissions?.can_update_status && !invite.permissions?.can_view_companies &&
-                 !invite.permissions?.can_message && (!invite.permissions?.auditor_access || invite.permissions.auditor_access.length === 0) && (
+                 (!invite.permissions?.auditor_access || invite.permissions.auditor_access.length === 0) && (
                   <span style={{ ...permBadge, background: '#fef3c7', color: '#92400e' }}>Default Access</span>
                 )}
               </div>

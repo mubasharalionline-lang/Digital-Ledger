@@ -23,7 +23,6 @@ import {
   Briefcase,
   CheckCircle2,
   Building2,
-  MessageSquare,
   Activity,
   ExternalLink,
   ChevronRight,
@@ -64,7 +63,6 @@ export default function StaffPage() {
   // Permissions state
   const [canUpdateStatus, setCanUpdateStatus] = useState(true);
   const [canViewCompanies, setCanViewCompanies] = useState(false);
-  const [canMessage, setCanMessage] = useState(false);
   const [auditorAccess, setAuditorAccess] = useState<string[]>([]);
   const [allAuditors, setAllAuditors] = useState<any[]>([]);
   const [showAuditorList, setShowAuditorList] = useState(false);
@@ -195,7 +193,6 @@ export default function StaffPage() {
         permissions: {
           can_update_status: canUpdateStatus,
           can_view_companies: canViewCompanies,
-          can_message: canMessage,
           auditor_access: auditorAccess,
         }
       };
@@ -217,7 +214,6 @@ export default function StaffPage() {
         permissions: {
           can_update_status: canUpdateStatus,
           can_view_companies: canViewCompanies,
-          can_message: canMessage,
           auditor_access: auditorAccess,
         }
       });
@@ -248,7 +244,6 @@ export default function StaffPage() {
     setFormRole('Accountant');
     setCanUpdateStatus(true);
     setCanViewCompanies(false);
-    setCanMessage(false);
     setAuditorAccess([]);
     setShowAuditorList(false);
     setAuditorSearch('');
@@ -263,7 +258,6 @@ export default function StaffPage() {
     setFormRole(member.role);
     setCanUpdateStatus(member.permissions?.can_update_status ?? true);
     setCanViewCompanies(member.permissions?.can_view_companies ?? false);
-    setCanMessage(member.permissions?.can_message ?? false);
     setAuditorAccess(member.permissions?.auditor_access || []);
     setShowAuditorList((member.permissions?.auditor_access || []).length > 0);
     setAuditorSearch('');
@@ -920,20 +914,6 @@ export default function StaffPage() {
                                   >
                                     <Building2 size={10} /> Companies
                                   </span>
-
-                                  <span
-                                    title={member.permissions?.can_message ? "Can send messages: Enabled" : "Can send messages: Disabled"}
-                                    style={{
-                                      fontSize: '10.5px', fontWeight: 600,
-                                      color: member.permissions?.can_message ? '#0284c7' : '#94a3b8',
-                                      background: member.permissions?.can_message ? '#f0f9ff' : '#f8fafc',
-                                      padding: '2px 6px', borderRadius: '5px',
-                                      border: member.permissions?.can_message ? '1px solid #bae6fd' : '1px solid #e2e8f0',
-                                      display: 'inline-flex', alignItems: 'center', gap: '3px'
-                                    }}
-                                  >
-                                    <MessageSquare size={10} /> Messages
-                                  </span>
                                 </>
                               )}
                             </div>
@@ -1194,16 +1174,6 @@ export default function StaffPage() {
                                 display: 'inline-flex', alignItems: 'center', gap: '3px'
                               }}>
                                 <Building2 size={10} /> Companies
-                              </span>
-                              <span style={{
-                                fontSize: '10.5px', fontWeight: 600,
-                                color: member.permissions?.can_message ? '#0284c7' : '#94a3b8',
-                                background: member.permissions?.can_message ? '#f0f9ff' : '#f8fafc',
-                                padding: '2px 6px', borderRadius: '5px',
-                                border: member.permissions?.can_message ? '1px solid #bae6fd' : '1px solid #e2e8f0',
-                                display: 'inline-flex', alignItems: 'center', gap: '3px'
-                              }}>
-                                <MessageSquare size={10} /> Messages
                               </span>
                             </>
                           )}
@@ -1554,27 +1524,6 @@ export default function StaffPage() {
                       type="checkbox"
                       checked={canViewCompanies}
                       onChange={e => setCanViewCompanies(e.target.checked)}
-                      style={{ width: '16px', height: '16px', cursor: 'pointer' }}
-                    />
-                  </label>
-
-                  {/* Permission 3: Messages */}
-                  <label style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    padding: '8px 12px', background: '#ffffff', borderRadius: '8px',
-                    border: '1px solid #e2e8f0', cursor: 'pointer'
-                  }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <MessageSquare size={14} color="#0284c7" />
-                      <div>
-                        <div style={{ fontSize: '12.5px', fontWeight: 600, color: '#0f172a' }}>Internal Messaging</div>
-                        <div style={{ fontSize: '11px', color: '#64748b' }}>Send and receive internal task updates & notes</div>
-                      </div>
-                    </div>
-                    <input
-                      type="checkbox"
-                      checked={canMessage}
-                      onChange={e => setCanMessage(e.target.checked)}
                       style={{ width: '16px', height: '16px', cursor: 'pointer' }}
                     />
                   </label>

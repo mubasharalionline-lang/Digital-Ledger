@@ -35,7 +35,6 @@ import {
   EyeOff,
   Activity,
   Building2,
-  MessageSquare,
   Columns3,
   ChevronUp,
   ChevronDown,
@@ -1111,9 +1110,6 @@ export default function SettingsPage() {
                       </div>
                       <div style={{ fontSize: '12.5px', color: user.permissions?.can_view_companies ? 'var(--text-primary)' : 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
                         <Building2 size={14} color={user.permissions?.can_view_companies ? '#3b82f6' : '#94a3b8'} /> Company Directory Access ({user.permissions?.can_view_companies ? 'Enabled' : 'Disabled'})
-                      </div>
-                      <div style={{ fontSize: '12.5px', color: user.permissions?.can_message ? 'var(--text-primary)' : 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <MessageSquare size={14} color={user.permissions?.can_message ? '#06b6d4' : '#94a3b8'} /> Internal Task Messaging ({user.permissions?.can_message ? 'Enabled' : 'Disabled'})
                       </div>
                     </>
                   )}

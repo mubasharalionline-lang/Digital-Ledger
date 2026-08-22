@@ -82,101 +82,83 @@ export default function BahrainDashboard() {
     const cachedData = sessionStorage.getItem(cacheKey);
     const cacheTime = sessionStorage.getItem(cacheTimeKey);
     
-    let useCache = false;
-
     if (cachedData && cacheTime) {
-      const isFresh = Date.now() - parseInt(cacheTime) < 3 * 60 * 1000; // 3 mins TTL
-      if (isFresh) {
-        try {
-          const parsed = JSON.parse(cachedData);
-          setTotalTasks(parsed.totalTasks);
-          setTotalDailyTasks(parsed.totalDailyTasks || 0);
-          setTotalCompanies(parsed.totalCompanies);
-          setActivePartners(parsed.activePartners);
-          setOverdueTasks(parsed.overdueTasks);
-          setTaskTypeStats(parsed.taskTypeStats);
-          setStatusCounts(parsed.statusCounts);
-          setRecentModifications(parsed.recentModifications || []);
-          setLoading(false);
-          useCache = true;
-        } catch (e) {}
-      }
-    }
-
-    if (useCache) {
-      return;
+      try {
+        const parsed = JSON.parse(cachedData);
+        setTotalTasks(parsed.totalTasks);
+        setTotalDailyTasks(parsed.totalDailyTasks || 0);
+        setTotalCompanies(parsed.totalCompanies);
+        setActivePartners(parsed.activePartners);
+        setOverdueTasks(parsed.overdueTasks);
+        setTaskTypeStats(parsed.taskTypeStats);
+        setStatusCounts(parsed.statusCounts);
+        setRecentModifications(parsed.recentModifications || []);
+        setLoading(false);
+        // If cache is fresh (< 60s), skip network entirely
+        if (Date.now() - parseInt(cacheTime) < 60 * 1000) {
+          return;
+        }
+      } catch (e) {}
     }
 
     try {
       const country = getDataCountry();
+      const taskCountry = country || 'Bahrain';
       const { user: u } = getSession();
       const isAdminUser = isAdmin(u);
 
-      // Fire independent queries simultaneously
-      const [companiesRes, usersRes, taskTypesRes, descLogsRes, generalLogsRes] = await Promise.all([
-        supabase.from('companies').select('id, company_name, notes, country, created_at').eq('country', country || 'Bahrain'),
+      // Fire ALL independent queries in parallel — ZERO waterfalls
+      const [companiesRes, usersRes, taskTypesRes, tasksRes, dailyTasksRes, recentLogsRes] = await Promise.all([
+        supabase.from('companies').select('id, company_name, notes, country, created_at').eq('country', taskCountry),
         supabase.from('users').select('id, username, role, country, created_at'),
-        supabase.from('task_types').select('id, name, category, jurisdiction, active, country, created_at').eq('country', country || 'Bahrain'),
-        supabase.from('status_log').select('id, task_id, status, updated_by, remarks, created_at').ilike('remarks', '%Description%').order('created_at', { ascending: false }).limit(300),
-        supabase.from('status_log').select('id, task_id, status, updated_by, remarks, created_at').order('created_at', { ascending: false }).limit(200)
+        supabase.from('task_types').select('id, name, category, jurisdiction, active, country, created_at').eq('country', taskCountry),
+        supabase.from('tasks').select('id, title, company_id, assigned_to, assigned_partners, status, priority, deadline, task_type_id, task_type_ids, auditor_id, description, is_daily, country, created_at').eq('country', taskCountry).neq('is_daily', true),
+        supabase.from('tasks').select('id', { count: 'exact', head: true }).eq('is_daily', true).eq('country', taskCountry),
+        supabase.from('status_log').select('id, task_id, status, updated_by, remarks, created_at').order('created_at', { ascending: false }).limit(50)
       ]);
 
       const companyList = companiesRes.data || [];
       const usersList = usersRes.data || [];
       const taskTypesList = taskTypesRes.data || [];
-      const descLogs = descLogsRes.data || [];
-      const generalLogs = generalLogsRes.data || [];
+      let allTasks = tasksRes.data || [];
+      const dailyCount = dailyTasksRes.count || 0;
+      const generalLogs = recentLogsRes.data || [];
 
-      const companyIds = companyList.map(c => c.id);
-      let newTotalCompanies = companyList.length;
-      
       const countryUsers = country ? usersList.filter(usr => !usr.country || usr.country === country) : usersList;
       setActivePartners(countryUsers.filter(usr => usr.role !== 'admin').length);
 
-      // Fetch tasks (depends on companyIds)
-      let taskList: Task[] = [];
+      // Permission filtering for non-admin users
       const userAuditorAccess: string[] = u?.permissions?.auditor_access || [];
-      if (companyIds.length > 0) {
-        let taskQuery = supabase.from('tasks').select('id, title, company_id, assigned_to, assigned_partners, status, priority, deadline, task_type_id, task_type_ids, auditor_id, description, is_daily, country, created_at').in('company_id', companyIds).neq('is_daily', true);
-        const { data: tasks } = await taskQuery;
-        let allTasks = tasks || [];
-
-        if (!isAdminUser && u) {
-          const isTaskAllowed = (t: Task) => {
-            const activePartnerIds = t.assigned_partners && t.assigned_partners.length > 0
-              ? t.assigned_partners
-              : (t.assigned_to ? [t.assigned_to] : []);
-            const isAssigned = activePartnerIds.includes(u.id);
-            const hasAuditorAccess = t.auditor_id ? userAuditorAccess.includes(t.auditor_id) : false;
-            if (userAuditorAccess.length > 0) {
-              return hasAuditorAccess;
-            }
-            return isAssigned && !t.auditor_id;
-          };
-          allTasks = allTasks.filter(isTaskAllowed);
-        }
-        taskList = allTasks;
+      if (!isAdminUser && u) {
+        const isTaskAllowed = (t: Task) => {
+          const activePartnerIds = t.assigned_partners && t.assigned_partners.length > 0
+            ? t.assigned_partners
+            : (t.assigned_to ? [t.assigned_to] : []);
+          const isAssigned = activePartnerIds.includes(u.id);
+          const hasAuditorAccess = t.auditor_id ? userAuditorAccess.includes(t.auditor_id) : false;
+          if (userAuditorAccess.length > 0) {
+            return hasAuditorAccess;
+          }
+          return isAssigned && !t.auditor_id;
+        };
+        allTasks = allTasks.filter(isTaskAllowed);
       }
-      
+      const taskList = allTasks;
+
       let allowedCompanyList = companyList;
       if (!isAdminUser && u) {
         allowedCompanyList = companyList.filter(c => 
           taskList.some(t => t.company_id === c.id)
         );
       }
-      newTotalCompanies = allowedCompanyList.length;
+      const newTotalCompanies = allowedCompanyList.length;
       setTotalCompanies(newTotalCompanies);
       
       const newTotalTasks = taskList.length;
       setTotalTasks(newTotalTasks);
 
       // Daily tasks count
-      const taskCountry = country || 'Bahrain';
-      const { count: dailyCount } = await supabase.from('tasks')
-        .select('id', { count: 'exact', head: true })
-        .eq('is_daily', true)
-        .eq('country', taskCountry);
-      setTotalDailyTasks(dailyCount || 0);
+      setTotalDailyTasks(dailyCount);
 
       // Overdue count
       const today = new Date();
@@ -190,8 +172,8 @@ export default function BahrainDashboard() {
       const ttMap = new Map<string, TaskTypeStats>();
       taskList.forEach(task => {
         if (task.task_type_id && taskTypesList.length > 0) {
-          const typeIds = task.task_type_id.split(',').map(s => s.trim()).filter(Boolean);
-          typeIds.forEach(ttId => {
+          const typeIds: string[] = task.task_type_id.split(',').map((s: string) => s.trim()).filter(Boolean);
+          typeIds.forEach((ttId: string) => {
             const tt = taskTypesList.find(t => t.id === ttId);
             if (tt) {
               if (!ttMap.has(tt.id)) {
@@ -213,13 +195,6 @@ export default function BahrainDashboard() {
       setStatusCounts(newStatusCounts);
 
       // ── Process Recently Modified Description Updates ──
-      const descLogMap = new Map<string, any>();
-      descLogs.forEach((log: any) => {
-        if (!descLogMap.has(log.task_id)) {
-          descLogMap.set(log.task_id, log);
-        }
-      });
-
       const genLogMap = new Map<string, any>();
       generalLogs.forEach((log: any) => {
         if (!genLogMap.has(log.task_id)) {
@@ -230,19 +205,19 @@ export default function BahrainDashboard() {
       const processedRecentList: RecentTaskItem[] = [];
       const seenTasks = new Set<string>();
 
-      // 1. Process tasks with description logs
-      descLogs.forEach((log: any) => {
+      // 1. Process tasks present in recent logs
+      generalLogs.forEach((log: any) => {
         const matchingTask = taskList.find(t => t.id === log.task_id);
         if (matchingTask && !seenTasks.has(matchingTask.id)) {
           seenTasks.add(matchingTask.id);
           const comp = companyList.find(c => c.id === matchingTask.company_id);
           
           // Task Type resolution
-          const typeIds = (matchingTask.task_type_ids && matchingTask.task_type_ids.length > 0)
+          const typeIds: string[] = (matchingTask.task_type_ids && matchingTask.task_type_ids.length > 0)
             ? matchingTask.task_type_ids
-            : (matchingTask.task_type_id ? matchingTask.task_type_id.split(',').map(s => s.trim()) : []);
+            : (matchingTask.task_type_id ? matchingTask.task_type_id.split(',').map((s: string) => s.trim()).filter(Boolean) : []);
           const ttNames = typeIds
-            .map(id => taskTypesList.find(tt => tt.id === id)?.name)
+            .map((id: string) => taskTypesList.find(tt => tt.id === id)?.name)
             .filter(Boolean)
             .join(', ') || 'General';
 
@@ -251,7 +226,7 @@ export default function BahrainDashboard() {
             ? matchingTask.assigned_partners
             : (matchingTask.assigned_to ? [matchingTask.assigned_to] : []);
           const assignedNames = partnerIds
-            .map(id => usersList.find(usr => usr.id === id)?.username)
+            .map((id: string) => usersList.find(usr => usr.id === id)?.username)
             .filter(Boolean)
             .join(', ') || 'Unassigned';
 
@@ -281,11 +256,11 @@ export default function BahrainDashboard() {
           const comp = companyList.find(c => c.id === task.company_id);
           const genLog = genLogMap.get(task.id);
           
-          const typeIds = (task.task_type_ids && task.task_type_ids.length > 0)
+          const typeIds: string[] = (task.task_type_ids && task.task_type_ids.length > 0)
             ? task.task_type_ids
-            : (task.task_type_id ? task.task_type_id.split(',').map(s => s.trim()) : []);
+            : (task.task_type_id ? task.task_type_id.split(',').map((s: string) => s.trim()).filter(Boolean) : []);
           const ttNames = typeIds
-            .map(id => taskTypesList.find(tt => tt.id === id)?.name)
+            .map((id: string) => taskTypesList.find(tt => tt.id === id)?.name)
             .filter(Boolean)
             .join(', ') || 'General';
 
@@ -293,7 +268,7 @@ export default function BahrainDashboard() {
             ? task.assigned_partners
             : (task.assigned_to ? [task.assigned_to] : []);
           const assignedNames = partnerIds
-            .map(id => usersList.find(usr => usr.id === id)?.username)
+            .map((id: string) => usersList.find(usr => usr.id === id)?.username)
             .filter(Boolean)
             .join(', ') || 'Unassigned';
 
@@ -325,7 +300,7 @@ export default function BahrainDashboard() {
       const serializableTaskTypeStats = newTaskTypeStats.map(s => ({ ...s, companies: Array.from(s.companies) }));
       sessionStorage.setItem(cacheKey, JSON.stringify({
         totalTasks: newTotalTasks,
-        totalDailyTasks: dailyCount || 0,
+        totalDailyTasks: dailyCount,
         totalCompanies: newTotalCompanies,
         activePartners: usersList.filter(usr => usr.role !== 'admin').length,
         overdueTasks: newOverdueTasks,

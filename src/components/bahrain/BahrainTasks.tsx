@@ -365,8 +365,6 @@ export default function BahrainTasks() {
     const cachedData = sessionStorage.getItem(cacheKey);
     const cacheTime = sessionStorage.getItem(cacheTimeKey);
 
-    let hadCache = false;
-
     // Show cached data instantly for zero-wait UI
     if (cachedData && cacheTime) {
       const age = Date.now() - parseInt(cacheTime);
@@ -383,35 +381,45 @@ export default function BahrainTasks() {
         if (parsed.statusObjects) setStatusObjects(parsed.statusObjects);
         if (parsed.descUpdateMap) setDescUpdateMap(parsed.descUpdateMap);
         setLoading(false);
-        hadCache = true;
-        // If cache is fresh (< 2 min), skip network entirely
-        if (age < 2 * 60 * 1000) return;
+        // If cache is fresh (< 60s), skip network entirely
+        if (age < 60 * 1000) return;
       } catch (e) { }
     }
 
-    // Fetch fresh data (runs in background if we had cache)
+    // Fetch fresh data in parallel — ZERO waterfalls
     try {
+      const targetCountry = dataCountry || 'Bahrain';
       let usersQuery = supabase.from('users').select('id, username, role, country, permissions, created_at').order('created_at', { ascending: false });
       if (dataCountry) {
         usersQuery = usersQuery.eq('country', dataCountry);
       }
 
       const compsPromise = (async () => {
-        const res = await supabase.from('companies').select('id, company_name, notes, country, cr_number, cr_link, google_drive_link, created_at').eq('country', dataCountry || 'Bahrain');
+        const res = await supabase.from('companies').select('id, company_name, notes, country, cr_number, cr_link, google_drive_link, created_at').eq('country', targetCountry);
         if (res.error) {
           console.warn('Companies select with google_drive_link failed, falling back...', res.error);
-          const fb1 = await supabase.from('companies').select('id, company_name, notes, country, cr_number, cr_link, created_at').eq('country', dataCountry || 'Bahrain');
+          const fb1 = await supabase.from('companies').select('id, company_name, notes, country, cr_number, cr_link, created_at').eq('country', targetCountry);
           if (fb1.error) {
-            return supabase.from('companies').select('id, company_name, notes, country, cr_number, created_at').eq('country', dataCountry || 'Bahrain');
+            return supabase.from('companies').select('id, company_name, notes, country, cr_number, created_at').eq('country', targetCountry);
           }
           return fb1;
         }
         return res;
       })();
 
-      const [compsRes, ttRes, usersRes, statusRes, audRes, descLogsRes] = await Promise.all([
+      const tasksPromise = (async () => {
+        const { data: t, error: tErr } = await supabase.from('tasks').select('id, title, company_id, assigned_to, assigned_partners, status, priority, deadline, admin_note, task_type_id, task_type_ids, auditor_id, description, is_daily, country, pl_uploaded, pl_date, created_at').eq('country', targetCountry).neq('is_daily', true);
+        if (tErr) {
+          console.warn('pl_date column query fallback:', tErr.message);
+          const { data: fallbackTasks } = await supabase.from('tasks').select('id, title, company_id, assigned_to, assigned_partners, status, priority, deadline, admin_note, task_type_id, task_type_ids, auditor_id, description, is_daily, country, pl_uploaded, created_at').eq('country', targetCountry).neq('is_daily', true);
+          return fallbackTasks || [];
+        }
+        return t || [];
+      })();
+
+      const [compsRes, ttRes, usersRes, statusRes, audRes, taskList] = await Promise.all([
         compsPromise,
-        supabase.from('task_types').select('id, name, category, jurisdiction, status_options, active, created_at').eq('active', true).eq('country', dataCountry || 'Bahrain'),
+        supabase.from('task_types').select('id, name, category, jurisdiction, status_options, active, created_at').eq('active', true).eq('country', targetCountry),
         usersQuery,
         dataCountry
           ? supabase.from('statuses').select('name, active, task_type_ids').eq('country', dataCountry)
@@ -419,7 +427,7 @@ export default function BahrainTasks() {
         dataCountry
           ? supabase.from('auditors').select('id, name, country').eq('country', dataCountry).order('name')
           : supabase.from('auditors').select('id, name, country').order('name'),
-        supabase.from('status_log').select('task_id, created_at, remarks').ilike('remarks', '%Description%').order('created_at', { ascending: false }).limit(5000)
+        tasksPromise
       ]);
 
       const companyList = compsRes.data || [];
@@ -437,28 +445,6 @@ export default function BahrainTasks() {
       // Store full status objects for task-type filtering
       const sObjs = activeStatuses.map(s => ({ name: s.name, task_type_ids: s.task_type_ids || null }));
       setStatusObjects(sObjs);
-
-      // Build map of latest description update dates
-      const descMap: Record<string, string> = {};
-      (descLogsRes.data || []).forEach((l: any) => {
-        if (!descMap[l.task_id]) {
-          descMap[l.task_id] = l.created_at;
-        }
-      });
-      setDescUpdateMap(descMap);
-
-      const companyIds = companyList.map(c => c.id);
-      let taskList: Task[] = [];
-      if (companyIds.length > 0) {
-        const { data: t, error: tErr } = await supabase.from('tasks').select('id, title, company_id, assigned_to, assigned_partners, status, priority, deadline, admin_note, task_type_id, task_type_ids, auditor_id, description, is_daily, country, pl_uploaded, pl_date, created_at').in('company_id', companyIds).neq('is_daily', true);
-        if (tErr) {
-          console.warn('pl_date column query fallback:', tErr.message);
-          const { data: fallbackTasks } = await supabase.from('tasks').select('id, title, company_id, assigned_to, assigned_partners, status, priority, deadline, admin_note, task_type_id, task_type_ids, auditor_id, description, is_daily, country, pl_uploaded, created_at').in('company_id', companyIds).neq('is_daily', true);
-          taskList = fallbackTasks || [];
-        } else {
-          taskList = t || [];
-        }
-      }
 
       let filteredTaskList = taskList;
       let filteredCompanyList = companyList;
@@ -486,7 +472,7 @@ export default function BahrainTasks() {
         tasks: filteredTaskList,
         dynamicStatuses: resolvedStatuses,
         statusObjects: sObjs,
-        descUpdateMap: descMap
+        descUpdateMap
       }));
       sessionStorage.setItem(cacheTimeKey, Date.now().toString());
 
@@ -497,6 +483,37 @@ export default function BahrainTasks() {
   }, [dataCountry]);
 
   useEffect(() => { loadData(); }, [loadData]);
+
+  // Targeted Description Logs: Fetch logs on-demand when description filter is activated
+  useEffect(() => {
+    if (!filterDescUpdated || filterDescUpdated === 'no_desc' || filterDescUpdated === 'has_desc') return;
+    let isMounted = true;
+    let query = supabase.from('status_log').select('task_id, created_at, remarks').ilike('remarks', '%Description%');
+    if (filterDescUpdated === '24h') {
+      query = query.gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
+    } else if (filterDescUpdated === '7d') {
+      query = query.gte('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString());
+    } else if (filterDescUpdated === '30d') {
+      query = query.gte('created_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString());
+    } else if (filterDescUpdated === 'updated') {
+      query = query.limit(500);
+    }
+    query.order('created_at', { ascending: false }).then(({ data: filterLogs }) => {
+      if (!isMounted || !filterLogs || filterLogs.length === 0) return;
+      setDescUpdateMap(prev => {
+        const next = { ...prev };
+        let changed = false;
+        filterLogs.forEach((l: any) => {
+          if (!next[l.task_id] || new Date(l.created_at) > new Date(next[l.task_id])) {
+            next[l.task_id] = l.created_at;
+            changed = true;
+          }
+        });
+        return changed ? next : prev;
+      });
+    });
+    return () => { isMounted = false; };
+  }, [filterDescUpdated]);
 
   // Close action menu when clicking outside or scrolling
   useEffect(() => {
@@ -623,7 +640,40 @@ export default function BahrainTasks() {
   const endIndex = pageSize === 'all' ? totalCount : Math.min(totalCount, startIndex + (pageSize as number));
   const paginatedTasks = pageSize === 'all' ? filtered : filtered.slice(startIndex, endIndex);
 
-  // Check for openDesc URL param
+  // Targeted Description Logs: Fetch description update logs only for visible page tasks
+  useEffect(() => {
+    if (!paginatedTasks || paginatedTasks.length === 0) return;
+    const missingIds = paginatedTasks
+      .filter(t => Boolean(t.description && t.description.trim().length > 0))
+      .map(t => t.id)
+      .filter(id => !descUpdateMap[id]);
+    
+    if (missingIds.length === 0) return;
+
+    let isMounted = true;
+    supabase
+      .from('status_log')
+      .select('task_id, created_at, remarks')
+      .in('task_id', missingIds)
+      .ilike('remarks', '%Description%')
+      .order('created_at', { ascending: false })
+      .then(({ data: logs }) => {
+        if (!isMounted || !logs || logs.length === 0) return;
+        setDescUpdateMap(prev => {
+          const next = { ...prev };
+          let changed = false;
+          logs.forEach((l: any) => {
+            if (!next[l.task_id] || new Date(l.created_at) > new Date(next[l.task_id])) {
+              next[l.task_id] = l.created_at;
+              changed = true;
+            }
+          });
+          return changed ? next : prev;
+        });
+      });
+
+    return () => { isMounted = false; };
+  }, [paginatedTasks, descUpdateMap]);
   useEffect(() => {
     const openDescId = searchParams.get('openDesc');
 
@@ -1070,7 +1120,7 @@ export default function BahrainTasks() {
   };
 
   // ─── Professional Excel Export Handler ───
-  const handleExportExcel = (mode: 'all' | 'filtered' | 'selected' = 'filtered') => {
+  const handleExportExcel = async (mode: 'all' | 'filtered' | 'selected' = 'filtered') => {
     let listToExport: Task[] = [];
     let title = 'Task Management';
     let prefix = 'Task_Management';
@@ -1095,7 +1145,7 @@ export default function BahrainTasks() {
     }
 
     try {
-      exportTaskManagementExcel(listToExport, {
+      await exportTaskManagementExcel(listToExport, {
         tasks,
         companies,
         partners,
@@ -1115,7 +1165,7 @@ export default function BahrainTasks() {
     }
   };
 
-  const handleExportTasks = () => {
+  const handleExportTasks = async () => {
     const listToExport = selectedTaskIds.length > 0
       ? tasks.filter(t => selectedTaskIds.includes(t.id))
       : filtered;
@@ -1126,7 +1176,7 @@ export default function BahrainTasks() {
     }
 
     try {
-      exportTaskManagementExcel(listToExport, {
+      await exportTaskManagementExcel(listToExport, {
         tasks,
         country: dataCountry || 'Bahrain',
         companies,
@@ -1535,11 +1585,11 @@ export default function BahrainTasks() {
     if (!isDark) {
       switch (p) {
         case 'Urgent':
-        case 'Critical': return { bg: '#E74C3C', color: '#fff', border: 'rgba(0,0,0,0.06)' };
-        case 'High': return { bg: '#F39C12', color: '#fff', border: 'rgba(0,0,0,0.06)' };
-        case 'Medium': return { bg: '#3498DB', color: '#fff', border: 'rgba(0,0,0,0.06)' };
-        case 'Low': return { bg: '#95A5A6', color: '#fff', border: 'rgba(0,0,0,0.06)' };
-        default: return { bg: '#95A5A6', color: '#fff', border: 'rgba(0,0,0,0.06)' };
+        case 'Critical': return { bg: '#fef2f2', color: '#dc2626', border: '#fecaca' };
+        case 'High': return { bg: '#fffbeb', color: '#d97706', border: '#fde68a' };
+        case 'Medium': return { bg: '#eff6ff', color: '#2563eb', border: '#bfdbfe' };
+        case 'Low': return { bg: '#f8fafc', color: '#475569', border: '#e2e8f0' };
+        default: return { bg: '#f8fafc', color: '#64748b', border: '#e2e8f0' };
       }
     }
     switch (p) {
@@ -3254,18 +3304,15 @@ export default function BahrainTasks() {
         </Modal>
       )}
 
-      {/* Helper function to render a single column cell dynamically based on user order */}
-      {(() => null)()}
-
       {/* Tasks Table — Desktop View (>768px) */}
-      <div className="desktop-task-view" ref={containerRef} style={{ width: '100%', maxWidth: '100%' }}>
+      <div className="desktop-task-view" style={{ width: '100%', maxWidth: '100%', minWidth: 0 }}>
         <div className="task-table-wrap" style={{
-          width: '100%', maxWidth: '100%', overflowX: 'auto', borderRadius: '18px',
+          width: '100%', maxWidth: '100%', minWidth: 0, overflowX: 'auto', borderRadius: '18px',
           boxShadow: 'var(--card-shadow)',
           border: '1px solid var(--border)', background: 'var(--bg-card, var(--bg-secondary))',
           WebkitOverflowScrolling: 'touch'
         }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', background: 'var(--bg-card, var(--bg-secondary))', tableLayout: 'auto' }}>
+          <table style={{ width: '100%', minWidth: '100%', borderCollapse: 'collapse', background: 'var(--bg-card, var(--bg-secondary))', tableLayout: 'fixed' }}>
             <thead>
               <tr style={{
                 background: 'var(--bg-tertiary)',
@@ -3273,7 +3320,7 @@ export default function BahrainTasks() {
               }}>
                 {multiSelectMode && (
                   <th style={{
-                    padding: '10px 4px', textAlign: 'center', width: '32px', minWidth: '32px',
+                    padding: '10px 4px', textAlign: 'center', width: '34px', minWidth: '34px', maxWidth: '34px',
                     borderBottom: '1.5px solid var(--border)'
                   }}>
                     <input
@@ -3291,8 +3338,8 @@ export default function BahrainTasks() {
                 )}
                 {visibleColumns.length === 0 ? (
                   <th style={{
-                    padding: '10px 14px', textAlign: 'left',
-                    fontSize: '11px', fontWeight: 700, color: '#dc2626',
+                    padding: '12px 14px', textAlign: 'left',
+                    fontSize: '11.5px', fontWeight: 700, color: '#dc2626',
                     borderBottom: '1.5px solid var(--border)'
                   }}>
                     No Columns Visible (Enable columns in Columns menu or Settings)
@@ -3300,23 +3347,41 @@ export default function BahrainTasks() {
                 ) : (
                   visibleColumns.map((col) => {
                     const isActions = col.id === 'actions';
-                    const isPl = col.id === 'pl';
                     const colCfg = getColumnColorConfig(col.id);
+                    const getHeaderWidth = (id: string) => {
+                      switch (id) {
+                        case 'actions': return '38px';
+                        case 'pl': return '9%';
+                        case 'company': return '14%';
+                        case 'cr_number': return '8%';
+                        case 'task_type': return '8.5%';
+                        case 'description': return '17%';
+                        case 'desc_updated': return '8%';
+                        case 'priority': return '6.5%';
+                        case 'deadline': return '9.5%';
+                        case 'status': return '9.5%';
+                        case 'auditor': return '7%';
+                        case 'assigned_to': return '9.5%';
+                        default: return 'auto';
+                      }
+                    };
+
                     return (
                       <th key={col.id} style={{
                         padding: isActions ? '10px 2px' : '10px 6px',
                         textAlign: (isActions ? 'center' : col.align) as any,
-                        fontSize: '10px', fontWeight: 750, textTransform: 'uppercase',
-                        letterSpacing: '0.04em', color: colCfg.headerColor, whiteSpace: 'nowrap',
+                        fontSize: '11px', fontWeight: 700, textTransform: 'uppercase',
+                        letterSpacing: '0.04em', color: isDark ? colCfg.headerColor : 'var(--text-secondary)', whiteSpace: 'nowrap',
                         borderBottom: isDark ? `2px solid ${colCfg.tagBorder || 'var(--border)'}` : '1.5px solid var(--border)',
-                        width: isActions ? '32px' : (isPl ? '95px' : undefined),
-                        minWidth: isActions ? '32px' : (isPl ? '85px' : (col.minWidth || 'auto')),
-                        maxWidth: isActions ? '34px' : undefined
+                        width: isActions ? '38px' : getHeaderWidth(col.id),
+                        maxWidth: isActions ? '40px' : undefined,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis'
                       }}>
                         {isActions ? '' : (
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }}>
                             <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: colCfg.dotColor, display: isDark ? 'inline-block' : 'none', flexShrink: 0, boxShadow: `0 0 6px ${colCfg.dotColor}` }} />
-                            {col.shortLabel !== undefined && col.shortLabel !== '' ? col.shortLabel : col.label}
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{col.shortLabel !== undefined && col.shortLabel !== '' ? col.shortLabel : col.label}</span>
                           </span>
                         )}
                       </th>
@@ -3340,7 +3405,7 @@ export default function BahrainTasks() {
                 </tr>
               ) : paginatedTasks.map(task => {
                 const company = companies.find(c => c.id === task.company_id);
-                const ttIds = task.task_type_ids && task.task_type_ids.length > 0 ? task.task_type_ids : (task.task_type_id ? task.task_type_id.split(',').map(s => s.trim()).filter(Boolean) : []);
+                const ttIds: string[] = task.task_type_ids && task.task_type_ids.length > 0 ? task.task_type_ids : (task.task_type_id ? task.task_type_id.split(',').map((s: string) => s.trim()).filter(Boolean) : []);
                 const ttNames = ttIds.map(id => taskTypes.find(t => t.id === id)?.name).filter(Boolean);
                 const statusOptions = getStatusesForTask(ttIds, statusObjects, dynamicStatuses);
                 if (task.status && !statusOptions.includes(task.status)) {
@@ -3360,12 +3425,12 @@ export default function BahrainTasks() {
                     onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = 'var(--bg-tertiary)'; }}
                     onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = 'transparent'; }}>
                     {multiSelectMode && (
-                      <td style={{ ...compactCell, textAlign: 'center', width: '38px' }} onClick={e => e.stopPropagation()}>
+                      <td style={{ ...compactCell, textAlign: 'center', width: '34px', maxWidth: '34px', padding: '8px 2px', overflow: 'hidden' }} onClick={e => e.stopPropagation()}>
                         <input
                           type="checkbox"
                           checked={isSelected}
                           onChange={() => toggleSelectTask(task.id)}
-                          style={{ cursor: 'pointer', width: '16px', height: '16px', accentColor: 'var(--accent)' }}
+                          style={{ cursor: 'pointer', width: '15px', height: '15px', accentColor: 'var(--accent)' }}
                         />
                       </td>
                     )}
@@ -3378,12 +3443,12 @@ export default function BahrainTasks() {
                           return (
                             <td
                               key={`pl-${task.id}`}
-                              style={{ ...compactCell, width: '95px', minWidth: '85px', padding: '5px 5px' }}
+                              style={{ ...compactCell, overflow: 'hidden', textOverflow: 'ellipsis' }}
                               onMouseEnter={() => setHoveredPlTaskId(task.id)}
                               onMouseLeave={() => setHoveredPlTaskId(null)}
                             >
                               {isEditingPl ? (
-                                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }} onClick={e => e.stopPropagation()}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '3px', width: '100%', minWidth: 0 }} onClick={e => e.stopPropagation()}>
                                   <input
                                     type="date"
                                     autoFocus
@@ -3396,7 +3461,7 @@ export default function BahrainTasks() {
                                     }}
                                     style={{
                                       padding: '2px 4px',
-                                      borderRadius: '6px',
+                                      borderRadius: '5px',
                                       border: isDark ? '1.5px solid #818cf8' : '1.5px solid #2563eb',
                                       fontSize: '10.5px',
                                       fontWeight: 600,
@@ -3405,7 +3470,8 @@ export default function BahrainTasks() {
                                       color: isDark ? 'var(--text-primary)' : '#0f172a',
                                       fontFamily: 'ui-monospace, monospace',
                                       boxShadow: isDark ? '0 2px 8px rgba(99, 102, 241, 0.25)' : '0 2px 8px rgba(37,99,235,0.2)',
-                                      maxWidth: '105px'
+                                      width: '100%',
+                                      minWidth: 0
                                     }}
                                   />
                                   <button
@@ -3423,7 +3489,8 @@ export default function BahrainTasks() {
                                       cursor: 'pointer',
                                       padding: '3px 4px',
                                       display: 'flex',
-                                      alignItems: 'center'
+                                      alignItems: 'center',
+                                      flexShrink: 0
                                     }}
                                   >
                                     <X size={10} />
@@ -3438,11 +3505,11 @@ export default function BahrainTasks() {
                                   }}
                                   title={`PL Date: ${formatPlDateDisplay(task.pl_date)} (Click to edit)`}
                                   style={{
-                                    padding: '2.5px 6px',
-                                    borderRadius: '6px',
+                                    padding: '2px 5px',
+                                    borderRadius: '5px',
                                     border: isDark ? '1px solid rgba(99, 102, 241, 0.45)' : '1px solid #bfdbfe',
                                     cursor: 'pointer',
-                                    fontSize: '10.5px',
+                                    fontSize: '11px',
                                     fontWeight: 650,
                                     transition: 'all 0.15s ease',
                                     background: isDark ? 'rgba(99, 102, 241, 0.15)' : '#eff6ff',
@@ -3465,9 +3532,9 @@ export default function BahrainTasks() {
                                     e.currentTarget.style.boxShadow = isDark ? '0 1px 3px rgba(99, 102, 241, 0.15)' : '0 1px 2px rgba(37,99,235,0.05)';
                                   }}
                                 >
-                                  <Calendar size={10} color={isDark ? '#818cf8' : '#2563eb'} />
-                                  <span>{formatPlDateDisplay(task.pl_date)}</span>
-                                  {hoveredPlTaskId === task.id && <Edit2 size={8} color={isDark ? '#818cf8' : '#3b82f6'} style={{ marginLeft: '1px' }} />}
+                                  <Calendar size={10} color={isDark ? '#818cf8' : '#2563eb'} style={{ flexShrink: 0 }} />
+                                  <span style={{ whiteSpace: 'nowrap' }}>{formatPlDateDisplay(task.pl_date)}</span>
+                                  {hoveredPlTaskId === task.id && <Edit2 size={8} color={isDark ? '#818cf8' : '#3b82f6'} style={{ marginLeft: '1px', flexShrink: 0 }} />}
                                 </button>
                               ) : (
                                 <button
@@ -3490,7 +3557,8 @@ export default function BahrainTasks() {
                                     display: 'inline-flex',
                                     alignItems: 'center',
                                     gap: '3px',
-                                    whiteSpace: 'nowrap'
+                                    whiteSpace: 'nowrap',
+                                    maxWidth: '100%'
                                   }}
                                   onMouseEnter={e => {
                                     e.currentTarget.style.borderColor = isDark ? '#818cf8' : '#3b82f6';
@@ -3503,8 +3571,8 @@ export default function BahrainTasks() {
                                     e.currentTarget.style.background = isDark ? 'rgba(99, 102, 241, 0.08)' : 'transparent';
                                   }}
                                 >
-                                  <Calendar size={9} />
-                                  <span>Set Date</span>
+                                  <Calendar size={9} style={{ flexShrink: 0 }} />
+                                  <span>Set</span>
                                 </button>
                               )}
                             </td>
@@ -3518,11 +3586,11 @@ export default function BahrainTasks() {
                           return (
                             <td
                               key={`comp-${task.id}`}
-                              style={{ ...compactCell, minWidth: '105px', maxWidth: '170px' }}
+                              style={{ ...compactCell, overflow: 'hidden' }}
                               onMouseEnter={() => setHoveredCompanyTaskId(task.id)}
                               onMouseLeave={() => setHoveredCompanyTaskId(null)}
                             >
-                              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', maxWidth: '100%' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', width: '100%', minWidth: 0, overflow: 'hidden' }}>
                                 {hasDrive ? (
                                   <a
                                     href={driveUrl}
@@ -3533,7 +3601,7 @@ export default function BahrainTasks() {
                                     style={{
                                       fontWeight: 650,
                                       fontSize: '12px',
-                                      color: isCompHovered ? (isDark ? '#38bdf8' : '#16a34a') : (isDark ? 'var(--text-primary)' : '#0f172a'),
+                                      color: isCompHovered ? (isDark ? '#38bdf8' : '#16a34a') : 'var(--text-primary)',
                                       textDecoration: isCompHovered ? 'underline' : 'none',
                                       textUnderlineOffset: '2px',
                                       cursor: 'pointer',
@@ -3541,7 +3609,8 @@ export default function BahrainTasks() {
                                       overflow: 'hidden',
                                       textOverflow: 'ellipsis',
                                       whiteSpace: 'nowrap',
-                                      maxWidth: '135px',
+                                      flex: 1,
+                                      minWidth: 0,
                                       letterSpacing: '-0.01em',
                                       transition: 'all 0.15s ease'
                                     }}
@@ -3553,12 +3622,13 @@ export default function BahrainTasks() {
                                     style={{
                                       fontWeight: 650,
                                       fontSize: '12px',
-                                      color: isDark ? 'var(--text-primary)' : '#0f172a',
+                                      color: 'var(--text-primary)',
                                       display: 'inline-block',
                                       overflow: 'hidden',
                                       textOverflow: 'ellipsis',
                                       whiteSpace: 'nowrap',
-                                      maxWidth: '145px',
+                                      flex: 1,
+                                      minWidth: 0,
                                       letterSpacing: '-0.01em'
                                     }}
                                     title={company?.company_name || 'Unknown'}
@@ -3581,9 +3651,9 @@ export default function BahrainTasks() {
                                       width: '18px',
                                       height: '18px',
                                       borderRadius: '4px',
-                                      background: isDark ? 'rgba(34, 197, 94, 0.15)' : '#f0fdf4',
+                                      background: isDark ? 'rgba(34, 197, 94, 0.18)' : '#f0fdf4',
                                       border: isDark ? '1px solid rgba(34, 197, 94, 0.45)' : '1px solid #bbf7d0',
-                                      boxShadow: isDark ? '0 1px 3px rgba(22, 163, 74, 0.15)' : '0 1px 3px rgba(22, 163, 74, 0.15)',
+                                      boxShadow: '0 1px 3px rgba(22, 163, 74, 0.15)',
                                       flexShrink: 0,
                                       cursor: 'pointer',
                                       transition: 'all 0.15s ease',
@@ -3592,11 +3662,11 @@ export default function BahrainTasks() {
                                     onMouseEnter={e => {
                                       e.currentTarget.style.transform = 'scale(1.1)';
                                       e.currentTarget.style.background = isDark ? 'rgba(34, 197, 94, 0.3)' : '#dcfce7';
-                                      e.currentTarget.style.boxShadow = isDark ? '0 2px 8px rgba(34, 197, 94, 0.4)' : '0 2px 6px rgba(22, 163, 74, 0.25)';
+                                      e.currentTarget.style.boxShadow = '0 2px 8px rgba(34, 197, 94, 0.35)';
                                     }}
                                     onMouseLeave={e => {
                                       e.currentTarget.style.transform = 'scale(1)';
-                                      e.currentTarget.style.background = isDark ? 'rgba(34, 197, 94, 0.15)' : '#f0fdf4';
+                                      e.currentTarget.style.background = isDark ? 'rgba(34, 197, 94, 0.18)' : '#f0fdf4';
                                       e.currentTarget.style.boxShadow = '0 1px 3px rgba(22, 163, 74, 0.15)';
                                     }}
                                   >
@@ -3615,7 +3685,7 @@ export default function BahrainTasks() {
                           return (
                             <td
                               key={`cr-${task.id}`}
-                              style={{ ...compactCell, minWidth: '85px', maxWidth: '140px', position: 'relative', cursor: (canManageTask(task) && company) ? 'pointer' : 'default' }}
+                              style={{ ...compactCell, overflow: 'hidden', position: 'relative', cursor: (canManageTask(task) && company) ? 'pointer' : 'default' }}
                               onMouseEnter={() => setHoveredCrTaskId(task.id)}
                               onMouseLeave={() => setHoveredCrTaskId(null)}
                             >
@@ -3626,7 +3696,7 @@ export default function BahrainTasks() {
                                     display: 'flex',
                                     flexDirection: 'column',
                                     gap: '4px',
-                                    minWidth: '190px',
+                                    minWidth: '180px',
                                     position: 'absolute',
                                     zIndex: 20,
                                     background: isDark ? 'var(--bg-card, var(--bg-secondary))' : '#ffffff',
@@ -3636,16 +3706,16 @@ export default function BahrainTasks() {
                                     border: isDark ? '1px solid var(--accent)' : '1px solid #93c5fd',
                                     top: '50%',
                                     transform: 'translateY(-50%)',
-                                    left: '6px'
+                                    left: '4px'
                                   }}
                                 >
-                                  <div style={{ fontSize: '10.5px', fontWeight: 700, color: isDark ? 'var(--text-primary)' : '#1e293b', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                    <span>Edit CR Number & Link</span>
+                                  <div style={{ fontSize: '10.5px', fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                    <span>Edit CR</span>
                                     <button
                                       onClick={() => setInlineEditCrId(null)}
-                                      style={{ background: 'none', border: 'none', color: isDark ? 'var(--text-tertiary)' : '#94a3b8', cursor: 'pointer', padding: '1px' }}
+                                      style={{ background: 'none', border: 'none', color: 'var(--text-tertiary)', cursor: 'pointer', padding: '1px' }}
                                     >
-                                      <X size={12} />
+                                      <X size={11} />
                                     </button>
                                   </div>
                                   <input
@@ -3653,14 +3723,14 @@ export default function BahrainTasks() {
                                     type="text"
                                     value={inlineEditCrValue}
                                     onChange={e => setInlineEditCrValue(e.target.value)}
-                                    placeholder="CR Number (e.g. 12345-1)"
+                                    placeholder="CR Number"
                                     style={{
-                                      padding: '4px 6px',
-                                      fontSize: '11px',
+                                      padding: '3px 6px',
+                                      fontSize: '10.5px',
                                       borderRadius: '5px',
-                                      border: isDark ? '1px solid var(--border)' : '1px solid #cbd5e1',
+                                      border: '1px solid var(--border)',
                                       background: isDark ? 'var(--bg-tertiary)' : '#ffffff',
-                                      color: isDark ? 'var(--text-primary)' : '#0f172a',
+                                      color: 'var(--text-primary)',
                                       outline: 'none',
                                       fontFamily: 'ui-monospace, monospace'
                                     }}
@@ -3670,17 +3740,17 @@ export default function BahrainTasks() {
                                     }}
                                   />
                                   <input
-                                    type="url"
+                                    type="text"
                                     value={inlineEditCrLinkValue}
                                     onChange={e => setInlineEditCrLinkValue(e.target.value)}
-                                    placeholder="CR URL (https://...)"
+                                    placeholder="URL (optional)"
                                     style={{
-                                      padding: '4px 6px',
-                                      fontSize: '11px',
+                                      padding: '3px 6px',
+                                      fontSize: '10.5px',
                                       borderRadius: '5px',
-                                      border: isDark ? '1px solid var(--border)' : '1px solid #cbd5e1',
+                                      border: '1px solid var(--border)',
                                       background: isDark ? 'var(--bg-tertiary)' : '#ffffff',
-                                      color: isDark ? 'var(--text-primary)' : '#0f172a',
+                                      color: 'var(--text-primary)',
                                       outline: 'none'
                                     }}
                                     onKeyDown={e => {
@@ -3690,28 +3760,23 @@ export default function BahrainTasks() {
                                   />
                                   <div style={{ display: 'flex', gap: '4px', justifyContent: 'flex-end', marginTop: '2px' }}>
                                     <button
-                                      disabled={savingCrTaskId === task.id}
-                                      onClick={() => { if (company) saveInlineCrNumber(company.id, task.id); }}
-                                      style={{
-                                        padding: '3px 8px',
-                                        background: isDark ? 'var(--accent)' : '#2563eb',
-                                        color: '#fff',
-                                        borderRadius: '5px',
-                                        fontSize: '10.5px',
-                                        fontWeight: 650,
-                                        border: 'none',
-                                        cursor: 'pointer',
-                                        display: 'inline-flex',
-                                        alignItems: 'center',
-                                        gap: '3px'
-                                      }}
+                                      type="button"
+                                      onClick={() => setInlineEditCrId(null)}
+                                      style={{ padding: '2px 6px', borderRadius: '4px', border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)', fontSize: '10px', fontWeight: 600, cursor: 'pointer' }}
                                     >
-                                      <Check size={11} /> {savingCrTaskId === task.id ? 'Saving...' : 'Save'}
+                                      Cancel
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => { if (company) saveInlineCrNumber(company.id, task.id); }}
+                                      style={{ padding: '2px 8px', borderRadius: '4px', border: 'none', background: 'var(--accent)', color: '#fff', fontSize: '10px', fontWeight: 700, cursor: 'pointer' }}
+                                    >
+                                      Save
                                     </button>
                                   </div>
                                 </div>
                               ) : (
-                                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', maxWidth: '100%' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '3px', width: '100%', minWidth: 0, overflow: 'hidden' }}>
                                   {company?.cr_number ? (
                                     <span
                                       onClick={() => {
@@ -3721,22 +3786,24 @@ export default function BahrainTasks() {
                                           setInlineEditCrLinkValue(company.cr_link || '');
                                         }
                                       }}
-                                      title={canManageTask(task) ? `CR: ${company.cr_number} (Click to edit)` : `CR: ${company.cr_number}`}
                                       style={{
                                         fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-                                        fontSize: '10.5px',
-                                        fontWeight: 650,
-                                        color: isDark ? '#fbbf24' : '#334155',
-                                        background: isDark ? 'rgba(245, 158, 11, 0.14)' : 'linear-gradient(135deg, #f8fafc, #f1f5f9)',
-                                        border: isDark ? '1px solid rgba(245, 158, 11, 0.35)' : '1px solid #cbd5e1',
-                                        padding: '2px 5px',
-                                        borderRadius: '5px',
-                                        letterSpacing: '0.01em',
+                                        fontSize: '11px',
+                                        fontWeight: 600,
+                                        color: isDark ? '#cbd5e1' : '#334155',
+                                        background: isDark ? 'rgba(255,255,255,0.04)' : '#f8fafc',
+                                        padding: '1.5px 4px',
+                                        borderRadius: '4px',
+                                        border: '1px solid var(--border)',
+                                        display: 'inline-block',
+                                        overflow: 'hidden',
+                                        textOverflow: 'ellipsis',
                                         whiteSpace: 'nowrap',
-                                        display: 'inline-flex',
-                                        alignItems: 'center',
-                                        gap: '3px'
+                                        flex: 1,
+                                        minWidth: 0,
+                                        letterSpacing: '-0.01em'
                                       }}
+                                      title={canManageTask(task) ? `${company.cr_number} (Click to edit)` : company.cr_number}
                                     >
                                       {company.cr_number}
                                     </span>
@@ -3751,8 +3818,8 @@ export default function BahrainTasks() {
                                         }}
                                         title="Add CR Number"
                                         style={{
-                                          padding: '2px 5px',
-                                          borderRadius: '5px',
+                                          padding: '1.5px 4px',
+                                          borderRadius: '4px',
                                           border: isDark ? '1px dashed rgba(245, 158, 11, 0.4)' : '1px dashed #cbd5e1',
                                           cursor: 'pointer',
                                           fontSize: '10px',
@@ -3761,11 +3828,11 @@ export default function BahrainTasks() {
                                           color: isDark ? '#fbbf24' : '#94a3b8',
                                           display: 'inline-flex',
                                           alignItems: 'center',
-                                          gap: '3px',
+                                          gap: '2px',
                                           whiteSpace: 'nowrap'
                                         }}
                                       >
-                                        <Plus size={9} /> Set CR
+                                        <Plus size={8} /> CR
                                       </button>
                                     )
                                   )}
@@ -3786,7 +3853,7 @@ export default function BahrainTasks() {
                                         borderRadius: '4px',
                                         background: isDark ? 'rgba(56, 189, 248, 0.18)' : '#ecfdf5',
                                         border: isDark ? '1px solid rgba(56, 189, 248, 0.45)' : '1px solid #a7f3d0',
-                                        boxShadow: isDark ? '0 1px 3px rgba(56, 189, 248, 0.15)' : '0 1px 3px rgba(22, 163, 74, 0.15)',
+                                        boxShadow: '0 1px 3px rgba(22, 163, 74, 0.15)',
                                         color: isDark ? '#38bdf8' : '#059669',
                                         flexShrink: 0,
                                         cursor: 'pointer',
@@ -3797,17 +3864,15 @@ export default function BahrainTasks() {
                                       onMouseEnter={e => {
                                         e.currentTarget.style.transform = 'scale(1.1)';
                                         e.currentTarget.style.background = isDark ? 'rgba(56, 189, 248, 0.32)' : '#d1fae5';
-                                        e.currentTarget.style.borderColor = isDark ? 'rgba(56, 189, 248, 0.65)' : '#6ee7b7';
                                         e.currentTarget.style.color = isDark ? '#38bdf8' : '#047857';
                                       }}
                                       onMouseLeave={e => {
                                         e.currentTarget.style.transform = 'scale(1)';
                                         e.currentTarget.style.background = isDark ? 'rgba(56, 189, 248, 0.18)' : '#ecfdf5';
-                                        e.currentTarget.style.borderColor = isDark ? 'rgba(56, 189, 248, 0.45)' : '#a7f3d0';
                                         e.currentTarget.style.color = isDark ? '#38bdf8' : '#059669';
                                       }}
                                     >
-                                      <Globe size={11} strokeWidth={2.2} />
+                                      <Globe size={10} strokeWidth={2.2} />
                                     </a>
                                   )}
                                 </div>
@@ -3817,33 +3882,42 @@ export default function BahrainTasks() {
 
                         case 'task_type':
                           return (
-                            <td key={`tt-${task.id}`} style={{ ...compactCell, minWidth: '90px', maxWidth: '140px' }}>
+                            <td key={`tt-${task.id}`} style={{ ...compactCell, overflow: 'hidden' }}>
                               {ttNames.length > 0 ? (
-                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2.5px' }}>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px', overflow: 'hidden', maxHeight: '28px' }}>
                                   {ttNames.map((name, i) => (
                                     <span key={i} style={{
-                                      padding: '1.5px 6px', borderRadius: '5px', fontSize: '10px',
+                                      padding: '1.5px 5px', borderRadius: '4px', fontSize: '10px',
                                       fontWeight: 650,
-                                      background: isDark ? 'rgba(59, 130, 246, 0.15)' : 'rgba(59, 130, 246, 0.12)',
+                                      background: isDark ? 'rgba(59, 130, 246, 0.15)' : 'rgba(59, 130, 246, 0.1)',
                                       color: isDark ? '#60a5fa' : '#2563eb',
-                                      border: isDark ? '1px solid rgba(59, 130, 246, 0.35)' : '1px solid rgba(59, 130, 246, 0.3)',
+                                      border: isDark ? '1px solid rgba(59, 130, 246, 0.35)' : '1px solid rgba(59, 130, 246, 0.25)',
                                       whiteSpace: 'nowrap',
+                                      overflow: 'hidden',
+                                      textOverflow: 'ellipsis',
+                                      maxWidth: '100%',
                                       letterSpacing: '0.01em',
                                     }}>{name}</span>
                                   ))}
                                 </div>
-                              ) : <span style={{ fontSize: '10.5px', color: isDark ? 'var(--text-tertiary)' : '#cbd5e1' }}>—</span>}
+                              ) : <span style={{ fontSize: '10.5px', color: 'var(--text-tertiary)' }}>—</span>}
                             </td>
                           );
 
                         case 'description':
+                          const isEditingDesc = inlineEditDescId === task.id;
                           return (
                             <td
                               key={`desc-${task.id}`}
-                              style={{ ...compactCell, minWidth: '100px', maxWidth: '160px', position: 'relative', cursor: (task.description && inlineEditDescId !== task.id) ? 'pointer' : 'default' }}
+                              style={{
+                                ...compactCell,
+                                overflow: isEditingDesc ? 'visible' : 'hidden',
+                                position: 'relative',
+                                zIndex: isEditingDesc ? 50 : 1
+                              }}
                               onMouseEnter={(e) => {
                                 setHoveredDescTaskId(task.id);
-                                if (task.description && inlineEditDescId !== task.id) {
+                                if (task.description && !isEditingDesc) {
                                   if (tooltipTimeoutRef.current) {
                                     clearTimeout(tooltipTimeoutRef.current);
                                     tooltipTimeoutRef.current = null;
@@ -3877,25 +3951,57 @@ export default function BahrainTasks() {
                                 }, 200);
                               }}
                             >
-                              {inlineEditDescId === task.id ? (
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', minWidth: '200px', position: 'absolute', zIndex: 20, background: isDark ? 'var(--bg-card, var(--bg-secondary))' : '#fff', padding: '8px', borderRadius: '8px', boxShadow: isDark ? '0 16px 36px rgba(0,0,0,0.4)' : '0 12px 30px rgba(0,0,0,0.15)', border: isDark ? '1px solid var(--accent)' : '1px solid #93c5fd', top: '50%', transform: 'translateY(-50%)', left: '6px' }}>
+                              {isEditingDesc ? (
+                                <div
+                                  onClick={e => e.stopPropagation()}
+                                  style={{
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    gap: '6px',
+                                    width: '280px',
+                                    position: 'absolute',
+                                    zIndex: 1000,
+                                    background: isDark ? 'var(--bg-card, #1e293b)' : '#ffffff',
+                                    padding: '10px',
+                                    borderRadius: '10px',
+                                    boxShadow: isDark ? '0 20px 45px rgba(0,0,0,0.6)' : '0 16px 36px rgba(15,23,42,0.22)',
+                                    border: isDark ? '1.5px solid var(--accent)' : '1.5px solid #3b82f6',
+                                    top: '50%',
+                                    transform: 'translateY(-50%)',
+                                    left: '4px'
+                                  }}
+                                >
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' }}>
+                                    <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                      <Edit2 size={11} color="var(--accent)" /> Edit Task Description
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => setInlineEditDescId(null)}
+                                      style={{ background: 'none', border: 'none', color: 'var(--text-tertiary)', cursor: 'pointer', padding: '1px' }}
+                                    >
+                                      <X size={12} />
+                                    </button>
+                                  </div>
                                   <textarea
                                     autoFocus
                                     value={inlineEditDescValue}
                                     onChange={e => setInlineEditDescValue(e.target.value)}
+                                    placeholder="Enter task notes or description..."
                                     style={{
                                       width: '100%',
-                                      minHeight: '60px',
+                                      minHeight: '65px',
                                       padding: '6px 8px',
-                                      fontSize: '11px',
+                                      fontSize: '11.5px',
                                       borderRadius: '6px',
                                       border: isDark ? '1.5px solid var(--accent)' : '1.5px solid #2563eb',
                                       outline: 'none',
                                       resize: 'vertical',
                                       fontFamily: 'inherit',
                                       background: isDark ? 'var(--bg-tertiary)' : '#fff',
-                                      color: isDark ? 'var(--text-primary)' : '#0f172a',
-                                      boxShadow: isDark ? '0 0 0 3px rgba(37,99,235,0.15)' : '0 0 0 3px rgba(37,99,235,0.1)'
+                                      color: 'var(--text-primary)',
+                                      boxShadow: isDark ? '0 0 0 3px rgba(37,99,235,0.15)' : '0 0 0 3px rgba(37,99,235,0.1)',
+                                      boxSizing: 'border-box'
                                     }}
                                     onKeyDown={e => {
                                       if (e.key === 'Escape') {
@@ -3905,17 +4011,19 @@ export default function BahrainTasks() {
                                       }
                                     }}
                                   />
-                                  <div style={{ display: 'flex', gap: '5px', justifyContent: 'flex-end', marginTop: '2px' }}>
+                                  <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end', marginTop: '2px' }}>
                                     <button
+                                      type="button"
                                       onClick={() => setInlineEditDescId(null)}
-                                      style={{ padding: '3px 8px', border: isDark ? '1px solid var(--border)' : '1px solid #e2e8f0', background: isDark ? 'var(--bg-tertiary)' : '#f8fafc', color: isDark ? 'var(--text-secondary)' : '#64748b', borderRadius: '5px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px', fontSize: '10.5px', fontWeight: 600 }}
+                                      style={{ padding: '3px 8px', border: '1px solid var(--border)', background: 'var(--bg-tertiary)', color: 'var(--text-secondary)', borderRadius: '5px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '3px', fontSize: '10.5px', fontWeight: 600 }}
                                       title="Cancel (Esc)"
                                     >
                                       <X size={11} /> Cancel
                                     </button>
                                     <button
+                                      type="button"
                                       onClick={() => saveInlineDescription(task.id)}
-                                      style={{ padding: '3px 9px', border: 'none', background: isDark ? 'var(--accent)' : '#2563eb', color: '#fff', borderRadius: '5px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px', fontSize: '10.5px', fontWeight: 600 }}
+                                      style={{ padding: '3px 10px', border: 'none', background: 'var(--accent)', color: '#fff', borderRadius: '5px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '3px', fontSize: '10.5px', fontWeight: 700 }}
                                       title="Save (Ctrl+Enter)"
                                     >
                                       <Check size={11} /> Save
@@ -3923,38 +4031,65 @@ export default function BahrainTasks() {
                                   </div>
                                 </div>
                               ) : (
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '3px', minHeight: '20px' }}>
-                                  <span style={{ fontSize: '11px', color: isDark ? 'var(--text-secondary)' : '#475569', maxWidth: '120px', display: 'inline-block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={task.description || ''}>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px', minHeight: '22px', width: '100%', minWidth: 0 }}>
+                                  <span
+                                    onClick={() => {
+                                      if (canManageTask(task)) {
+                                        setInlineEditDescId(task.id);
+                                        setInlineEditDescValue(task.description || '');
+                                      }
+                                    }}
+                                    style={{
+                                      fontSize: '11.5px',
+                                      color: task.description ? 'var(--text-secondary)' : 'var(--text-tertiary)',
+                                      fontStyle: task.description ? 'normal' : 'italic',
+                                      flex: 1,
+                                      minWidth: 0,
+                                      display: 'inline-block',
+                                      overflow: 'hidden',
+                                      textOverflow: 'ellipsis',
+                                      whiteSpace: 'nowrap',
+                                      cursor: canManageTask(task) ? 'pointer' : 'default'
+                                    }}
+                                    title={task.description ? `${task.description} (Click to edit)` : (canManageTask(task) ? 'Click to add description' : '')}
+                                  >
                                     {task.description || '—'}
                                   </span>
                                   {canManageTask(task) && (
                                     <button
-                                      onClick={() => {
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
                                         setInlineEditDescId(task.id);
                                         setInlineEditDescValue(task.description || '');
                                         activeTooltipRef.current = null;
                                         setActiveTooltipTaskId(null);
                                       }}
                                       style={{
-                                        background: isDark ? 'rgba(148, 163, 184, 0.15)' : '#eff6ff',
-                                        border: isDark ? '1px solid rgba(148, 163, 184, 0.35)' : '1px solid #dbeafe',
+                                        background: isDark ? 'rgba(148, 163, 184, 0.15)' : '#f1f5f9',
+                                        border: isDark ? '1px solid rgba(148, 163, 184, 0.35)' : '1px solid #cbd5e1',
                                         borderRadius: '4px',
                                         cursor: 'pointer',
-                                        padding: '2px',
-                                        display: 'flex',
+                                        padding: '2px 4px',
+                                        display: 'inline-flex',
                                         alignItems: 'center',
                                         justifyContent: 'center',
-                                        color: isDark ? '#94a3b8' : '#2563eb',
+                                        color: isDark ? '#94a3b8' : '#475569',
                                         transition: 'all 0.15s ease',
-                                        opacity: hoveredDescTaskId === task.id ? 1 : 0,
-                                        pointerEvents: hoveredDescTaskId === task.id ? 'auto' as const : 'none' as const,
-                                        width: '18px',
-                                        height: '18px',
+                                        height: '19px',
                                         flexShrink: 0,
                                       }}
                                       title="Edit Description"
-                                      onMouseEnter={e => { e.currentTarget.style.background = isDark ? 'rgba(148, 163, 184, 0.28)' : '#dbeafe'; }}
-                                      onMouseLeave={e => { e.currentTarget.style.background = isDark ? 'rgba(148, 163, 184, 0.15)' : '#eff6ff'; }}
+                                      onMouseEnter={e => {
+                                        e.currentTarget.style.background = isDark ? 'rgba(59, 130, 246, 0.25)' : '#eff6ff';
+                                        e.currentTarget.style.color = isDark ? '#60a5fa' : '#2563eb';
+                                        e.currentTarget.style.borderColor = isDark ? '#3b82f6' : '#93c5fd';
+                                      }}
+                                      onMouseLeave={e => {
+                                        e.currentTarget.style.background = isDark ? 'rgba(148, 163, 184, 0.15)' : '#f1f5f9';
+                                        e.currentTarget.style.color = isDark ? '#94a3b8' : '#475569';
+                                        e.currentTarget.style.borderColor = isDark ? 'rgba(148, 163, 184, 0.35)' : '#cbd5e1';
+                                      }}
                                     >
                                       <Edit2 size={9} />
                                     </button>
@@ -3966,11 +4101,11 @@ export default function BahrainTasks() {
 
                         case 'desc_updated':
                           return (
-                            <td key={`desc_up-${task.id}`} style={{ ...compactCell, minWidth: '85px', whiteSpace: 'nowrap' }}>
+                            <td key={`desc_up-${task.id}`} style={{ ...compactCell, overflow: 'hidden', whiteSpace: 'nowrap' }}>
                               {(() => {
                                 const updateDate = descUpdateMap[task.id] || (task.description ? task.created_at : null);
                                 if (!updateDate || !task.description || task.description.trim() === '') {
-                                  return <span style={{ fontSize: '10.5px', color: isDark ? 'var(--text-tertiary)' : '#cbd5e1' }}>—</span>;
+                                  return <span style={{ fontSize: '10.5px', color: 'var(--text-tertiary)' }}>—</span>;
                                 }
                                 const updateTime = new Date(updateDate).getTime();
                                 const isRecent = !isNaN(updateTime) && (currentTime - updateTime < 24 * 60 * 60 * 1000);
@@ -3979,19 +4114,22 @@ export default function BahrainTasks() {
                                     title={`Last updated: ${new Date(updateDate).toLocaleString()}`}
                                     style={{
                                       fontSize: '10px',
-                                      color: isRecent ? (isDark ? '#22d3ee' : '#0284c7') : (isDark ? 'var(--text-tertiary)' : '#64748b'),
+                                      color: isRecent ? (isDark ? '#22d3ee' : '#0284c7') : 'var(--text-secondary)',
                                       fontWeight: isRecent ? 700 : 500,
                                       display: 'inline-flex',
                                       alignItems: 'center',
-                                      gap: '3px',
+                                      gap: '2.5px',
                                       background: isRecent ? (isDark ? 'rgba(6, 182, 212, 0.15)' : 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)') : 'transparent',
-                                      padding: isRecent ? (isDark ? '1.5px 5px' : '2px 5px') : '0',
-                                      borderRadius: isRecent ? '4px' : '0',
+                                      padding: isRecent ? '1.5px 4px' : '0',
+                                      borderRadius: '4px',
                                       border: isRecent ? (isDark ? '1px solid rgba(6, 182, 212, 0.35)' : '1px solid #bae6fd') : 'none',
+                                      maxWidth: '100%',
+                                      overflow: 'hidden',
+                                      textOverflow: 'ellipsis'
                                     }}
                                   >
-                                    {isRecent && <span style={{ width: '4px', height: '4px', borderRadius: '50%', background: isDark ? '#22d3ee' : '#0284c7', boxShadow: isDark ? '0 0 6px #22d3ee' : '0 0 0 1.5px #bae6fd' }} />}
-                                    {formatDescDate(updateDate)}
+                                    {isRecent && <span style={{ width: '4px', height: '4px', borderRadius: '50%', background: isDark ? '#22d3ee' : '#0284c7', boxShadow: isDark ? '0 0 6px #22d3ee' : '0 0 0 1.5px #bae6fd', flexShrink: 0 }} />}
+                                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{formatDescDate(updateDate)}</span>
                                   </span>
                                 );
                               })()}
@@ -4000,20 +4138,22 @@ export default function BahrainTasks() {
 
                         case 'priority':
                           return (
-                            <td key={`prio-${task.id}`} style={{ ...compactCell, minWidth: '75px', whiteSpace: 'nowrap' }}>
+                            <td key={`prio-${task.id}`} style={{ ...compactCell, overflow: 'hidden', whiteSpace: 'nowrap' }}>
                               {canUpdateStatus ? (
                                 <select value={task.priority} onChange={e => handlePriorityChange(task.id, e.target.value)}
                                   style={{
-                                    padding: '2.5px 6px', borderRadius: '6px',
-                                    border: isDark ? `1px solid ${pc.border || 'rgba(244, 63, 94, 0.35)'}` : '1px solid rgba(0,0,0,0.06)',
+                                    padding: '2.5px 4px', borderRadius: '5px',
+                                    border: `1px solid ${pc.border || 'var(--border)'}`,
                                     background: pc.bg, color: pc.color, fontWeight: 700,
                                     fontSize: '10px', cursor: 'pointer', outline: 'none',
-                                    boxShadow: isDark ? '0 1px 3px rgba(0,0,0,0.1)' : '0 1px 2px rgba(0,0,0,0.03)'
+                                    boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
+                                    width: '100%',
+                                    maxWidth: '100%'
                                   }}>
                                   {BAHRAIN_PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
                                 </select>
                               ) : (
-                                <span style={{ padding: '2.5px 6px', borderRadius: '6px', fontSize: '9.5px', fontWeight: 700, background: pc.bg, color: pc.color, border: isDark ? `1px solid ${pc.border || 'transparent'}` : 'none', whiteSpace: 'nowrap' }}>
+                                <span style={{ padding: '2px 5px', borderRadius: '5px', fontSize: '10px', fontWeight: 700, background: pc.bg, color: pc.color, border: `1px solid ${pc.border || 'transparent'}`, whiteSpace: 'nowrap', display: 'inline-block', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }}>
                                   {task.priority}
                                 </span>
                               )}
@@ -4021,34 +4161,29 @@ export default function BahrainTasks() {
                           );
 
                         case 'deadline':
+                          const isOverdue = !!(task.deadline && new Date(task.deadline).getTime() < new Date().setHours(0,0,0,0) && !['completed', 'closed', 'filed', 'done'].includes((task.status || '').toLowerCase()));
                           return (
-                            <td key={`dl-${task.id}`} style={{ ...compactCell, minWidth: '80px', whiteSpace: 'nowrap' }}>
+                            <td key={`dl-${task.id}`} style={{ ...compactCell, overflow: 'hidden', whiteSpace: 'nowrap' }}>
                               {task.deadline ? (
-                                isDark ? (
-                                  <span style={{
-                                    fontSize: '10px',
-                                    color: '#fb923c',
-                                    background: 'rgba(249, 115, 22, 0.14)',
-                                    border: '1px solid rgba(249, 115, 22, 0.35)',
-                                    padding: '2px 5px',
-                                    borderRadius: '5px',
-                                    fontWeight: 650,
-                                    whiteSpace: 'nowrap',
-                                    fontFamily: 'ui-monospace, monospace',
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: '3px'
-                                  }}>
-                                    <Calendar size={9} color="#fb923c" />
-                                    {task.deadline}
-                                  </span>
-                                ) : (
-                                  <span style={{ fontSize: '11px', color: '#475569', fontWeight: 500, whiteSpace: 'nowrap', fontFamily: 'ui-monospace, monospace' }}>
-                                    {task.deadline}
-                                  </span>
-                                )
+                                <span style={{
+                                  fontSize: '11px',
+                                  color: isOverdue ? '#ef4444' : (isDark ? '#fb923c' : '#334155'),
+                                  background: isOverdue ? (isDark ? 'rgba(239, 68, 68, 0.18)' : '#fef2f2') : (isDark ? 'rgba(249, 115, 22, 0.14)' : '#f8fafc'),
+                                  border: isOverdue ? (isDark ? '1px solid rgba(239, 68, 68, 0.45)' : '1px solid #fecaca') : (isDark ? '1px solid rgba(249, 115, 22, 0.35)' : '1px solid #e2e8f0'),
+                                  padding: '2px 5px',
+                                  borderRadius: '5px',
+                                  fontWeight: isOverdue ? 700 : 600,
+                                  whiteSpace: 'nowrap',
+                                  fontFamily: 'ui-monospace, monospace',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '3px'
+                                }}>
+                                  <Calendar size={10} color={isOverdue ? '#ef4444' : (isDark ? '#fb923c' : '#64748b')} style={{ flexShrink: 0 }} />
+                                  <span style={{ whiteSpace: 'nowrap' }}>{task.deadline}</span>
+                                </span>
                               ) : (
-                                <span style={{ fontSize: '10.5px', color: isDark ? 'var(--text-tertiary)' : '#cbd5e1' }}>—</span>
+                                <span style={{ fontSize: '10.5px', color: 'var(--text-tertiary)' }}>—</span>
                               )}
                             </td>
                           );
@@ -4056,113 +4191,81 @@ export default function BahrainTasks() {
                         case 'status':
                           const sc = statusColor(task.status);
                           return (
-                            <td key={`stat-${task.id}`} style={{ ...compactCell, minWidth: '100px', whiteSpace: 'nowrap' }}>
+                            <td key={`stat-${task.id}`} style={{ ...compactCell, overflow: 'hidden', whiteSpace: 'nowrap' }}>
                               {canUpdateStatus ? (
-                                isDark ? (
-                                  <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
-                                    <select
-                                      value={task.status}
-                                      onChange={e => handleStatusChange(task.id, e.target.value)}
-                                      style={{
-                                        padding: '3px 8px 3px 18px',
-                                        borderRadius: '7px',
-                                        border: `1.5px solid ${sc.border}`,
-                                        background: sc.bg,
-                                        color: sc.color,
-                                        fontWeight: 800,
-                                        fontSize: '10.5px',
-                                        letterSpacing: '0.01em',
-                                        cursor: 'pointer',
-                                        outline: 'none',
-                                        minWidth: '95px',
-                                        maxWidth: '135px',
-                                        boxShadow: sc.glow,
-                                        transition: 'all 0.15s ease'
-                                      }}
-                                    >
-                                      {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
-                                    </select>
-                                    <span style={{
-                                      position: 'absolute',
-                                      left: '6px',
-                                      width: '6px',
-                                      height: '6px',
-                                      borderRadius: '50%',
-                                      background: sc.dot,
-                                      boxShadow: `0 0 8px ${sc.dot}`,
-                                      pointerEvents: 'none'
-                                    }} />
-                                  </div>
-                                ) : (
+                                <div style={{ position: 'relative', display: 'flex', alignItems: 'center', width: '100%', minWidth: 0 }}>
                                   <select
                                     value={task.status}
                                     onChange={e => handleStatusChange(task.id, e.target.value)}
                                     style={{
-                                      padding: '3.5px 6px',
-                                      borderRadius: '7px',
-                                      border: `1px solid ${sc.border}`,
+                                      padding: '2.5px 4px 2.5px 15px',
+                                      borderRadius: '6px',
+                                      border: `1.5px solid ${sc.border}`,
                                       background: sc.bg,
                                       color: sc.color,
-                                      fontWeight: 650,
+                                      fontWeight: 750,
                                       fontSize: '10.5px',
+                                      letterSpacing: '0.01em',
                                       cursor: 'pointer',
                                       outline: 'none',
-                                      minWidth: '95px',
-                                      maxWidth: '125px',
-                                      boxShadow: '0 1px 2px rgba(0,0,0,0.02)'
+                                      width: '100%',
+                                      maxWidth: '100%',
+                                      boxShadow: sc.glow,
+                                      transition: 'all 0.15s ease',
+                                      overflow: 'hidden',
+                                      textOverflow: 'ellipsis',
+                                      whiteSpace: 'nowrap'
                                     }}
                                   >
                                     {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
                                   </select>
-                                )
+                                  <span style={{
+                                    position: 'absolute',
+                                    left: '5px',
+                                    width: '5px',
+                                    height: '5px',
+                                    borderRadius: '50%',
+                                    background: sc.dot,
+                                    boxShadow: `0 0 6px ${sc.dot}`,
+                                    pointerEvents: 'none'
+                                  }} />
+                                </div>
                               ) : (
-                                isDark ? (
-                                  <span style={{
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: '4px',
-                                    padding: '3px 7px',
-                                    borderRadius: '7px',
-                                    fontSize: '10.5px',
-                                    fontWeight: 800,
-                                    background: sc.bg,
-                                    color: sc.color,
-                                    border: `1.5px solid ${sc.border}`,
-                                    whiteSpace: 'nowrap',
-                                    boxShadow: sc.glow
-                                  }}>
-                                    <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: sc.dot, boxShadow: `0 0 8px ${sc.dot}` }} />
-                                    {task.status}
-                                  </span>
-                                ) : (
-                                  <span style={{
-                                    padding: '2.5px 6px',
-                                    borderRadius: '6px',
-                                    fontSize: '10.5px',
-                                    fontWeight: 650,
-                                    background: sc.bg,
-                                    color: sc.color,
-                                    border: `1px solid ${sc.border}`,
-                                    whiteSpace: 'nowrap'
-                                  }}>
-                                    {task.status}
-                                  </span>
-                                )
+                                <span style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '3px',
+                                  padding: '2px 5px',
+                                  borderRadius: '6px',
+                                  fontSize: '10.5px',
+                                  fontWeight: 750,
+                                  background: sc.bg,
+                                  color: sc.color,
+                                  border: `1.5px solid ${sc.border}`,
+                                  whiteSpace: 'nowrap',
+                                  boxShadow: sc.glow,
+                                  maxWidth: '100%',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis'
+                                }}>
+                                  <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: sc.dot, boxShadow: `0 0 6px ${sc.dot}`, flexShrink: 0 }} />
+                                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{task.status}</span>
+                                </span>
                               )}
                             </td>
                           );
 
                         case 'auditor':
                           return (
-                            <td key={`aud-${task.id}`} style={{ ...compactCell, minWidth: '85px', whiteSpace: 'nowrap' }}>
+                            <td key={`aud-${task.id}`} style={{ ...compactCell, overflow: 'hidden', whiteSpace: 'nowrap' }}>
                               {isAdminUser ? (
                                 <select value={task.auditor_id || ''} onChange={e => handleAssignAuditor(task.id, e.target.value)}
                                   style={{
-                                    padding: '3px 6px', borderRadius: '6px',
+                                    padding: '2.5px 4px', borderRadius: '5px',
                                     border: isDark ? (task.auditor_id ? '1px solid rgba(168, 85, 247, 0.45)' : '1px solid var(--border)') : '1px solid #e2e8f0',
                                     background: isDark ? (task.auditor_id ? 'rgba(168, 85, 247, 0.14)' : 'var(--bg-tertiary)') : '#f8fafc',
                                     color: isDark ? (task.auditor_id ? '#c084fc' : 'var(--text-secondary)') : '#1e293b',
-                                    fontSize: '10px', fontWeight: isDark ? 650 : 500, minWidth: '80px', maxWidth: '110px',
+                                    fontSize: '10.5px', fontWeight: 600, width: '100%', maxWidth: '100%',
                                     cursor: 'pointer', outline: 'none',
                                     boxShadow: '0 1px 2px rgba(0,0,0,0.02)'
                                   }}>
@@ -4170,24 +4273,22 @@ export default function BahrainTasks() {
                                   {auditors.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                                 </select>
                               ) : (
-                                isDark ? (
-                                  <span style={{
-                                    fontSize: '10px',
-                                    color: task.auditor_id ? '#c084fc' : 'var(--text-tertiary)',
-                                    background: task.auditor_id ? 'rgba(168, 85, 247, 0.14)' : 'transparent',
-                                    border: task.auditor_id ? '1px solid rgba(168, 85, 247, 0.35)' : 'none',
-                                    padding: task.auditor_id ? '2px 6px' : '0',
-                                    borderRadius: '5px',
-                                    fontWeight: 650,
-                                    whiteSpace: 'nowrap'
-                                  }}>
-                                    {auditors.find(a => a.id === task.auditor_id)?.name || '—'}
-                                  </span>
-                                ) : (
-                                  <span style={{ fontSize: '11px', color: '#475569', fontWeight: 500 }}>
-                                    {auditors.find(a => a.id === task.auditor_id)?.name || '—'}
-                                  </span>
-                                )
+                                <span style={{
+                                  fontSize: '10.5px',
+                                  color: task.auditor_id ? (isDark ? '#c084fc' : '#7e22ce') : 'var(--text-tertiary)',
+                                  background: task.auditor_id ? (isDark ? 'rgba(168, 85, 247, 0.14)' : '#faf5ff') : 'transparent',
+                                  border: task.auditor_id ? (isDark ? '1px solid rgba(168, 85, 247, 0.35)' : '1px solid #f3e8ff') : 'none',
+                                  padding: task.auditor_id ? '2px 5px' : '0',
+                                  borderRadius: '4px',
+                                  fontWeight: 600,
+                                  whiteSpace: 'nowrap',
+                                  display: 'inline-block',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  maxWidth: '100%'
+                                }}>
+                                  {auditors.find(a => a.id === task.auditor_id)?.name || '—'}
+                                </span>
                               )}
                             </td>
                           );
@@ -4199,19 +4300,19 @@ export default function BahrainTasks() {
                           const activePartnerObjects = activePartnerIds.map((id: string) => partners.find((p: any) => p.id === id)).filter((p): p is typeof partners[number] => Boolean(p));
 
                           return (
-                            <td key={`ass-${task.id}`} style={{ ...compactCell, minWidth: '95px', whiteSpace: 'nowrap' }}>
+                            <td key={`ass-${task.id}`} style={{ ...compactCell, overflow: 'hidden', whiteSpace: 'nowrap' }}>
                               {isAdminUser ? (
                                 isDark ? (() => {
                                   const selectedPartner = partners.find(p => p.id === task.assigned_to);
                                   const pCol = getPartnerColor(selectedPartner?.username || selectedPartner?.id);
                                   return (
-                                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '3px', width: '100%', minWidth: 0 }}>
                                       {selectedPartner && (
                                         <div style={{
                                           width: '16px', height: '16px', borderRadius: '50%',
                                           background: pCol.avatarBg,
                                           color: '#ffffff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                                          fontSize: '8.5px', fontWeight: 800, flexShrink: 0,
+                                          fontSize: '8px', fontWeight: 800, flexShrink: 0,
                                           boxShadow: `0 0 6px ${pCol.border}`
                                         }}>
                                           {selectedPartner.username.substring(0, 1).toUpperCase()}
@@ -4221,15 +4322,15 @@ export default function BahrainTasks() {
                                         value={task.assigned_to || ''}
                                         onChange={e => handleAssign(task.id, e.target.value)}
                                         style={{
-                                          padding: '3px 6px',
-                                          borderRadius: '6px',
+                                          padding: '2.5px 4px',
+                                          borderRadius: '5px',
                                           border: task.assigned_to ? `1.5px solid ${pCol.border}` : '1px solid var(--border)',
                                           background: task.assigned_to ? pCol.bg : 'var(--bg-tertiary)',
                                           color: task.assigned_to ? pCol.text : 'var(--text-secondary)',
                                           fontSize: '10.5px',
-                                          fontWeight: 750,
-                                          minWidth: '85px',
-                                          maxWidth: '115px',
+                                          fontWeight: 700,
+                                          width: '100%',
+                                          maxWidth: '100%',
                                           cursor: 'pointer',
                                           outline: 'none',
                                           boxShadow: task.assigned_to ? `0 0 6px ${pCol.bg}` : 'none'
@@ -4243,9 +4344,9 @@ export default function BahrainTasks() {
                                 })() : (
                                   <select value={task.assigned_to || ''} onChange={e => handleAssign(task.id, e.target.value)}
                                     style={{
-                                      padding: '3.5px 6px', borderRadius: '7px', border: '1px solid #e2e8f0',
+                                      padding: '2.5px 4px', borderRadius: '5px', border: '1px solid #e2e8f0',
                                       background: '#f8fafc', fontSize: '10.5px', color: '#1e293b',
-                                      minWidth: '85px', maxWidth: '115px', cursor: 'pointer', outline: 'none', fontWeight: 500,
+                                      width: '100%', maxWidth: '100%', cursor: 'pointer', outline: 'none', fontWeight: 550,
                                       boxShadow: '0 1px 2px rgba(0,0,0,0.02)'
                                     }}>
                                     <option value="">Unassigned</option>
@@ -4253,52 +4354,46 @@ export default function BahrainTasks() {
                                   </select>
                                 )
                               ) : (
-                                isDark ? (
-                                  activePartnerObjects.length > 0 ? (
-                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px', alignItems: 'center' }}>
-                                      {activePartnerObjects.map(p => {
-                                        const pCol = getPartnerColor(p.username || p.id);
-                                        return (
-                                          <span
-                                            key={p.id}
-                                            style={{
-                                              display: 'inline-flex',
-                                              alignItems: 'center',
-                                              gap: '4px',
-                                              fontSize: '10px',
-                                              fontWeight: 750,
-                                              color: pCol.text,
-                                              background: pCol.bg,
-                                              border: `1px solid ${pCol.border}`,
-                                              padding: '2px 6px',
-                                              borderRadius: '5px',
-                                              whiteSpace: 'nowrap',
-                                              boxShadow: `0 0 6px ${pCol.bg}`
-                                            }}
-                                            title={p.username}
-                                          >
-                                            <span style={{
-                                              width: '13px', height: '13px', borderRadius: '50%',
-                                              background: pCol.avatarBg, color: '#ffffff',
-                                              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                                              fontSize: '7.5px', fontWeight: 800, flexShrink: 0
-                                            }}>
-                                              {p.username.substring(0, 1).toUpperCase()}
-                                            </span>
-                                            {p.username}
+                                activePartnerObjects.length > 0 ? (
+                                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px', alignItems: 'center', overflow: 'hidden', maxHeight: '28px' }}>
+                                    {activePartnerObjects.map(p => {
+                                      const pCol = getPartnerColor(p.username || p.id);
+                                      return (
+                                        <span
+                                          key={p.id}
+                                          style={{
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: '2.5px',
+                                            fontSize: '10px',
+                                            fontWeight: 700,
+                                            color: pCol.text,
+                                            background: pCol.bg,
+                                            border: `1px solid ${pCol.border}`,
+                                            padding: '1.5px 5px',
+                                            borderRadius: '4px',
+                                            whiteSpace: 'nowrap',
+                                            boxShadow: `0 0 6px ${pCol.bg}`,
+                                            maxWidth: '100%',
+                                            overflow: 'hidden',
+                                            textOverflow: 'ellipsis'
+                                          }}
+                                          title={p.username}
+                                        >
+                                          <span style={{
+                                            width: '12px', height: '12px', borderRadius: '50%',
+                                            background: pCol.avatarBg, color: '#ffffff',
+                                            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                            fontSize: '7px', fontWeight: 800, flexShrink: 0
+                                          }}>
+                                            {p.username.substring(0, 1).toUpperCase()}
                                           </span>
-                                        );
-                                      })}
-                                    </div>
-                                  ) : <span style={{ fontSize: '10.5px', color: 'var(--text-tertiary)' }}>Unassigned</span>
-                                ) : (
-                                  <span style={{ fontSize: '11px', color: '#1e293b', fontWeight: 500 }}>
-                                    {(() => {
-                                      const allNames = activePartnerObjects.map((p: any) => p.username).filter(Boolean);
-                                      return allNames.length > 0 ? allNames.join(', ') : 'Unassigned';
-                                    })()}
-                                  </span>
-                                )
+                                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.username}</span>
+                                        </span>
+                                      );
+                                    })}
+                                  </div>
+                                ) : <span style={{ fontSize: '10.5px', color: 'var(--text-tertiary)' }}>Unassigned</span>
                               )}
                             </td>
                           );
@@ -4308,11 +4403,12 @@ export default function BahrainTasks() {
                             <td key={`act-${task.id}`} style={{
                               ...compactCell,
                               position: 'relative',
-                              width: '32px',
-                              minWidth: '32px',
-                              maxWidth: '36px',
+                              width: '36px',
+                              minWidth: '36px',
+                              maxWidth: '38px',
                               padding: '4px 2px',
-                              textAlign: 'center'
+                              textAlign: 'center',
+                              overflow: 'visible'
                             }}>
                               <button onClick={e => { 
                                 e.stopPropagation(); 
@@ -4355,7 +4451,7 @@ export default function BahrainTasks() {
                                 <MoreHorizontal size={16} color="var(--text-secondary)" />
                               </button>
                               {isMenuOpen && typeof window !== 'undefined' && createPortal(
-                                <div style={{ position: 'fixed', top: menuPos.top, bottom: menuPos.bottom, right: menuPos.right, maxHeight: menuPos.maxHeight || 'none', overflowY: 'auto', background: 'var(--bg-card, var(--bg-secondary))', borderRadius: '12px', boxShadow: '0 16px 36px rgba(0,0,0,0.45)', border: '1px solid var(--border)', zIndex: 9999, minWidth: '165px' }}
+                                <div style={{ position: 'fixed', top: menuPos.top, bottom: menuPos.bottom, right: menuPos.right, maxHeight: menuPos.maxHeight || 'none', overflowY: 'auto', background: 'var(--bg-card, var(--bg-secondary))', borderRadius: '12px', boxShadow: '0 16px 36px rgba(0,0,0,0.45)', border: '1px solid var(--border)', zIndex: 9999, minWidth: '175px' }}
                                   onClick={e => e.stopPropagation()}>
                                   <button onClick={() => { viewDetail(task.id); setOpenMenuId(null); }} style={menuItemStyle}>
                                     <Eye size={14} color="var(--accent)" /> View Details
@@ -4369,7 +4465,7 @@ export default function BahrainTasks() {
                                   <button
                                     onClick={() => {
                                       const comp = companies.find(c => c.id === task.company_id);
-                                      const ttIds = task.task_type_ids && task.task_type_ids.length > 0 ? task.task_type_ids : (task.task_type_id ? task.task_type_id.split(',').map(s => s.trim()).filter(Boolean) : []);
+                                      const ttIds = task.task_type_ids && task.task_type_ids.length > 0 ? task.task_type_ids : (task.task_type_id ? task.task_type_id.split(',').map((s: string) => s.trim()).filter(Boolean) : []);
                                       const ttNames = ttIds.map(id => taskTypes.find(t => t.id === id)?.name).filter(Boolean).join(', ') || 'N/A';
                                       const activePartnerIds = task.assigned_partners && task.assigned_partners.length > 0 
                                         ? task.assigned_partners 
@@ -6112,41 +6208,100 @@ function FormField({ label, children }: { label: string; children: React.ReactNo
 }
 
 const filterStyle: React.CSSProperties = {
-  padding: '8px 12px', border: '1px solid var(--border)', borderRadius: '10px', fontSize: '12px',
-  background: 'var(--bg-secondary)', color: 'var(--text-primary)', outline: 'none', transition: 'all 0.15s ease',
-  boxShadow: 'var(--card-shadow)', fontWeight: 500, flex: '1 1 120px', minWidth: '115px'
+  height: '38px',
+  padding: '0 12px',
+  border: '1px solid var(--border)',
+  borderRadius: '10px',
+  fontSize: '12.5px',
+  background: 'var(--bg-secondary)',
+  color: 'var(--text-primary)',
+  outline: 'none',
+  transition: 'all 0.15s ease',
+  boxShadow: 'var(--card-shadow)',
+  fontWeight: 500,
+  flex: '1 1 125px',
+  minWidth: '120px',
+  display: 'flex',
+  alignItems: 'center',
+  boxSizing: 'border-box'
 };
 
 const compactCell: React.CSSProperties = {
-  padding: '7px 5px', fontSize: '11.5px', verticalAlign: 'middle', color: 'var(--text-primary)', boxSizing: 'border-box'
+  padding: '9px 8px',
+  fontSize: '12px',
+  verticalAlign: 'middle',
+  color: 'var(--text-primary)',
+  boxSizing: 'border-box',
+  lineHeight: '1.4'
 };
 
 const cellStyle: React.CSSProperties = {
-  padding: '7px 5px', fontSize: '11.5px', verticalAlign: 'middle', color: 'var(--text-primary)', boxSizing: 'border-box'
+  padding: '9px 8px',
+  fontSize: '12px',
+  verticalAlign: 'middle',
+  color: 'var(--text-primary)',
+  boxSizing: 'border-box',
+  lineHeight: '1.4'
 };
 
 const dropdownStyle: React.CSSProperties = {
-  padding: '4px 7px', border: '1px solid var(--border)', borderRadius: '7px', fontSize: '11px',
-  width: '100%', minWidth: '100px', cursor: 'pointer', background: 'var(--bg-tertiary)', color: 'var(--text-primary)', outline: 'none',
-  transition: 'all 0.15s ease', fontWeight: 500,
+  padding: '5px 8px',
+  border: '1px solid var(--border)',
+  borderRadius: '8px',
+  fontSize: '11.5px',
+  width: '100%',
+  minWidth: '100px',
+  cursor: 'pointer',
+  background: 'var(--bg-tertiary)',
+  color: 'var(--text-primary)',
+  outline: 'none',
+  transition: 'all 0.15s ease',
+  fontWeight: 600,
 };
 
 const inputStyle: React.CSSProperties = {
-  padding: '10px 14px', border: '1px solid var(--border)', borderRadius: '10px', fontSize: '13px',
-  width: '100%', background: 'var(--bg-secondary)', color: 'var(--text-primary)', outline: 'none',
-  transition: 'border-color 0.15s ease, box-shadow 0.15s ease', fontWeight: 500,
+  padding: '10px 14px',
+  border: '1px solid var(--border)',
+  borderRadius: '10px',
+  fontSize: '13px',
+  width: '100%',
+  background: 'var(--bg-secondary)',
+  color: 'var(--text-primary)',
+  outline: 'none',
+  transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
+  fontWeight: 500,
+  boxSizing: 'border-box'
 };
 
 const menuItemStyle: React.CSSProperties = {
-  display: 'flex', alignItems: 'center', gap: '10px', width: '100%', padding: '9px 14px',
-  background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '12.5px',
-  color: 'var(--text-primary)', fontWeight: 500, transition: 'background 0.1s ease', textAlign: 'left',
+  display: 'flex',
+  alignItems: 'center',
+  gap: '10px',
+  width: '100%',
+  padding: '10px 14px',
+  background: 'transparent',
+  border: 'none',
+  cursor: 'pointer',
+  fontSize: '13px',
+  color: 'var(--text-primary)',
+  fontWeight: 500,
+  transition: 'background 0.1s ease',
+  textAlign: 'left',
 };
 
 function btnSmStyle(bg: string): React.CSSProperties {
   return {
-    padding: '7px 10px', background: bg, color: '#fff', border: 'none', borderRadius: '8px',
-    cursor: 'pointer', display: 'flex', alignItems: 'center', transition: 'all 0.15s ease',
+    padding: '8px 12px',
+    background: bg,
+    color: '#fff',
+    border: 'none',
+    borderRadius: '8px',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    transition: 'all 0.15s ease',
     boxShadow: `0 1px 3px ${bg}40`,
+    fontSize: '12px',
+    fontWeight: 600
   };
 }

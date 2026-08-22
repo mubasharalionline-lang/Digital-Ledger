@@ -27,7 +27,6 @@ export function InvitePartnerModal({
   const [role, setRole] = useState(roles[0] || 'Accountant');
   const [canUpdateStatus, setCanUpdateStatus] = useState(true);
   const [canViewCompanies, setCanViewCompanies] = useState(false);
-  const [canMessage, setCanMessage] = useState(false);
   const [auditorAccess, setAuditorAccess] = useState<string[]>([]);
   const [showAuditors, setShowAuditors] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -40,7 +39,6 @@ export function InvitePartnerModal({
       setRole(roles[0] || 'Accountant');
       setCanUpdateStatus(true);
       setCanViewCompanies(false);
-      setCanMessage(false);
       setAuditorAccess([]);
       setShowAuditors(false);
       setGeneratedLink('');
@@ -61,7 +59,6 @@ export function InvitePartnerModal({
       permissions: {
         can_update_status: canUpdateStatus,
         can_view_companies: canViewCompanies,
-        can_message: canMessage,
         auditor_access: auditorAccess,
       },
       status: 'pending',
@@ -209,7 +206,6 @@ export function InvitePartnerModal({
                   <span style={tagBadge}><Globe size={11} /> {getDataCountry() || 'Bahrain'}</span>
                   {canUpdateStatus && <span style={greenBadge}>Status Updates</span>}
                   {canViewCompanies && <span style={greenBadge}>View Companies</span>}
-                  {canMessage && <span style={greenBadge}>Messaging</span>}
                   {auditorAccess.length > 0 && (
                     <span style={greenBadge}>{auditorAccess.length} Auditor(s)</span>
                   )}
@@ -266,15 +262,6 @@ export function InvitePartnerModal({
                   }}>
                     <span style={{ fontSize: '12.5px', fontWeight: 600, color: '#0f172a' }}>Can view assigned companies</span>
                     <input type="checkbox" checked={canViewCompanies} onChange={e => setCanViewCompanies(e.target.checked)} style={{ width: '16px', height: '16px', cursor: 'pointer' }} />
-                  </label>
-
-                  <label style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    padding: '8px 12px', background: '#ffffff', borderRadius: '8px',
-                    border: '1px solid #e2e8f0', cursor: 'pointer'
-                  }}>
-                    <span style={{ fontSize: '12.5px', fontWeight: 600, color: '#0f172a' }}>Can send/receive messages</span>
-                    <input type="checkbox" checked={canMessage} onChange={e => setCanMessage(e.target.checked)} style={{ width: '16px', height: '16px', cursor: 'pointer' }} />
                   </label>
                 </div>
 

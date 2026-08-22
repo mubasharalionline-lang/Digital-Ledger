@@ -509,7 +509,16 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       </div>
 
       {/* Main Content */}
-      <main className="main-content" style={{ flex: 1, minWidth: 0, marginLeft: collapsed ? '68px' : '236px', transition: 'margin-left 0.25s cubic-bezier(0.25,0.1,0.25,1)', padding: '24px 28px', width: '100%', boxSizing: 'border-box' }}>
+      <main className="main-content" style={{
+        flex: 1,
+        minWidth: 0,
+        marginLeft: collapsed ? '68px' : '236px',
+        width: `calc(100% - ${collapsed ? '68px' : '236px'})`,
+        maxWidth: `calc(100% - ${collapsed ? '68px' : '236px'})`,
+        transition: 'margin-left 0.25s cubic-bezier(0.25,0.1,0.25,1), width 0.25s cubic-bezier(0.25,0.1,0.25,1), max-width 0.25s cubic-bezier(0.25,0.1,0.25,1)',
+        padding: '24px 28px',
+        boxSizing: 'border-box'
+      }}>
         {children}
       </main>
 
