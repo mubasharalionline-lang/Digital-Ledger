@@ -21,7 +21,7 @@ import {
   MessageSquare, Copy, Send, Search, ListTodo, FileSpreadsheet, CheckSquare,
   Square, Download, ChevronDown, ChevronLeft, ChevronRight, ExternalLink, Link2,
   SlidersHorizontal, Columns3, RotateCcw, XCircle, Sparkles, Filter, FileCheck2, FileX2, CheckCheck,
-  Calendar, FolderOpen, Globe
+  Calendar, FolderOpen, Globe, UserCheck, Users, Tag, AlertTriangle, Hash, FileText
 } from 'lucide-react';
 import { EGRESS_OPTIMIZATION_MODE } from '@/lib/optimizationConfig';
 import { exportTaskManagementExcel, formatPlDateDisplay } from '@/lib/reportExportUtils';
@@ -541,13 +541,22 @@ export default function BahrainTasks() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showColumnPicker]);
 
-  // Filter tasks
   // Determine if the user is actively looking for completed tasks via filter or search
   const isCompletedFilterActive = filterStatus && (() => {
     const fl = filterStatus.toLowerCase();
     return fl === 'complete' || fl === 'completed' || fl === 'closed' || fl === 'filed' || fl === 'done' || fl.includes('complete') || fl.includes('closed') || fl.includes('filed') || fl.includes('done');
   })();
   const isSearchActive = search.trim().length > 0;
+  const isManualFilterActive = Boolean(
+    filterStatus ||
+    filterPriority ||
+    filterCompany ||
+    filterPartner ||
+    filterAuditor ||
+    filterTaskType ||
+    filterDescUpdated ||
+    isSearchActive
+  );
 
   const filtered = tasks.filter(t => {
     const sl = (t.status || '').toLowerCase();
@@ -1391,9 +1400,17 @@ export default function BahrainTasks() {
     const task = tasks.find(t => t.id === taskId);
     if (!task) return;
     setDetailTask(task);
-    setDetailCompany(companies.find(c => c.id === task.company_id) || null);
+    let comp = companies.find(c => c.id === task.company_id) || null;
+    setDetailCompany(comp);
     setUpdateStatus(task.status);
     setUpdatePartners(task.assigned_partners || (task.assigned_to ? [task.assigned_to] : []));
+
+    // If company not found in memory, fetch it directly
+    if (!comp && task.company_id) {
+      supabase.from('companies').select('*').eq('id', task.company_id).maybeSingle().then(({ data }) => {
+        if (data) setDetailCompany(data as Company);
+      });
+    }
 
     const { data: logs, error } = await supabase
       .from('status_log')
@@ -3681,97 +3698,154 @@ export default function BahrainTasks() {
                           const hasCrLink = !!(company?.cr_link && company.cr_link.trim() !== '');
                           const isCrHovered = hoveredCrTaskId === task.id;
                           const crUrl = hasCrLink ? formatExternalUrl(company.cr_link) : '';
+                          const isEditingCr = inlineEditCrId === task.id;
 
                           return (
                             <td
                               key={`cr-${task.id}`}
-                              style={{ ...compactCell, overflow: 'hidden', position: 'relative', cursor: (canManageTask(task) && company) ? 'pointer' : 'default' }}
+                              style={{
+                                ...compactCell,
+                                overflow: isEditingCr ? 'visible' : 'hidden',
+                                position: 'relative',
+                                zIndex: isEditingCr ? 60 : 1,
+                                cursor: (canManageTask(task) && company && !isEditingCr) ? 'pointer' : 'default'
+                              }}
                               onMouseEnter={() => setHoveredCrTaskId(task.id)}
                               onMouseLeave={() => setHoveredCrTaskId(null)}
                             >
-                              {inlineEditCrId === task.id ? (
+                              {isEditingCr ? (
                                 <div
                                   onClick={e => e.stopPropagation()}
                                   style={{
                                     display: 'flex',
                                     flexDirection: 'column',
-                                    gap: '4px',
-                                    minWidth: '180px',
+                                    gap: '8px',
+                                    width: '260px',
+                                    minWidth: '240px',
                                     position: 'absolute',
-                                    zIndex: 20,
-                                    background: isDark ? 'var(--bg-card, var(--bg-secondary))' : '#ffffff',
-                                    padding: '8px',
-                                    borderRadius: '8px',
-                                    boxShadow: isDark ? '0 16px 36px rgba(0,0,0,0.45)' : '0 12px 30px rgba(15, 23, 42, 0.18)',
-                                    border: isDark ? '1px solid var(--accent)' : '1px solid #93c5fd',
+                                    zIndex: 1000,
+                                    background: isDark ? 'var(--bg-card, #1e293b)' : '#ffffff',
+                                    padding: '12px',
+                                    borderRadius: '10px',
+                                    boxShadow: isDark ? '0 20px 45px rgba(0,0,0,0.6)' : '0 16px 36px rgba(15, 23, 42, 0.22)',
+                                    border: isDark ? '1.5px solid var(--accent)' : '1.5px solid #3b82f6',
                                     top: '50%',
                                     transform: 'translateY(-50%)',
                                     left: '4px'
                                   }}
                                 >
-                                  <div style={{ fontSize: '10.5px', fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                    <span>Edit CR</span>
+                                  <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                    <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                      <Edit2 size={12} color="var(--accent)" /> Edit CR & URL
+                                    </span>
                                     <button
+                                      type="button"
                                       onClick={() => setInlineEditCrId(null)}
-                                      style={{ background: 'none', border: 'none', color: 'var(--text-tertiary)', cursor: 'pointer', padding: '1px' }}
+                                      style={{ background: 'none', border: 'none', color: 'var(--text-tertiary)', cursor: 'pointer', padding: '2px', display: 'flex', alignItems: 'center' }}
+                                      title="Close (Esc)"
                                     >
-                                      <X size={11} />
+                                      <X size={13} />
                                     </button>
                                   </div>
-                                  <input
-                                    autoFocus
-                                    type="text"
-                                    value={inlineEditCrValue}
-                                    onChange={e => setInlineEditCrValue(e.target.value)}
-                                    placeholder="CR Number"
-                                    style={{
-                                      padding: '3px 6px',
-                                      fontSize: '10.5px',
-                                      borderRadius: '5px',
-                                      border: '1px solid var(--border)',
-                                      background: isDark ? 'var(--bg-tertiary)' : '#ffffff',
-                                      color: 'var(--text-primary)',
-                                      outline: 'none',
-                                      fontFamily: 'ui-monospace, monospace'
-                                    }}
-                                    onKeyDown={e => {
-                                      if (e.key === 'Escape') setInlineEditCrId(null);
-                                      if (e.key === 'Enter' && company) saveInlineCrNumber(company.id, task.id);
-                                    }}
-                                  />
-                                  <input
-                                    type="text"
-                                    value={inlineEditCrLinkValue}
-                                    onChange={e => setInlineEditCrLinkValue(e.target.value)}
-                                    placeholder="URL (optional)"
-                                    style={{
-                                      padding: '3px 6px',
-                                      fontSize: '10.5px',
-                                      borderRadius: '5px',
-                                      border: '1px solid var(--border)',
-                                      background: isDark ? 'var(--bg-tertiary)' : '#ffffff',
-                                      color: 'var(--text-primary)',
-                                      outline: 'none'
-                                    }}
-                                    onKeyDown={e => {
-                                      if (e.key === 'Escape') setInlineEditCrId(null);
-                                      if (e.key === 'Enter' && company) saveInlineCrNumber(company.id, task.id);
-                                    }}
-                                  />
-                                  <div style={{ display: 'flex', gap: '4px', justifyContent: 'flex-end', marginTop: '2px' }}>
+
+                                  <div>
+                                    <label style={{ display: 'block', fontSize: '9.5px', fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '3px' }}>
+                                      CR Number
+                                    </label>
+                                    <input
+                                      autoFocus
+                                      type="text"
+                                      value={inlineEditCrValue}
+                                      onChange={e => setInlineEditCrValue(e.target.value)}
+                                      placeholder="e.g. 123456-1"
+                                      style={{
+                                        width: '100%',
+                                        boxSizing: 'border-box',
+                                        padding: '6px 8px',
+                                        fontSize: '11.5px',
+                                        borderRadius: '6px',
+                                        border: '1px solid var(--border)',
+                                        background: isDark ? 'var(--bg-tertiary)' : '#ffffff',
+                                        color: 'var(--text-primary)',
+                                        outline: 'none',
+                                        fontFamily: 'ui-monospace, monospace'
+                                      }}
+                                      onKeyDown={e => {
+                                        if (e.key === 'Escape') setInlineEditCrId(null);
+                                        if (e.key === 'Enter' && company) saveInlineCrNumber(company.id, task.id);
+                                      }}
+                                    />
+                                  </div>
+
+                                  <div>
+                                    <label style={{ display: 'block', fontSize: '9.5px', fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '3px' }}>
+                                      URL / CR Link (Optional)
+                                    </label>
+                                    <input
+                                      type="text"
+                                      value={inlineEditCrLinkValue}
+                                      onChange={e => setInlineEditCrLinkValue(e.target.value)}
+                                      placeholder="https://... or portal URL"
+                                      style={{
+                                        width: '100%',
+                                        boxSizing: 'border-box',
+                                        padding: '6px 8px',
+                                        fontSize: '11.5px',
+                                        borderRadius: '6px',
+                                        border: '1px solid var(--border)',
+                                        background: isDark ? 'var(--bg-tertiary)' : '#ffffff',
+                                        color: 'var(--text-primary)',
+                                        outline: 'none'
+                                      }}
+                                      onKeyDown={e => {
+                                        if (e.key === 'Escape') setInlineEditCrId(null);
+                                        if (e.key === 'Enter' && company) saveInlineCrNumber(company.id, task.id);
+                                      }}
+                                    />
+                                  </div>
+
+                                  <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end', marginTop: '4px' }}>
                                     <button
                                       type="button"
                                       onClick={() => setInlineEditCrId(null)}
-                                      style={{ padding: '2px 6px', borderRadius: '4px', border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)', fontSize: '10px', fontWeight: 600, cursor: 'pointer' }}
+                                      style={{
+                                        padding: '4px 10px',
+                                        borderRadius: '6px',
+                                        border: '1px solid var(--border)',
+                                        background: isDark ? 'var(--bg-tertiary)' : '#f1f5f9',
+                                        color: 'var(--text-secondary)',
+                                        fontSize: '11px',
+                                        fontWeight: 600,
+                                        cursor: 'pointer',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '3px'
+                                      }}
+                                      title="Cancel (Esc)"
                                     >
-                                      Cancel
+                                      <X size={11} /> Cancel
                                     </button>
                                     <button
                                       type="button"
+                                      disabled={savingCrTaskId === task.id}
                                       onClick={() => { if (company) saveInlineCrNumber(company.id, task.id); }}
-                                      style={{ padding: '2px 8px', borderRadius: '4px', border: 'none', background: 'var(--accent)', color: '#fff', fontSize: '10px', fontWeight: 700, cursor: 'pointer' }}
+                                      style={{
+                                        padding: '4px 12px',
+                                        borderRadius: '6px',
+                                        border: 'none',
+                                        background: 'var(--accent)',
+                                        color: '#fff',
+                                        fontSize: '11px',
+                                        fontWeight: 700,
+                                        cursor: savingCrTaskId === task.id ? 'not-allowed' : 'pointer',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '4px',
+                                        boxShadow: '0 2px 6px rgba(37,99,235,0.25)'
+                                      }}
+                                      title="Save (Enter)"
                                     >
-                                      Save
+                                      <Check size={12} /> {savingCrTaskId === task.id ? 'Saving...' : 'Save'}
                                     </button>
                                   </div>
                                 </div>
@@ -4896,36 +4970,58 @@ export default function BahrainTasks() {
                 {inlineEditCrId === task.id && (
                   <div
                     onClick={e => e.stopPropagation()}
-                    style={{ background: 'var(--bg-tertiary)', padding: '8px', borderRadius: '8px', border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: '6px' }}
+                    style={{ background: isDark ? 'var(--bg-tertiary)' : '#f8fafc', padding: '10px 12px', borderRadius: '10px', border: isDark ? '1.5px solid var(--accent)' : '1.5px solid #3b82f6', display: 'flex', flexDirection: 'column', gap: '8px' }}
                   >
                     <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <span>Edit CR Details</span>
-                      <button onClick={() => setInlineEditCrId(null)} style={{ background: 'none', border: 'none', color: 'var(--text-tertiary)', cursor: 'pointer' }}><X size={12} /></button>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                        <Edit2 size={12} color="var(--accent)" /> Edit CR & URL
+                      </span>
+                      <button onClick={() => setInlineEditCrId(null)} style={{ background: 'none', border: 'none', color: 'var(--text-tertiary)', cursor: 'pointer', padding: '2px' }} title="Close"><X size={13} /></button>
                     </div>
-                    <input
-                      autoFocus
-                      type="text"
-                      value={inlineEditCrValue}
-                      onChange={e => setInlineEditCrValue(e.target.value)}
-                      placeholder="CR Number"
-                      style={{ width: '100%', padding: '6px', fontSize: '12px', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}
-                      onKeyDown={e => { if (e.key === 'Enter' && company) saveInlineCrNumber(company.id, task.id); }}
-                    />
-                    <input
-                      type="url"
-                      value={inlineEditCrLinkValue}
-                      onChange={e => setInlineEditCrLinkValue(e.target.value)}
-                      placeholder="CR Link"
-                      style={{ width: '100%', padding: '6px', fontSize: '12px', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}
-                      onKeyDown={e => { if (e.key === 'Enter' && company) saveInlineCrNumber(company.id, task.id); }}
-                    />
-                    <button
-                      disabled={savingCrTaskId === task.id}
-                      onClick={() => { if (company) saveInlineCrNumber(company.id, task.id); }}
-                      style={{ padding: '6px', background: 'var(--accent)', color: '#fff', borderRadius: '6px', fontSize: '11px', fontWeight: 600, border: 'none', cursor: 'pointer' }}
-                    >
-                      {savingCrTaskId === task.id ? 'Saving...' : 'Save'}
-                    </button>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '9.5px', fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '3px' }}>
+                        CR Number
+                      </label>
+                      <input
+                        autoFocus
+                        type="text"
+                        value={inlineEditCrValue}
+                        onChange={e => setInlineEditCrValue(e.target.value)}
+                        placeholder="e.g. 123456-1"
+                        style={{ width: '100%', boxSizing: 'border-box', padding: '6px 8px', fontSize: '12px', borderRadius: '6px', border: '1px solid var(--border)', background: isDark ? 'var(--bg-secondary)' : '#ffffff', color: 'var(--text-primary)', outline: 'none' }}
+                        onKeyDown={e => { if (e.key === 'Enter' && company) saveInlineCrNumber(company.id, task.id); }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '9.5px', fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '3px' }}>
+                        URL / CR Link (Optional)
+                      </label>
+                      <input
+                        type="url"
+                        value={inlineEditCrLinkValue}
+                        onChange={e => setInlineEditCrLinkValue(e.target.value)}
+                        placeholder="https://... or portal URL"
+                        style={{ width: '100%', boxSizing: 'border-box', padding: '6px 8px', fontSize: '12px', borderRadius: '6px', border: '1px solid var(--border)', background: isDark ? 'var(--bg-secondary)' : '#ffffff', color: 'var(--text-primary)', outline: 'none' }}
+                        onKeyDown={e => { if (e.key === 'Enter' && company) saveInlineCrNumber(company.id, task.id); }}
+                      />
+                    </div>
+                    <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end', marginTop: '2px' }}>
+                      <button
+                        type="button"
+                        onClick={() => setInlineEditCrId(null)}
+                        style={{ padding: '4px 10px', borderRadius: '6px', border: '1px solid var(--border)', background: isDark ? 'var(--bg-secondary)' : '#f1f5f9', color: 'var(--text-secondary)', fontSize: '11px', fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
+                      >
+                        <X size={11} /> Cancel
+                      </button>
+                      <button
+                        type="button"
+                        disabled={savingCrTaskId === task.id}
+                        onClick={() => { if (company) saveInlineCrNumber(company.id, task.id); }}
+                        style={{ padding: '4px 12px', background: 'var(--accent)', color: '#fff', borderRadius: '6px', fontSize: '11px', fontWeight: 700, border: 'none', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                      >
+                        <Check size={12} /> {savingCrTaskId === task.id ? 'Saving...' : 'Save'}
+                      </button>
+                    </div>
                   </div>
                 )}
 
@@ -5158,7 +5254,7 @@ export default function BahrainTasks() {
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
             <div style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 600 }}>
               Showing <strong style={{ color: 'var(--text-primary)' }}>{startIndex + 1}</strong>–<strong style={{ color: 'var(--text-primary)' }}>{endIndex}</strong> of <strong style={{ color: 'var(--accent)' }}>{totalCount}</strong> tasks
-              {totalCount !== tasks.length && (
+              {isManualFilterActive && totalCount !== tasks.length && (
                 <span style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginLeft: '6px' }}>
                   (filtered from {tasks.length} total)
                 </span>
@@ -5441,162 +5537,604 @@ export default function BahrainTasks() {
       )}
 
       {/* Task Detail Modal */}
-      {detailTask && (
-        <Modal title={`Task #${detailTask.id.slice(0, 6)} — ${taskTypes.find(t => t.id === detailTask.task_type_id)?.name || detailTask.title}`} onClose={() => setDetailTask(null)}>
-          {/* Task info grid */}
-          <div style={{
-            display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px',
-            padding: '20px', background: 'var(--bg-secondary, #ECF0F1)', borderRadius: '8px', marginBottom: '24px',
-          }}>
-            <div>
-              <strong>Company:</strong> {detailCompany?.company_name || 'Unknown'}
-              {detailCompany?.google_drive_link && (
-                <a
-                  href={formatExternalUrl(detailCompany.google_drive_link)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{
-                    marginLeft: '8px',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '5px',
-                    color: '#16a34a',
-                    fontSize: '12px',
-                    textDecoration: 'none',
-                    fontWeight: 600,
-                    background: '#f0fdf4',
-                    padding: '3px 8px',
-                    borderRadius: '6px',
-                    border: '1px solid #bbf7d0'
-                  }}
-                  title={`Open Google Drive: ${detailCompany.google_drive_link}`}
-                >
-                  <GoogleDriveIcon size={13} /> Open Drive
-                </a>
-              )}
-            </div>
-            <div>
-              <strong>CR Number:</strong> {detailCompany?.cr_number || '—'}
-              {detailCompany?.cr_link && (
-                <a
-                  href={formatExternalUrl(detailCompany.cr_link)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{
-                    marginLeft: '8px',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    color: '#2563eb',
-                    fontSize: '12px',
-                    textDecoration: 'none',
-                    fontWeight: 600,
-                    background: '#eff6ff',
-                    padding: '2px 8px',
-                    borderRadius: '5px',
-                    border: '1px solid #bfdbfe'
-                  }}
-                  title={`Open CR Link: ${detailCompany.cr_link}`}
-                >
-                  <Globe size={12} strokeWidth={2.2} /> Open CR Link
-                </a>
-              )}
-            </div>
-            <div><strong>Type:</strong> {(() => {
-              const ids = detailTask.task_type_ids && detailTask.task_type_ids.length > 0 ? detailTask.task_type_ids : (detailTask.task_type_id ? detailTask.task_type_id.split(',').map(s => s.trim()).filter(Boolean) : []);
-              const names = ids.map(id => taskTypes.find(t => t.id === id)?.name).filter(Boolean);
-              return names.length > 0 ? names.join(', ') : detailTask.title;
-            })()}</div>
-            <div><strong>Auditor:</strong> {auditors.find(a => a.id === detailTask.auditor_id)?.name || 'None'}</div>
-            <div><strong>Priority:</strong> <span style={{ padding: '3px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: 600, background: priorityColor(detailTask.priority).bg, color: '#fff' }}>{detailTask.priority}</span></div>
-            <div><strong>Status:</strong> <span style={{ padding: '3px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: 600, background: '#D6EAF8', color: '#3498DB' }}>{detailTask.status}</span></div>
-            <div><strong>Due Date:</strong> {detailTask.deadline}</div>
-            <div>
-              <strong>PL Date:</strong> {detailTask.pl_date ? (
-                <span style={{ fontFamily: 'ui-monospace, monospace', fontWeight: 600, color: '#1d4ed8', background: '#eff6ff', padding: '2px 8px', borderRadius: '6px', border: '1px solid #bfdbfe', marginLeft: '6px' }}>
-                  📅 {formatPlDateDisplay(detailTask.pl_date)}
-                </span>
-              ) : (
-                <span style={{ color: '#94a3b8', marginLeft: '6px' }}>Not set</span>
-              )}
-            </div>
-            <div><strong>Created:</strong> {detailTask.created_at?.slice(0, 10)}</div>
-            <div><strong>Description Updated:</strong> {formatDescDate(descUpdateMap[detailTask.id] || (detailTask.description ? detailTask.created_at : null))}</div>
-            <div style={{ gridColumn: '1 / -1' }}><strong>Description:</strong><br />{detailTask.description || 'No description'}</div>
-          </div>
+      {detailTask && (() => {
+        const dCompany = detailCompany || companies.find(c => c.id === detailTask.company_id);
+        const sc = statusColor(detailTask.status);
+        const pc = priorityColor(detailTask.priority);
+        const isOverdue = !!(
+          detailTask.deadline &&
+          new Date(detailTask.deadline).getTime() < new Date().setHours(0, 0, 0, 0) &&
+          !['completed', 'closed', 'filed', 'done'].includes((detailTask.status || '').toLowerCase())
+        );
 
-          {/* Status History Timeline */}
-          <h3 style={{ marginBottom: '15px', color: '#2E4053', fontSize: '16px' }}>Status History</h3>
-          <div style={{ position: 'relative', paddingLeft: '40px', marginBottom: '24px' }}>
-            <div style={{ position: 'absolute', left: '15px', top: 0, bottom: 0, width: '2px', background: '#BDC3C7' }} />
-            {statusLogs.length === 0 ? (
-              <div style={{ padding: '15px', color: '#7F8C8D' }}>No history yet</div>
-            ) : statusLogs.map((log, i) => (
-              <div key={log.id} style={{ position: 'relative', marginBottom: '20px' }}>
-                <div style={{
-                  position: 'absolute', left: '-32px', top: '0',
-                  width: '14px', height: '14px', borderRadius: '50%',
-                  background: '#5DADE2', border: '3px solid white', boxShadow: '0 0 0 2px #5DADE2',
-                }} />
-                <div style={{ background: 'var(--bg-secondary, #ECF0F1)', padding: '12px 15px', borderRadius: '8px' }}>
-                  <div style={{ fontSize: '12px', color: '#7F8C8D', fontWeight: 600 }}>{new Date(log.created_at).toLocaleString()}</div>
-                  <div style={{ fontWeight: 700, color: '#2E4053', margin: '4px 0' }}>{log.status}</div>
-                  <div style={{ fontSize: '14px', color: '#34495E' }}>{log.remarks || 'No remarks'}</div>
-                  <div style={{ fontSize: '12px', color: '#7F8C8D', marginTop: '4px' }}>
-                    By: {(log as any).updater?.username || 'Unknown'}
+        // Resolve task types
+        const dttIds = detailTask.task_type_ids && detailTask.task_type_ids.length > 0
+          ? detailTask.task_type_ids
+          : (detailTask.task_type_id ? detailTask.task_type_id.split(',').map(s => s.trim()).filter(Boolean) : []);
+        const dttNames = dttIds.map(id => taskTypes.find(t => t.id === id)?.name).filter(Boolean);
+
+        // Resolve assigned partners
+        const activePartnerIds = detailTask.assigned_partners && detailTask.assigned_partners.length > 0
+          ? detailTask.assigned_partners
+          : (detailTask.assigned_to ? [detailTask.assigned_to] : []);
+        const activePartnerObjects = activePartnerIds
+          .map(id => partners.find(p => p.id === id))
+          .filter((p): p is typeof partners[number] => Boolean(p));
+
+        const auditorName = auditors.find(a => a.id === detailTask.auditor_id)?.name;
+        const lastDescDate = descUpdateMap[detailTask.id] || (detailTask.description ? detailTask.created_at : null);
+
+        return (
+          <Modal
+            title={`Task #${detailTask.id.slice(0, 8)}`}
+            onClose={() => setDetailTask(null)}
+          >
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+              
+              {/* 1. Header Banner with Company Name, Status Pill, Priority & Action Links */}
+              <div style={{
+                background: isDark ? 'var(--bg-tertiary)' : 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
+                padding: '16px 18px',
+                borderRadius: '14px',
+                border: '1px solid var(--border)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '12px'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
+                    <div style={{
+                      width: '42px',
+                      height: '42px',
+                      borderRadius: '12px',
+                      background: 'linear-gradient(135deg, var(--accent, #3b82f6), #2563eb)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                      boxShadow: '0 4px 12px rgba(37,99,235,0.25)',
+                      color: '#ffffff'
+                    }}>
+                      <Building2 size={20} />
+                    </div>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                        <h3 style={{ fontSize: '18px', fontWeight: 750, color: 'var(--text-primary)', margin: 0, letterSpacing: '-0.02em' }}>
+                          {dCompany?.company_name || 'Unassigned Company'}
+                        </h3>
+                        {detailTask.country && (
+                          <span style={{ fontSize: '11px', color: 'var(--text-tertiary)', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                            <CountryFlag name={detailTask.country} size={13} /> {detailTask.country}
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px', fontFamily: 'ui-monospace, monospace' }}>
+                        Task ID: #{detailTask.id}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Status, Priority & Overdue Badges */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                    <span style={{
+                      padding: '4px 12px',
+                      borderRadius: '20px',
+                      fontSize: '11.5px',
+                      fontWeight: 750,
+                      background: sc.bg,
+                      color: sc.color,
+                      border: `1.5px solid ${sc.border}`,
+                      boxShadow: sc.glow,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '5px'
+                    }}>
+                      <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: sc.dot, boxShadow: `0 0 6px ${sc.dot}` }} />
+                      {detailTask.status}
+                    </span>
+
+                    <span style={{
+                      padding: '4px 10px',
+                      borderRadius: '20px',
+                      fontSize: '11.5px',
+                      fontWeight: 700,
+                      background: pc.bg,
+                      color: pc.color,
+                      border: `1px solid ${pc.border || 'transparent'}`
+                    }}>
+                      {detailTask.priority}
+                    </span>
+
+                    {isOverdue && (
+                      <span style={{
+                        padding: '4px 10px',
+                        borderRadius: '20px',
+                        fontSize: '11.5px',
+                        fontWeight: 700,
+                        background: 'rgba(239, 68, 68, 0.15)',
+                        color: '#ef4444',
+                        border: '1px solid rgba(239, 68, 68, 0.3)',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px'
+                      }}>
+                        ⚠️ Overdue
+                      </span>
+                    )}
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
 
-          {/* Update Status */}
-          {canUpdateStatus && (
-            <>
-              <h3 style={{ marginBottom: '15px', color: '#2E4053', fontSize: '16px' }}>Update Status</h3>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
-                <FormField label="New Status">
-                  <select value={updateStatus} onChange={e => setUpdateStatus(e.target.value)} style={inputStyle}>
-                    {(() => {
-                      const dttIds = detailTask?.task_type_ids && detailTask.task_type_ids.length > 0
-                        ? detailTask.task_type_ids
-                        : (detailTask?.task_type_id ? detailTask.task_type_id.split(',').map(s => s.trim()).filter(Boolean) : []);
-                      return getStatusesForTask(dttIds, statusObjects, dynamicStatuses).map(s => <option key={s} value={s}>{s}</option>);
-                    })()}
-                  </select>
-                </FormField>
-                <FormField label="Updated By">
-                  <select value={updateBy} onChange={e => setUpdateBy(e.target.value)} style={inputStyle} disabled={!isAdminUser && !(detailTask && canManageTask(detailTask))}>
-                    {!partners.some(p => p.id === updateBy) && updateBy && (
-                      <option value={updateBy}>{currentUser?.username || 'Current User'}</option>
+                {/* Company Link Shortcuts (Google Drive, CR Number & Link) */}
+                {(dCompany?.google_drive_link || dCompany?.cr_number || dCompany?.cr_link) && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', paddingTop: '10px', borderTop: '1px solid var(--border)' }}>
+                    {dCompany?.google_drive_link && (
+                      <a
+                        href={formatExternalUrl(dCompany.google_drive_link)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          padding: '5px 10px',
+                          borderRadius: '8px',
+                          fontSize: '12px',
+                          fontWeight: 650,
+                          color: '#16a34a',
+                          background: isDark ? 'rgba(34, 197, 94, 0.15)' : '#f0fdf4',
+                          border: isDark ? '1px solid rgba(34, 197, 94, 0.35)' : '1px solid #bbf7d0',
+                          textDecoration: 'none',
+                          transition: 'all 0.15s ease'
+                        }}
+                        title={`Open Google Drive: ${dCompany.google_drive_link}`}
+                      >
+                        <GoogleDriveIcon size={14} /> Open Google Drive
+                      </a>
                     )}
-                    {partners.map(p => <option key={p.id} value={p.id}>{p.username}</option>)}
-                  </select>
-                </FormField>
+
+                    {dCompany?.cr_number && (
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{
+                          fontFamily: 'ui-monospace, monospace',
+                          fontSize: '12px',
+                          fontWeight: 650,
+                          color: isDark ? '#cbd5e1' : '#334155',
+                          background: isDark ? 'var(--bg-secondary)' : '#ffffff',
+                          padding: '5px 10px',
+                          borderRadius: '8px',
+                          border: '1px solid var(--border)',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}>
+                          <Hash size={12} color="var(--text-tertiary)" /> CR: {dCompany.cr_number}
+                        </span>
+
+                        {dCompany?.cr_link && (
+                          <a
+                            href={formatExternalUrl(dCompany.cr_link)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              padding: '5px 10px',
+                              borderRadius: '8px',
+                              fontSize: '12px',
+                              fontWeight: 650,
+                              color: '#2563eb',
+                              background: isDark ? 'rgba(59, 130, 246, 0.15)' : '#eff6ff',
+                              border: isDark ? '1px solid rgba(59, 130, 246, 0.35)' : '1px solid #bfdbfe',
+                              textDecoration: 'none',
+                              transition: 'all 0.15s ease'
+                            }}
+                            title={`Open CR Portal Link: ${dCompany.cr_link}`}
+                          >
+                            <Globe size={13} strokeWidth={2.2} /> CR Portal
+                          </a>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
-              {isAdminUser && (
-                <FormField label="Assign Partners">
-                  <MultiSelect
-                    options={partners.map(p => ({ id: p.id, label: p.username }))}
-                    selected={updatePartners}
-                    onChange={setUpdatePartners}
-                    placeholder="Select Partners"
-                  />
-                </FormField>
+
+              {/* 2. Structured Metadata Grid */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: '14px' }}>
+                
+                {/* Card A: Task Types & Category */}
+                <div style={{
+                  background: isDark ? 'var(--bg-tertiary)' : '#ffffff',
+                  borderRadius: '12px',
+                  padding: '14px 16px',
+                  border: '1px solid var(--border)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '6px'
+                }}>
+                  <div style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <Tag size={13} color="var(--accent)" /> Task Types & Services
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginTop: '2px' }}>
+                    {dttNames.length > 0 ? (
+                      dttNames.map((name, i) => (
+                        <span
+                          key={i}
+                          style={{
+                            padding: '3px 8px',
+                            borderRadius: '6px',
+                            fontSize: '11.5px',
+                            fontWeight: 650,
+                            background: isDark ? 'rgba(99, 102, 241, 0.16)' : '#eef2ff',
+                            color: isDark ? '#a5b4fc' : '#4338ca',
+                            border: isDark ? '1px solid rgba(99, 102, 241, 0.35)' : '1px solid #c7d2fe'
+                          }}
+                        >
+                          {name}
+                        </span>
+                      ))
+                    ) : (
+                      <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                        {detailTask.title || 'General Task'}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Card B: Assigned Partners */}
+                <div style={{
+                  background: isDark ? 'var(--bg-tertiary)' : '#ffffff',
+                  borderRadius: '12px',
+                  padding: '14px 16px',
+                  border: '1px solid var(--border)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '6px'
+                }}>
+                  <div style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <Users size={13} color="var(--accent)" /> Assigned Team
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '2px' }}>
+                    {activePartnerObjects.length > 0 ? (
+                      activePartnerObjects.map(p => {
+                        const pCol = getPartnerColor(p.username || p.id);
+                        return (
+                          <div
+                            key={p.id}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              padding: '3px 8px 3px 4px',
+                              borderRadius: '20px',
+                              background: isDark ? pCol.bg : '#f8fafc',
+                              border: `1px solid ${pCol.border}`,
+                              color: isDark ? pCol.text : '#334155'
+                            }}
+                          >
+                            <div style={{
+                              width: '18px',
+                              height: '18px',
+                              borderRadius: '50%',
+                              background: pCol.avatarBg,
+                              color: '#fff',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '9px',
+                              fontWeight: 800
+                            }}>
+                              {p.username.charAt(0).toUpperCase()}
+                            </div>
+                            <span style={{ fontSize: '11.5px', fontWeight: 650 }}>{p.username}</span>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <span style={{ fontSize: '12.5px', color: 'var(--text-tertiary)', fontStyle: 'italic' }}>
+                        No partners assigned
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Card C: Auditor & Compliance */}
+                <div style={{
+                  background: isDark ? 'var(--bg-tertiary)' : '#ffffff',
+                  borderRadius: '12px',
+                  padding: '14px 16px',
+                  border: '1px solid var(--border)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '6px'
+                }}>
+                  <div style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <UserCheck size={13} color="var(--accent)" /> Assigned Auditor
+                  </div>
+                  <div style={{ marginTop: '2px' }}>
+                    {auditorName ? (
+                      <span style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '5px',
+                        padding: '3px 8px',
+                        borderRadius: '6px',
+                        fontSize: '12px',
+                        fontWeight: 650,
+                        background: isDark ? 'rgba(168, 85, 247, 0.16)' : '#faf5ff',
+                        color: isDark ? '#c084fc' : '#7e22ce',
+                        border: isDark ? '1px solid rgba(168, 85, 247, 0.35)' : '1px solid #f3e8ff'
+                      }}>
+                        {auditorName}
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: '12.5px', color: 'var(--text-tertiary)', fontStyle: 'italic' }}>
+                        None assigned
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Card D: Key Dates & Milestones */}
+                <div style={{
+                  background: isDark ? 'var(--bg-tertiary)' : '#ffffff',
+                  borderRadius: '12px',
+                  padding: '14px 16px',
+                  border: '1px solid var(--border)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px'
+                }}>
+                  <div style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <Calendar size={13} color="var(--accent)" /> Important Dates
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '12px' }}>
+                    <div>
+                      <div style={{ color: 'var(--text-tertiary)', fontSize: '10.5px', fontWeight: 600 }}>Due Date:</div>
+                      <div style={{ fontWeight: 650, color: isOverdue ? '#ef4444' : 'var(--text-primary)', fontFamily: 'ui-monospace, monospace', marginTop: '1px' }}>
+                        {detailTask.deadline || '—'}
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ color: 'var(--text-tertiary)', fontSize: '10.5px', fontWeight: 600 }}>PL Date:</div>
+                      <div style={{ fontWeight: 650, color: detailTask.pl_date ? '#2563eb' : 'var(--text-tertiary)', fontFamily: 'ui-monospace, monospace', marginTop: '1px' }}>
+                        {detailTask.pl_date ? formatPlDateDisplay(detailTask.pl_date) : 'Not set'}
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ color: 'var(--text-tertiary)', fontSize: '10.5px', fontWeight: 600 }}>Created:</div>
+                      <div style={{ color: 'var(--text-secondary)', fontFamily: 'ui-monospace, monospace', marginTop: '1px' }}>
+                        {detailTask.created_at ? detailTask.created_at.slice(0, 10) : '—'}
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ color: 'var(--text-tertiary)', fontSize: '10.5px', fontWeight: 600 }}>Desc Updated:</div>
+                      <div style={{ color: 'var(--text-secondary)', fontFamily: 'ui-monospace, monospace', marginTop: '1px' }}>
+                        {formatDescDate(lastDescDate)}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+
+              {/* 3. Description & Notes Card */}
+              <div style={{
+                background: isDark ? 'var(--bg-tertiary)' : '#ffffff',
+                borderRadius: '12px',
+                padding: '16px',
+                border: '1px solid var(--border)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '8px'
+              }}>
+                <div style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <FileText size={13} color="var(--accent)" /> Task Notes & Description
+                </div>
+                <div style={{
+                  padding: '12px 14px',
+                  borderRadius: '8px',
+                  background: isDark ? 'var(--bg-secondary)' : '#f8fafc',
+                  border: '1px solid var(--border)',
+                  fontSize: '13px',
+                  lineHeight: '1.6',
+                  color: detailTask.description ? 'var(--text-primary)' : 'var(--text-tertiary)',
+                  fontStyle: detailTask.description ? 'normal' : 'italic',
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-word',
+                  maxHeight: '180px',
+                  overflowY: 'auto'
+                }}>
+                  {detailTask.description || 'No description or remarks added yet.'}
+                </div>
+              </div>
+
+              {/* 4. Status History & Activity Timeline */}
+              <div style={{
+                background: isDark ? 'var(--bg-tertiary)' : '#ffffff',
+                borderRadius: '12px',
+                padding: '16px',
+                border: '1px solid var(--border)'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
+                  <div style={{ fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Activity size={14} color="var(--accent)" /> Status History & Audit Log
+                  </div>
+                  <span style={{ fontSize: '11px', fontWeight: 650, color: 'var(--text-tertiary)', background: isDark ? 'var(--bg-secondary)' : '#f1f5f9', padding: '2px 8px', borderRadius: '12px', border: '1px solid var(--border)' }}>
+                    {statusLogs.length} {statusLogs.length === 1 ? 'event' : 'events'}
+                  </span>
+                </div>
+
+                {statusLogs.length === 0 ? (
+                  <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '12.5px', background: isDark ? 'var(--bg-secondary)' : '#f8fafc', borderRadius: '8px' }}>
+                    No status history recorded yet.
+                  </div>
+                ) : (
+                  <div style={{ position: 'relative', paddingLeft: '28px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                    <div style={{ position: 'absolute', left: '10px', top: '8px', bottom: '8px', width: '2px', background: 'var(--border)' }} />
+                    {statusLogs.map((log) => {
+                      const logSc = statusColor(log.status);
+                      const updaterName = (log as any).updater?.username || 'System';
+                      return (
+                        <div key={log.id} style={{ position: 'relative' }}>
+                          <div style={{
+                            position: 'absolute',
+                            left: '-23px',
+                            top: '4px',
+                            width: '12px',
+                            height: '12px',
+                            borderRadius: '50%',
+                            background: logSc.dot,
+                            border: '2px solid var(--bg-card, #ffffff)',
+                            boxShadow: `0 0 0 2px ${logSc.border}`
+                          }} />
+                          <div style={{
+                            background: isDark ? 'var(--bg-secondary)' : '#f8fafc',
+                            padding: '10px 14px',
+                            borderRadius: '8px',
+                            border: '1px solid var(--border)'
+                          }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
+                              <span style={{
+                                padding: '2px 8px',
+                                borderRadius: '12px',
+                                fontSize: '10.5px',
+                                fontWeight: 750,
+                                background: logSc.bg,
+                                color: logSc.color,
+                                border: `1px solid ${logSc.border}`
+                              }}>
+                                {log.status}
+                              </span>
+                              <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', fontWeight: 500, fontFamily: 'ui-monospace, monospace' }}>
+                                {new Date(log.created_at).toLocaleString()}
+                              </div>
+                            </div>
+                            {log.remarks && (
+                              <div style={{ fontSize: '12.5px', color: 'var(--text-primary)', marginTop: '6px', lineHeight: '1.4', wordBreak: 'break-word' }}>
+                                {log.remarks}
+                              </div>
+                            )}
+                            <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <span>Updated by:</span>
+                              <strong style={{ color: 'var(--text-primary)' }}>{updaterName}</strong>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* 5. Update Status & Assignments (if permitted) */}
+              {canUpdateStatus && (
+                <div style={{
+                  background: isDark ? 'var(--bg-tertiary)' : 'linear-gradient(135deg, #f0fdf4 0%, #f8fafc 100%)',
+                  borderRadius: '12px',
+                  padding: '18px',
+                  border: isDark ? '1px solid var(--border)' : '1px solid #dcfce7',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '14px'
+                }}>
+                  <div style={{ fontSize: '12px', fontWeight: 750, textTransform: 'uppercase', letterSpacing: '0.05em', color: isDark ? 'var(--text-primary)' : '#166534', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Edit2 size={14} color={isDark ? 'var(--accent)' : '#16a34a'} /> Update Task Status & Progress
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px' }}>
+                    <FormField label="New Status *">
+                      <select value={updateStatus} onChange={e => setUpdateStatus(e.target.value)} style={inputStyle}>
+                        {(() => {
+                          const dttIds = detailTask?.task_type_ids && detailTask.task_type_ids.length > 0
+                            ? detailTask.task_type_ids
+                            : (detailTask?.task_type_id ? detailTask.task_type_id.split(',').map(s => s.trim()).filter(Boolean) : []);
+                          return getStatusesForTask(dttIds, statusObjects, dynamicStatuses).map(s => <option key={s} value={s}>{s}</option>);
+                        })()}
+                      </select>
+                    </FormField>
+
+                    <FormField label="Updated By">
+                      <select value={updateBy} onChange={e => setUpdateBy(e.target.value)} style={inputStyle} disabled={!isAdminUser && !(detailTask && canManageTask(detailTask))}>
+                        {!partners.some(p => p.id === updateBy) && updateBy && (
+                          <option value={updateBy}>{currentUser?.username || 'Current User'}</option>
+                        )}
+                        {partners.map(p => <option key={p.id} value={p.id}>{p.username}</option>)}
+                      </select>
+                    </FormField>
+                  </div>
+
+                  {isAdminUser && (
+                    <FormField label="Assign Partners (Team)">
+                      <MultiSelect
+                        options={partners.map(p => ({ id: p.id, label: p.username }))}
+                        selected={updatePartners}
+                        onChange={setUpdatePartners}
+                        placeholder="Select Partners"
+                      />
+                    </FormField>
+                  )}
+
+                  <FormField label="Progress Remarks / Notes (Optional)">
+                    <textarea
+                      value={updateRemarks}
+                      onChange={e => setUpdateRemarks(e.target.value)}
+                      placeholder="Add brief remarks on progress, client communications, or changes..."
+                      style={{ ...inputStyle, minHeight: '75px', resize: 'vertical' }}
+                    />
+                  </FormField>
+                </div>
               )}
-              <FormField label="Remarks">
-                <textarea value={updateRemarks} onChange={e => setUpdateRemarks(e.target.value)} placeholder="Add notes..." style={{ ...inputStyle, minHeight: '80px', resize: 'vertical' }} />
-              </FormField>
-            </>
-          )}
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '24px', paddingTop: '20px', borderTop: '1px solid #f1f5f9' }}>
-            <button onClick={() => setDetailTask(null)} style={{ padding: '11px 24px', background: '#f1f5f9', color: '#475569', border: '1px solid #e2e8f0', borderRadius: '10px', cursor: 'pointer', fontWeight: 600, fontSize: '14px', transition: 'all 0.15s ease' }} onMouseEnter={e => e.currentTarget.style.background = '#e2e8f0'} onMouseLeave={e => e.currentTarget.style.background = '#f1f5f9'}>Close</button>
-            {canUpdateStatus && (
-              <button onClick={submitStatusUpdate} style={{ padding: '11px 24px', background: 'linear-gradient(135deg, #3b82f6, #2563eb)', color: '#fff', border: 'none', borderRadius: '10px', cursor: 'pointer', fontWeight: 600, fontSize: '14px', boxShadow: '0 4px 14px rgba(59,130,246,0.3)', transition: 'all 0.15s ease' }} onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 6px 20px rgba(59,130,246,0.4)'; }} onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 4px 14px rgba(59,130,246,0.3)'; }}>Update Status</button>
-            )}
-          </div>
-        </Modal>
-      )}
+
+              {/* 6. Footer Actions */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', paddingTop: '16px', borderTop: '1px solid var(--border)' }}>
+                <button
+                  type="button"
+                  onClick={() => setDetailTask(null)}
+                  style={{
+                    padding: '9px 20px',
+                    background: 'var(--bg-tertiary)',
+                    color: 'var(--text-secondary)',
+                    border: '1px solid var(--border)',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    fontWeight: 600,
+                    fontSize: '13px',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  Close
+                </button>
+                {canUpdateStatus && (
+                  <button
+                    type="button"
+                    onClick={submitStatusUpdate}
+                    style={{
+                      padding: '9px 22px',
+                      background: 'linear-gradient(135deg, var(--accent, #3b82f6), #2563eb)',
+                      color: '#ffffff',
+                      border: 'none',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      fontWeight: 700,
+                      fontSize: '13px',
+                      boxShadow: '0 4px 14px rgba(37,99,235,0.3)',
+                      transition: 'all 0.15s ease',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    <Check size={14} /> Update Status
+                  </button>
+                )}
+              </div>
+
+            </div>
+          </Modal>
+        );
+      })()}
 
       {activeTooltipTaskId && typeof window !== 'undefined' && createPortal(
         <div

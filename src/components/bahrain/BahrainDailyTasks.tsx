@@ -6,8 +6,10 @@ import { useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import type { Task, User, StatusLog } from '@/lib/supabase';
 import { getSession, isAdmin, getDataCountry } from '@/lib/auth';
-import { Plus, X, Eye, Edit2, CheckCircle2, Search, Filter, Repeat, Trash2, MoreHorizontal, Check } from 'lucide-react';
-import { EGRESS_OPTIMIZATION_MODE } from '@/lib/optimizationConfig';
+import {
+  Plus, X, Eye, Edit2, CheckCircle2, Search, Filter, Repeat, Trash2, MoreHorizontal, Check,
+  Calendar, Clock, Users, Tag, FileText, Activity, AlertTriangle, Hash, Sparkles, ListTodo
+} from 'lucide-react';
 
 // Fixed array of statuses so it alphabetically sorts correctly
 const BAHRAIN_STATUSES = [
@@ -57,6 +59,7 @@ export default function BahrainDailyTasks() {
   const [statusLogs, setStatusLogs] = useState<StatusLog[]>([]);
   const [updateStatus, setUpdateStatus] = useState('');
   const [updateBy, setUpdateBy] = useState('');
+  const [updatePartners, setUpdatePartners] = useState<string[]>([]);
   const [updateRemarks, setUpdateRemarks] = useState('');
   
   // Inline edit state
@@ -588,6 +591,7 @@ export default function BahrainDailyTasks() {
       setUpdateBy(currentUser?.id || '');
     }
     setUpdateStatus(task.status);
+    setUpdatePartners(task.assigned_partners || (task.assigned_to ? [task.assigned_to] : []));
     setUpdateRemarks('');
     
     const { data: logs } = await supabase.from('status_log').select('*, updater:users(username)').eq('task_id', id).order('created_at', { ascending: false });
@@ -599,13 +603,31 @@ export default function BahrainDailyTasks() {
     const oldStatus = detailTask.status;
     const byId = isAdminUser ? updateBy : currentUser?.id;
     
-    await supabase.from('tasks').update({ status: updateStatus }).eq('id', detailTask.id);
+    const updatePayload: any = { status: updateStatus };
+    if (isAdminUser) {
+      updatePayload.assigned_partners = updatePartners;
+      updatePayload.assigned_to = updatePartners.length > 0 ? updatePartners[0] : null;
+    }
+
+    await supabase.from('tasks').update(updatePayload).eq('id', detailTask.id);
+    
+    let remarks = updateRemarks;
+    if (!remarks) {
+      if (oldStatus !== updateStatus) {
+        remarks = `Changed from ${oldStatus} to ${updateStatus}`;
+      } else {
+        remarks = 'Updated task details';
+      }
+    }
+
     await supabase.from('status_log').insert({
       task_id: detailTask.id,
       status: updateStatus,
       updated_by: byId,
-      remarks: updateRemarks || `Changed from ${oldStatus} to ${updateStatus}`
+      remarks: remarks
     });
+    sessionStorage.removeItem('bahrain_daily_tasks_cache_v1');
+    sessionStorage.removeItem('tasks_data_time');
     setDetailTask(null);
     loadData();
   }
@@ -661,28 +683,54 @@ export default function BahrainDailyTasks() {
       </div>
 
       {/* Tasks Table */}
-      <div className="task-table-wrap" style={{ width: '100%', overflowX: 'auto', borderRadius: '18px', boxShadow: '0 8px 32px rgba(0,0,0,0.05)', border: '1px solid rgba(226, 232, 240, 0.8)', background: '#ffffff', WebkitOverflowScrolling: 'touch' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', background: '#ffffff' }}>
+      <div className="task-table-wrap" style={{ width: '100%', overflowX: 'auto', borderRadius: '18px', boxShadow: 'var(--card-shadow, 0 8px 32px rgba(0,0,0,0.05))', border: '1px solid var(--border, rgba(226, 232, 240, 0.8))', background: 'var(--bg-card, #ffffff)', WebkitOverflowScrolling: 'touch' }}>
+        <table style={{ width: '100%', minWidth: '960px', borderCollapse: 'collapse', background: 'var(--bg-card, #ffffff)', tableLayout: 'fixed' }}>
           <thead>
-            <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
-              {['ID', 'Title', 'Description', 'Priority', 'Status', 'Due', 'Assigned To', ''].map(h => (
-                <th key={h} style={{ padding: '11px 10px', textAlign: 'left', fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', color: '#64748b', whiteSpace: 'nowrap' }}>{h}</th>
+            <tr style={{ background: isDark ? 'var(--bg-tertiary)' : '#f8fafc', borderBottom: '2px solid var(--border, #e2e8f0)' }}>
+              {[
+                { id: 'id', label: 'ID', width: '68px', minWidth: '68px', align: 'left' },
+                { id: 'title', label: 'Title', width: '20%', minWidth: '160px', align: 'left' },
+                { id: 'description', label: 'Description', width: '22%', minWidth: '170px', align: 'left' },
+                { id: 'priority', label: 'Priority', width: '95px', minWidth: '95px', align: 'left' },
+                { id: 'status', label: 'Status', width: '155px', minWidth: '150px', align: 'left' },
+                { id: 'deadline', label: 'Due Date', width: '115px', minWidth: '110px', align: 'left' },
+                { id: 'assigned_to', label: 'Assigned To', width: '160px', minWidth: '150px', align: 'left' },
+                { id: 'actions', label: '', width: '45px', minWidth: '45px', align: 'center' },
+              ].map(col => (
+                <th
+                  key={col.id}
+                  style={{
+                    padding: col.id === 'actions' ? '11px 4px' : '11px 10px',
+                    textAlign: col.align as any,
+                    fontSize: '10.5px',
+                    fontWeight: 700,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.5px',
+                    color: 'var(--text-secondary, #64748b)',
+                    whiteSpace: 'nowrap',
+                    width: col.width,
+                    minWidth: col.minWidth,
+                    boxSizing: 'border-box'
+                  }}
+                >
+                  {col.label}
+                </th>
               ))}
             </tr>
           </thead>
           <tbody>
             {sortedTasks.length === 0 ? (
-              <tr><td colSpan={8} style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>No daily tasks found.</td></tr>
+              <tr><td colSpan={8} style={{ textAlign: 'center', padding: '40px', color: 'var(--text-tertiary, #94a3b8)' }}>No daily tasks found.</td></tr>
             ) : sortedTasks.map(task => {
               const pc = priorityColor(task.priority);
               const isMenuOpen = openMenuId === task.id;
               
               return (
-              <tr key={task.id} style={{ borderBottom: '1px solid #f1f5f9', transition: 'background 0.15s ease' }} onMouseEnter={e => e.currentTarget.style.background = '#fafbfc'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                <td style={compactCell}><span style={{ fontWeight: 600, color: '#475569', fontSize: '12px' }}>#{task.id.slice(0, 6)}</span></td>
-                <td style={compactCell}>
+              <tr key={task.id} style={{ borderBottom: '1px solid var(--border, #f1f5f9)', transition: 'background 0.15s ease' }} onMouseEnter={e => e.currentTarget.style.background = isDark ? 'var(--bg-tertiary)' : '#fafbfc'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                <td style={{ ...compactCell, width: '68px', minWidth: '68px' }}><span style={{ fontWeight: 600, color: 'var(--text-secondary, #475569)', fontSize: '12px', fontFamily: 'ui-monospace, monospace' }}>#{task.id.slice(0, 6)}</span></td>
+                <td style={{ ...compactCell, width: '20%', minWidth: '160px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                    <span style={{ fontWeight: 500, fontSize: '12px', color: '#1e293b', maxWidth: '160px', display: 'inline-block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{task.title}</span>
+                    <span style={{ fontWeight: 500, fontSize: '12px', color: 'var(--text-primary, #1e293b)', maxWidth: '160px', display: 'inline-block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{task.title}</span>
                     {task.repeat_daily && (
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', padding: '2px 8px', borderRadius: '20px', fontSize: '9px', fontWeight: 700, background: 'linear-gradient(135deg, #7c3aed20, #6d28d920)', color: '#7c3aed', border: '1px solid #7c3aed30', letterSpacing: '0.3px', textTransform: 'uppercase' }}>
                         <Repeat size={10} /> Repeat
@@ -696,12 +744,12 @@ export default function BahrainDailyTasks() {
                   </div>
                 </td>
                 <td 
-                  style={{...compactCell, position: 'relative'}}
+                  style={{ ...compactCell, width: '22%', minWidth: '170px', position: 'relative' }}
                   onMouseEnter={() => setHoveredDescTaskId(task.id)}
                   onMouseLeave={() => setHoveredDescTaskId(null)}
                 >
                   {inlineEditDescId === task.id ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: '180px', position: 'absolute', zIndex: 10, background: '#fff', padding: '8px', borderRadius: '8px', boxShadow: '0 4px 20px rgba(0,0,0,0.15)', border: '1px solid #e2e8f0', top: '50%', transform: 'translateY(-50%)', left: '10px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: '180px', position: 'absolute', zIndex: 10, background: 'var(--bg-card, #fff)', padding: '8px', borderRadius: '8px', boxShadow: '0 4px 20px rgba(0,0,0,0.15)', border: '1px solid var(--border, #e2e8f0)', top: '50%', transform: 'translateY(-50%)', left: '10px' }}>
                       <textarea
                         autoFocus
                         value={inlineEditDescValue}
@@ -716,7 +764,8 @@ export default function BahrainDailyTasks() {
                           outline: 'none',
                           resize: 'vertical',
                           fontFamily: 'inherit',
-                          color: '#1e293b'
+                          color: 'var(--text-primary, #1e293b)',
+                          background: 'var(--bg-primary, #ffffff)'
                         }}
                         onKeyDown={e => {
                           if (e.key === 'Escape') {
@@ -729,7 +778,7 @@ export default function BahrainDailyTasks() {
                       <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end', marginTop: '2px' }}>
                         <button
                           onClick={() => setInlineEditDescId(null)}
-                          style={{ padding: '4px 8px', border: '1px solid #e2e8f0', background: '#f8fafc', color: '#64748b', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10px', fontWeight: 600 }}
+                          style={{ padding: '4px 8px', border: '1px solid var(--border, #e2e8f0)', background: 'var(--bg-tertiary, #f8fafc)', color: 'var(--text-secondary, #64748b)', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10px', fontWeight: 600 }}
                           title="Cancel (Esc)"
                         >
                           <X size={12} /> Cancel
@@ -745,7 +794,7 @@ export default function BahrainDailyTasks() {
                     </div>
                   ) : (
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px', minHeight: '24px' }}>
-                      <span style={{ fontSize: '11px', color: '#475569', maxWidth: '150px', display: 'inline-block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={task.description || ''}>
+                      <span style={{ fontSize: '11px', color: 'var(--text-secondary, #475569)', maxWidth: '160px', display: 'inline-block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={task.description || ''}>
                         {task.description || '—'}
                       </span>
                       {hoveredDescTaskId === task.id && isAdminUser && (
@@ -755,8 +804,8 @@ export default function BahrainDailyTasks() {
                             setInlineEditDescValue(task.description || '');
                           }}
                           style={{
-                            background: '#eff6ff',
-                            border: '1px solid #bfdbfe',
+                            background: isDark ? 'rgba(59, 130, 246, 0.15)' : '#eff6ff',
+                            border: isDark ? '1px solid rgba(59, 130, 246, 0.35)' : '1px solid #bfdbfe',
                             borderRadius: '4px',
                             cursor: 'pointer',
                             padding: '3px',
@@ -767,8 +816,8 @@ export default function BahrainDailyTasks() {
                             transition: 'all 0.15s ease'
                           }}
                           title="Edit Description"
-                          onMouseEnter={e => { e.currentTarget.style.background = '#dbeafe'; }}
-                          onMouseLeave={e => { e.currentTarget.style.background = '#eff6ff'; }}
+                          onMouseEnter={e => { e.currentTarget.style.background = isDark ? 'rgba(59, 130, 246, 0.25)' : '#dbeafe'; }}
+                          onMouseLeave={e => { e.currentTarget.style.background = isDark ? 'rgba(59, 130, 246, 0.15)' : '#eff6ff'; }}
                         >
                           <Edit2 size={12} />
                         </button>
@@ -776,23 +825,25 @@ export default function BahrainDailyTasks() {
                     </div>
                   )}
                 </td>
-                <td style={compactCell}>
+                <td style={{ ...compactCell, width: '95px', minWidth: '95px' }}>
                   {canUpdateStatus ? (
                     <select value={task.priority} onChange={e => handlePriorityChange(task.id, e.target.value)}
-                      style={{ padding: '4px 6px', borderRadius: '8px', border: 'none', background: pc.bg, color: pc.color, fontWeight: 700, fontSize: '10px', cursor: 'pointer', outline: 'none' }}>
+                      style={{ width: '100%', maxWidth: '85px', padding: '4px 6px', borderRadius: '8px', border: 'none', background: pc.bg, color: pc.color, fontWeight: 700, fontSize: '10.5px', cursor: 'pointer', outline: 'none', boxSizing: 'border-box' }}>
                       {['Urgent', 'Critical', 'High', 'Medium', 'Low'].map(p => <option key={p} value={p}>{p}</option>)}
                     </select>
                   ) : (
                     <span style={{ padding: '3px 8px', borderRadius: '20px', fontSize: '10px', fontWeight: 700, background: pc.bg, color: pc.color, whiteSpace: 'nowrap' }}>{task.priority}</span>
                   )}
                 </td>
-                <td style={compactCell}>
+                <td style={{ ...compactCell, width: '155px', minWidth: '150px' }}>
                   {canUpdateStatus ? (() => {
                     const sc = statusColor(task.status);
                     return (
                       <select value={task.status} onChange={e => handleStatusChange(task.id, e.target.value)}
                         style={{
-                          padding: '4px 10px',
+                          width: '100%',
+                          maxWidth: '145px',
+                          padding: '4px 8px',
                           borderRadius: '8px',
                           border: `1.5px solid ${sc.border}`,
                           background: sc.bg,
@@ -801,8 +852,8 @@ export default function BahrainDailyTasks() {
                           fontSize: '11px',
                           cursor: 'pointer',
                           outline: 'none',
-                          minWidth: '115px',
-                          boxShadow: isDark ? sc.glow : 'none'
+                          boxShadow: isDark ? sc.glow : 'none',
+                          boxSizing: 'border-box'
                         }}
                       >
                         {dynamicStatuses.map(s => <option key={s} value={s}>{s}</option>)}
@@ -823,16 +874,32 @@ export default function BahrainDailyTasks() {
                         color: sc.color,
                         border: `1.5px solid ${sc.border}`,
                         whiteSpace: 'nowrap',
-                        boxShadow: isDark ? sc.glow : 'none'
+                        boxShadow: isDark ? sc.glow : 'none',
+                        maxWidth: '145px',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis'
                       }}>
-                        <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: sc.dot, boxShadow: isDark ? `0 0 8px ${sc.dot}` : 'none' }} />
-                        {task.status}
+                        <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: sc.dot, boxShadow: isDark ? `0 0 8px ${sc.dot}` : 'none', flexShrink: 0 }} />
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{task.status}</span>
                       </span>
                     );
                   })()}
                 </td>
-                <td style={compactCell}><span style={{ fontSize: '12px', color: isDark ? '#fb923c' : '#c2410c', fontWeight: 650, whiteSpace: 'nowrap' }}>{task.deadline || '—'}</span></td>
-                <td style={compactCell}>
+                <td style={{ ...compactCell, width: '115px', minWidth: '110px' }}>
+                  <span style={{
+                    fontSize: '11.5px',
+                    color: isDark ? '#fb923c' : '#c2410c',
+                    fontWeight: 650,
+                    whiteSpace: 'nowrap',
+                    fontFamily: 'ui-monospace, monospace',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}>
+                    {task.deadline || <span style={{ color: 'var(--text-tertiary, #94a3b8)' }}>—</span>}
+                  </span>
+                </td>
+                <td style={{ ...compactCell, width: '160px', minWidth: '150px' }}>
                   {(() => {
                     const allAssignedIds = task.assigned_partners && task.assigned_partners.length > 0 
                       ? task.assigned_partners 
@@ -843,7 +910,7 @@ export default function BahrainDailyTasks() {
                       const selectedPartner = partners.find(p => p.id === task.assigned_to);
                       const pCol = getPartnerColor(selectedPartner?.username || selectedPartner?.id);
                       return (
-                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', width: '100%', maxWidth: '150px' }}>
                           {selectedPartner && (
                             <div style={{
                               width: '18px', height: '18px', borderRadius: '50%',
@@ -859,6 +926,8 @@ export default function BahrainDailyTasks() {
                             value={task.assigned_to || ''}
                             onChange={e => handleAssign(task.id, e.target.value)}
                             style={{
+                              width: '100%',
+                              maxWidth: selectedPartner ? '125px' : '145px',
                               padding: '4px 8px',
                               borderRadius: '8px',
                               border: task.assigned_to ? `1.5px solid ${pCol.border}` : '1px solid var(--border)',
@@ -868,8 +937,8 @@ export default function BahrainDailyTasks() {
                               fontWeight: 750,
                               cursor: 'pointer',
                               outline: 'none',
-                              minWidth: '115px',
-                              boxShadow: (task.assigned_to && isDark) ? `0 0 8px ${pCol.bg}` : 'none'
+                              boxShadow: (task.assigned_to && isDark) ? `0 0 8px ${pCol.bg}` : 'none',
+                              boxSizing: 'border-box'
                             }}
                           >
                             <option value="">👤 Unassigned</option>
@@ -922,7 +991,7 @@ export default function BahrainDailyTasks() {
                     return <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>Unassigned</span>;
                   })()}
                 </td>
-                <td style={{ ...compactCell, position: 'relative', width: '40px' }}>
+                <td style={{ ...compactCell, position: 'relative', width: '45px', minWidth: '45px', textAlign: 'center' }}>
                   <button onClick={e => { 
                     e.stopPropagation(); 
                     if (isMenuOpen) {
@@ -945,22 +1014,20 @@ export default function BahrainDailyTasks() {
                     }
                   }}
                     style={{
-                      background: isMenuOpen ? '#f1f5f9' : 'transparent',
+                      background: isMenuOpen ? 'var(--bg-tertiary, #f1f5f9)' : 'transparent',
                       border: 'none',
                       cursor: 'pointer', borderRadius: '8px', padding: '6px',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                       transition: 'all 0.15s ease', position: 'relative',
-                      marginLeft: 'auto',
-                      marginRight: '4px',
                       width: '32px',
                       height: '32px',
                     }}
-                    onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'}
+                    onMouseEnter={e => e.currentTarget.style.background = isDark ? 'var(--bg-tertiary)' : '#f1f5f9'}
                     onMouseLeave={e => { if (!isMenuOpen) e.currentTarget.style.background = 'transparent'; }}>
-                    <MoreHorizontal size={16} color="#64748b" />
+                    <MoreHorizontal size={16} color="var(--text-secondary, #64748b)" />
                   </button>
                   {isMenuOpen && typeof window !== 'undefined' && createPortal(
-                    <div style={{ position: 'fixed', top: menuPos.top, bottom: menuPos.bottom, right: menuPos.right, maxHeight: menuPos.maxHeight || 'none', overflowY: 'auto', background: '#fff', borderRadius: '12px', boxShadow: '0 8px 30px rgba(0,0,0,0.12)', border: '1px solid #e2e8f0', zIndex: 9999, minWidth: '155px' }}
+                    <div style={{ position: 'fixed', top: menuPos.top, bottom: menuPos.bottom, right: menuPos.right, maxHeight: menuPos.maxHeight || 'none', overflowY: 'auto', background: 'var(--bg-card, #fff)', borderRadius: '12px', boxShadow: '0 8px 30px rgba(0,0,0,0.12)', border: '1px solid var(--border, #e2e8f0)', zIndex: 9999, minWidth: '155px' }}
                       onClick={e => e.stopPropagation()}>
                       <button onClick={() => { viewDetail(task.id); setOpenMenuId(null); }} style={menuItemStyle}>
                         <Eye size={14} color="#3b82f6" /> View Details
@@ -975,7 +1042,7 @@ export default function BahrainDailyTasks() {
                         }} style={menuItemStyle}>
                           <Edit2 size={14} color="#f59e0b" /> Edit Task
                         </button>
-                        <div style={{ height: '1px', background: '#f1f5f9', margin: '2px 0' }} />
+                        <div style={{ height: '1px', background: 'var(--border, #f1f5f9)', margin: '2px 0' }} />
                         <button onClick={() => { deleteTask(task.id); setOpenMenuId(null); }} style={{ ...menuItemStyle, color: '#ef4444' }}>
                           <Trash2 size={14} color="#ef4444" /> Delete
                         </button>
@@ -1072,68 +1139,503 @@ export default function BahrainDailyTasks() {
         </div>
       )}
 
-      {/* Detail Modal */}
-      {detailTask && (
-        <div style={modalOverlayStyle}>
-          <div style={{ ...modalContentStyle, maxWidth: '800px' }}>
-            <div style={modalHeaderStyle}>
-              <h3>Task Details</h3>
-              <button onClick={() => setDetailTask(null)} style={closeBtnStyle}><X size={20} /></button>
-            </div>
-            <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-              <div style={{ background: '#F8F9F9', padding: '16px', borderRadius: '8px', border: '1px solid #EAEDED' }}>
-                <h4 style={{ fontSize: '18px', color: '#2C3E50', marginBottom: '8px' }}>{detailTask.title}</h4>
-                <p style={{ fontSize: '14px', color: '#566573', marginBottom: '12px' }}>{detailTask.description || 'No description provided.'}</p>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', fontSize: '13px' }}>
-                  <div><strong style={{ color: '#7F8C8D' }}>Status:</strong> {detailTask.status}</div>
-                  <div><strong style={{ color: '#7F8C8D' }}>Priority:</strong> {detailTask.priority}</div>
-                  <div><strong style={{ color: '#7F8C8D' }}>Deadline:</strong> {detailTask.deadline || 'N/A'}</div>
+      {/* Enhanced Daily Task Detail Modal */}
+      {detailTask && (() => {
+        const sc = statusColor(detailTask.status);
+        const pc = priorityColor(detailTask.priority);
+        const isOverdue = !!(
+          detailTask.deadline &&
+          new Date(detailTask.deadline).getTime() < new Date().setHours(0, 0, 0, 0) &&
+          !['completed', 'closed', 'filed', 'done'].includes((detailTask.status || '').toLowerCase())
+        );
+
+        // Resolve assigned partners
+        const activePartnerIds = detailTask.assigned_partners && detailTask.assigned_partners.length > 0
+          ? detailTask.assigned_partners
+          : (detailTask.assigned_to ? [detailTask.assigned_to] : []);
+        const activePartnerObjects = activePartnerIds
+          .map(id => partners.find(p => p.id === id))
+          .filter((p): p is typeof partners[number] => Boolean(p));
+
+        return (
+          <div style={modalOverlayStyle} onClick={() => setDetailTask(null)}>
+            <div
+              style={{
+                ...modalContentStyle,
+                maxWidth: '680px',
+                background: 'var(--bg-card, #ffffff)',
+                border: '1px solid var(--border)'
+              }}
+              onClick={e => e.stopPropagation()}
+            >
+              {/* Modal Header Bar */}
+              <div style={{
+                padding: '18px 24px',
+                borderBottom: '1px solid var(--border)',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                background: isDark ? 'var(--bg-tertiary)' : 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
+                borderRadius: '20px 20px 0 0'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div style={{
+                    width: '40px',
+                    height: '40px',
+                    borderRadius: '11px',
+                    background: 'linear-gradient(135deg, #7c3aed, #6d28d9)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#ffffff',
+                    boxShadow: '0 4px 12px rgba(124,58,237,0.3)',
+                    flexShrink: 0
+                  }}>
+                    <ListTodo size={20} />
+                  </div>
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 750, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
+                      Daily Task Details
+                    </h3>
+                    <div style={{ fontSize: '11.5px', color: 'var(--text-tertiary)', fontFamily: 'ui-monospace, monospace', marginTop: '2px' }}>
+                      Task #{detailTask.id}
+                    </div>
+                  </div>
                 </div>
+
+                <button
+                  onClick={() => setDetailTask(null)}
+                  style={{
+                    background: isDark ? 'var(--bg-secondary)' : '#ffffff',
+                    border: '1px solid var(--border)',
+                    cursor: 'pointer',
+                    color: 'var(--text-secondary)',
+                    width: '34px',
+                    height: '34px',
+                    borderRadius: '8px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transition: 'all 0.15s ease'
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.background = isDark ? 'var(--bg-card)' : '#f1f5f9'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = isDark ? 'var(--bg-secondary)' : '#ffffff'; }}
+                >
+                  <X size={16} />
+                </button>
               </div>
 
-              {canUpdateStatus && (
-                <div style={{ background: '#fff', padding: '16px', borderRadius: '8px', border: '1px solid #D5DBDB' }}>
-                  <h4 style={{ fontSize: '15px', color: '#2C3E50', marginBottom: '12px' }}>Update Status</h4>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '12px' }}>
-                    <FormField label="New Status">
-                      <select value={updateStatus} onChange={e => setUpdateStatus(e.target.value)} style={inputStyle}>
-                        {dynamicStatuses.map(s => <option key={s} value={s}>{s}</option>)}
-                      </select>
-                    </FormField>
-                    <FormField label="Updated By">
-                      <select value={updateBy} onChange={e => setUpdateBy(e.target.value)} style={inputStyle} disabled={!isAdminUser}>
-                        {partners.map(p => <option key={p.id} value={p.id}>{p.username}</option>)}
-                      </select>
-                    </FormField>
-                  </div>
-                  <FormField label="Remarks">
-                    <input value={updateRemarks} onChange={e => setUpdateRemarks(e.target.value)} placeholder="Add a note..." style={inputStyle} />
-                  </FormField>
-                  <button onClick={saveStatusUpdate} style={{ marginTop: '12px', padding: '8px 16px', background: '#3498DB', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 600, width: '100%' }}>Update Status</button>
-                </div>
-              )}
+              {/* Modal Body */}
+              <div style={{ padding: '22px 24px', display: 'flex', flexDirection: 'column', gap: '18px', maxHeight: 'calc(90vh - 85px)', overflowY: 'auto' }}>
+                
+                {/* 1. Hero Info Banner */}
+                <div style={{
+                  background: isDark ? 'var(--bg-tertiary)' : '#f8fafc',
+                  padding: '18px',
+                  borderRadius: '14px',
+                  border: '1px solid var(--border)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '12px'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', flexWrap: 'wrap' }}>
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <h4 style={{ fontSize: '17px', fontWeight: 750, color: 'var(--text-primary)', margin: 0, letterSpacing: '-0.01em', wordBreak: 'break-word' }}>
+                        {detailTask.title}
+                      </h4>
+                      {detailTask.country && (
+                        <div style={{ fontSize: '11.5px', color: 'var(--text-tertiary)', marginTop: '4px', fontWeight: 600 }}>
+                          Region: {detailTask.country}
+                        </div>
+                      )}
+                    </div>
 
-              <div>
-                <h4 style={{ fontSize: '15px', color: '#2C3E50', marginBottom: '12px' }}>Status History</h4>
-                <div style={{ maxHeight: '200px', overflowY: 'auto', background: '#FDFEFE', border: '1px solid #EAEDED', borderRadius: '8px', padding: '10px' }}>
-                  {statusLogs.length === 0 ? <p style={{ fontSize: '13px', color: '#95A5A6', textAlign: 'center' }}>No status updates yet.</p> :
-                    statusLogs.map(log => (
-                      <div key={log.id} style={{ display: 'flex', gap: '12px', padding: '10px', borderBottom: '1px solid #F2F4F4' }}>
-                        <div style={{ color: '#27AE60', marginTop: '2px' }}><CheckCircle2 size={16} /></div>
-                        <div>
-                          <div style={{ fontSize: '13px', color: '#2C3E50', fontWeight: 500 }}>Changed to <strong>{log.status}</strong> by {log.updater?.username || 'Unknown'}</div>
-                          <div style={{ fontSize: '12px', color: '#7F8C8D', marginTop: '2px' }}>{new Date(log.created_at).toLocaleString()}</div>
-                          {log.remarks && <div style={{ fontSize: '13px', color: '#566573', marginTop: '4px', background: '#F8F9F9', padding: '6px 10px', borderRadius: '4px' }}>&quot;{log.remarks}&quot;</div>}
+                    <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+                      <span style={{
+                        padding: '4px 11px',
+                        borderRadius: '20px',
+                        fontSize: '11px',
+                        fontWeight: 750,
+                        background: sc.bg,
+                        color: sc.color,
+                        border: `1.5px solid ${sc.border}`,
+                        boxShadow: sc.glow,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '5px'
+                      }}>
+                        <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: sc.dot, boxShadow: `0 0 6px ${sc.dot}` }} />
+                        {detailTask.status}
+                      </span>
+
+                      <span style={{
+                        padding: '4px 10px',
+                        borderRadius: '20px',
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        background: pc.bg,
+                        color: pc.color
+                      }}>
+                        {detailTask.priority}
+                      </span>
+
+                      {detailTask.repeat_daily && (
+                        <span style={{
+                          padding: '4px 9px',
+                          borderRadius: '20px',
+                          fontSize: '10.5px',
+                          fontWeight: 700,
+                          background: 'linear-gradient(135deg, #7c3aed20, #6d28d920)',
+                          color: '#7c3aed',
+                          border: '1px solid #7c3aed30',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}>
+                          <Repeat size={11} /> Repeat Daily
+                        </span>
+                      )}
+
+                      {detailTask.repeat_monthly && (
+                        <span style={{
+                          padding: '4px 9px',
+                          borderRadius: '20px',
+                          fontSize: '10.5px',
+                          fontWeight: 700,
+                          background: 'linear-gradient(135deg, #2563eb20, #1d4ed820)',
+                          color: '#2563eb',
+                          border: '1px solid #2563eb30',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}>
+                          <Repeat size={11} /> Repeat Monthly
+                        </span>
+                      )}
+
+                      {isOverdue && (
+                        <span style={{
+                          padding: '4px 9px',
+                          borderRadius: '20px',
+                          fontSize: '10.5px',
+                          fontWeight: 750,
+                          background: 'rgba(239, 68, 68, 0.15)',
+                          color: '#ef4444',
+                          border: '1px solid rgba(239, 68, 68, 0.3)',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}>
+                          ⚠️ Overdue
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2. Structured Metadata Grid */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '14px' }}>
+                  
+                  {/* Card A: Assigned Team */}
+                  <div style={{
+                    background: isDark ? 'var(--bg-tertiary)' : '#ffffff',
+                    borderRadius: '12px',
+                    padding: '14px 16px',
+                    border: '1px solid var(--border)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '8px'
+                  }}>
+                    <div style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      <Users size={13} color="var(--accent, #7c3aed)" /> Assigned Partners
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                      {activePartnerObjects.length > 0 ? (
+                        activePartnerObjects.map(p => {
+                          const pCol = getPartnerColor(p.username || p.id);
+                          return (
+                            <div
+                              key={p.id}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                padding: '3px 8px 3px 4px',
+                                borderRadius: '20px',
+                                background: isDark ? pCol.bg : '#f8fafc',
+                                border: `1px solid ${pCol.border}`,
+                                color: isDark ? pCol.text : '#334155'
+                              }}
+                            >
+                              <div style={{
+                                width: '18px',
+                                height: '18px',
+                                borderRadius: '50%',
+                                background: pCol.avatarBg,
+                                color: '#fff',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontSize: '9px',
+                                fontWeight: 800
+                              }}>
+                                {p.username.charAt(0).toUpperCase()}
+                              </div>
+                              <span style={{ fontSize: '11.5px', fontWeight: 650 }}>{p.username}</span>
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <span style={{ fontSize: '12.5px', color: 'var(--text-tertiary)', fontStyle: 'italic' }}>
+                          No partners assigned
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Card B: Dates & Schedule */}
+                  <div style={{
+                    background: isDark ? 'var(--bg-tertiary)' : '#ffffff',
+                    borderRadius: '12px',
+                    padding: '14px 16px',
+                    border: '1px solid var(--border)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '8px'
+                  }}>
+                    <div style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      <Calendar size={13} color="var(--accent, #7c3aed)" /> Dates & Schedule
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '12px' }}>
+                      <div>
+                        <div style={{ color: 'var(--text-tertiary)', fontSize: '10.5px', fontWeight: 600 }}>Due Date:</div>
+                        <div style={{ fontWeight: 650, color: isOverdue ? '#ef4444' : 'var(--text-primary)', fontFamily: 'ui-monospace, monospace', marginTop: '1px' }}>
+                          {detailTask.deadline || '—'}
                         </div>
                       </div>
-                    ))
-                  }
+                      <div>
+                        <div style={{ color: 'var(--text-tertiary)', fontSize: '10.5px', fontWeight: 600 }}>Created:</div>
+                        <div style={{ color: 'var(--text-secondary)', fontFamily: 'ui-monospace, monospace', marginTop: '1px' }}>
+                          {detailTask.created_at ? detailTask.created_at.slice(0, 10) : '—'}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
                 </div>
+
+                {/* 3. Description & Notes Card */}
+                <div style={{
+                  background: isDark ? 'var(--bg-tertiary)' : '#ffffff',
+                  borderRadius: '12px',
+                  padding: '16px',
+                  border: '1px solid var(--border)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px'
+                }}>
+                  <div style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <FileText size={13} color="var(--accent, #7c3aed)" /> Task Notes & Description
+                  </div>
+                  <div style={{
+                    padding: '12px 14px',
+                    borderRadius: '8px',
+                    background: isDark ? 'var(--bg-secondary)' : '#f8fafc',
+                    border: '1px solid var(--border)',
+                    fontSize: '13px',
+                    lineHeight: '1.6',
+                    color: detailTask.description ? 'var(--text-primary)' : 'var(--text-tertiary)',
+                    fontStyle: detailTask.description ? 'normal' : 'italic',
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                    maxHeight: '180px',
+                    overflowY: 'auto'
+                  }}>
+                    {detailTask.description || 'No description or remarks added yet.'}
+                  </div>
+                </div>
+
+                {/* 4. Activity & Status History Timeline */}
+                <div style={{
+                  background: isDark ? 'var(--bg-tertiary)' : '#ffffff',
+                  borderRadius: '12px',
+                  padding: '16px',
+                  border: '1px solid var(--border)'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
+                    <div style={{ fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Activity size={14} color="var(--accent, #7c3aed)" /> Status History & Audit Log
+                    </div>
+                    <span style={{ fontSize: '11px', fontWeight: 650, color: 'var(--text-tertiary)', background: isDark ? 'var(--bg-secondary)' : '#f1f5f9', padding: '2px 8px', borderRadius: '12px', border: '1px solid var(--border)' }}>
+                      {statusLogs.length} {statusLogs.length === 1 ? 'event' : 'events'}
+                    </span>
+                  </div>
+
+                  {statusLogs.length === 0 ? (
+                    <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '12.5px', background: isDark ? 'var(--bg-secondary)' : '#f8fafc', borderRadius: '8px' }}>
+                      No status updates recorded yet.
+                    </div>
+                  ) : (
+                    <div style={{ position: 'relative', paddingLeft: '28px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                      <div style={{ position: 'absolute', left: '10px', top: '8px', bottom: '8px', width: '2px', background: 'var(--border)' }} />
+                      {statusLogs.map((log) => {
+                        const logSc = statusColor(log.status);
+                        const updaterName = (log as any).updater?.username || 'System';
+                        return (
+                          <div key={log.id} style={{ position: 'relative' }}>
+                            <div style={{
+                              position: 'absolute',
+                              left: '-23px',
+                              top: '4px',
+                              width: '12px',
+                              height: '12px',
+                              borderRadius: '50%',
+                              background: logSc.dot,
+                              border: '2px solid var(--bg-card, #ffffff)',
+                              boxShadow: `0 0 0 2px ${logSc.border}`
+                            }} />
+                            <div style={{
+                              background: isDark ? 'var(--bg-secondary)' : '#f8fafc',
+                              padding: '10px 14px',
+                              borderRadius: '8px',
+                              border: '1px solid var(--border)'
+                            }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
+                                <span style={{
+                                  padding: '2px 8px',
+                                  borderRadius: '12px',
+                                  fontSize: '10.5px',
+                                  fontWeight: 750,
+                                  background: logSc.bg,
+                                  color: logSc.color,
+                                  border: `1px solid ${logSc.border}`
+                                }}>
+                                  {log.status}
+                                </span>
+                                <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', fontWeight: 500, fontFamily: 'ui-monospace, monospace' }}>
+                                  {new Date(log.created_at).toLocaleString()}
+                                </div>
+                              </div>
+                              {log.remarks && (
+                                <div style={{ fontSize: '12.5px', color: 'var(--text-primary)', marginTop: '6px', lineHeight: '1.4', wordBreak: 'break-word' }}>
+                                  {log.remarks}
+                                </div>
+                              )}
+                              <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <span>Updated by:</span>
+                                <strong style={{ color: 'var(--text-primary)' }}>{updaterName}</strong>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* 5. Update Status & Assignments (if permitted) */}
+                {canUpdateStatus && (
+                  <div style={{
+                    background: isDark ? 'var(--bg-tertiary)' : 'linear-gradient(135deg, #faf5ff 0%, #f8fafc 100%)',
+                    borderRadius: '12px',
+                    padding: '18px',
+                    border: isDark ? '1px solid var(--border)' : '1px solid #f3e8ff',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '14px'
+                  }}>
+                    <div style={{ fontSize: '12px', fontWeight: 750, textTransform: 'uppercase', letterSpacing: '0.05em', color: isDark ? 'var(--text-primary)' : '#6b21a8', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Edit2 size={14} color={isDark ? '#c084fc' : '#7c3aed'} /> Update Task Status & Team
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px' }}>
+                      <FormField label="New Status *">
+                        <select value={updateStatus} onChange={e => setUpdateStatus(e.target.value)} style={inputStyle}>
+                          {dynamicStatuses.map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                      </FormField>
+
+                      <FormField label="Updated By">
+                        <select value={updateBy} onChange={e => setUpdateBy(e.target.value)} style={inputStyle} disabled={!isAdminUser}>
+                          {!partners.some(p => p.id === updateBy) && updateBy && (
+                            <option value={updateBy}>{currentUser?.username || 'Current User'}</option>
+                          )}
+                          {partners.map(p => <option key={p.id} value={p.id}>{p.username}</option>)}
+                        </select>
+                      </FormField>
+                    </div>
+
+                    {isAdminUser && (
+                      <FormField label="Assign Partners (Team)">
+                        <MultiSelect
+                          options={partners.map(p => ({ id: p.id, label: p.username }))}
+                          selected={updatePartners}
+                          onChange={setUpdatePartners}
+                          placeholder="Select Partners"
+                        />
+                      </FormField>
+                    )}
+
+                    <FormField label="Remarks / Progress Notes (Optional)">
+                      <textarea
+                        value={updateRemarks}
+                        onChange={e => setUpdateRemarks(e.target.value)}
+                        placeholder="Add brief remarks or notes..."
+                        style={{ ...inputStyle, minHeight: '75px', resize: 'vertical' }}
+                      />
+                    </FormField>
+                  </div>
+                )}
+
+                {/* 6. Footer Actions */}
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', paddingTop: '16px', borderTop: '1px solid var(--border)' }}>
+                  <button
+                    type="button"
+                    onClick={() => setDetailTask(null)}
+                    style={{
+                      padding: '9px 20px',
+                      background: 'var(--bg-tertiary)',
+                      color: 'var(--text-secondary)',
+                      border: '1px solid var(--border)',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      fontWeight: 600,
+                      fontSize: '13px',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    Close
+                  </button>
+                  {canUpdateStatus && (
+                    <button
+                      type="button"
+                      onClick={saveStatusUpdate}
+                      style={{
+                        padding: '9px 22px',
+                        background: 'linear-gradient(135deg, #7c3aed, #6d28d9)',
+                        color: '#ffffff',
+                        border: 'none',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        fontWeight: 700,
+                        fontSize: '13px',
+                        boxShadow: '0 4px 14px rgba(124,58,237,0.3)',
+                        transition: 'all 0.15s ease',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px'
+                      }}
+                    >
+                      <Check size={14} /> Update Status
+                    </button>
+                  )}
+                </div>
+
               </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
 
     </div>
@@ -1143,20 +1645,20 @@ export default function BahrainDailyTasks() {
 function FormField({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', marginBottom: '16px' }}>
-      <label style={{ fontWeight: 600, marginBottom: '8px', color: '#334155', fontSize: '13px', letterSpacing: '0.01em' }}>{label}</label>
+      <label style={{ fontWeight: 600, marginBottom: '8px', color: 'var(--text-primary, #334155)', fontSize: '13px', letterSpacing: '0.01em' }}>{label}</label>
       {children}
     </div>
   );
 }
 
 // Inline styles
-const thStyle: React.CSSProperties = { padding: '14px 14px', textAlign: 'left', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.6px', color: '#64748b' };
-const tdStyle: React.CSSProperties = { padding: '14px 14px', fontSize: '13px', verticalAlign: 'middle', color: '#334155' };
-const filterStyle: React.CSSProperties = { padding: '8px 12px', border: '1px solid #cbd5e1', borderRadius: '12px', fontSize: '12.5px', background: '#ffffff', color: '#334155', outline: 'none', transition: 'all 0.2s ease', boxShadow: '0 2px 4px rgba(0,0,0,0.02)', fontWeight: 500, flex: '1 1 130px', minWidth: '115px' };
+const thStyle: React.CSSProperties = { padding: '14px 14px', textAlign: 'left', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.6px', color: 'var(--text-secondary, #64748b)' };
+const tdStyle: React.CSSProperties = { padding: '14px 14px', fontSize: '13px', verticalAlign: 'middle', color: 'var(--text-primary, #334155)' };
+const filterStyle: React.CSSProperties = { padding: '8px 12px', border: '1px solid var(--border, #cbd5e1)', borderRadius: '12px', fontSize: '12.5px', background: 'var(--bg-primary, #ffffff)', color: 'var(--text-primary, #334155)', outline: 'none', transition: 'all 0.2s ease', boxShadow: '0 2px 4px rgba(0,0,0,0.02)', fontWeight: 500, flex: '1 1 130px', minWidth: '115px' };
 const inputStyle: React.CSSProperties = { ...filterStyle, padding: '10px 14px', width: '100%' };
 const btnSmStyle = (bg: string): React.CSSProperties => ({ padding: '6px 9px', background: bg, color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s ease', boxShadow: `0 1px 3px ${bg}40` });
-const compactCell: React.CSSProperties = { padding: '8px 10px', fontSize: '12px', verticalAlign: 'middle', color: '#334155' };
-const menuItemStyle: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 14px', width: '100%', background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left', fontSize: '13px', color: '#475569', fontWeight: 500, transition: 'background 0.15s' };
+const compactCell: React.CSSProperties = { padding: '10px 10px', fontSize: '12px', verticalAlign: 'middle', color: 'var(--text-primary, #334155)', boxSizing: 'border-box' };
+const menuItemStyle: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 14px', width: '100%', background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left', fontSize: '13px', color: 'var(--text-secondary, #475569)', fontWeight: 500, transition: 'background 0.15s' };
 const modalOverlayStyle: React.CSSProperties = { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(15,23,42,0.6)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px', animation: 'fadeIn 0.2s ease-out' };
 const modalContentStyle: React.CSSProperties = { background: '#ffffff', borderRadius: '20px', maxWidth: '600px', width: '100%', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 25px 60px rgba(0,0,0,0.2), 0 10px 20px rgba(0,0,0,0.1)', animation: 'scaleIn 0.25s ease-out', border: '1px solid rgba(226,232,240,0.6)' };
 const modalHeaderStyle: React.CSSProperties = { padding: '22px 28px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)', borderRadius: '20px 20px 0 0' };

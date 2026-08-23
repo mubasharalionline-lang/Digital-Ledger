@@ -5,7 +5,10 @@ import { supabase } from '@/lib/supabase';
 import type { Company } from '@/lib/supabase';
 import { getDataCountry, getSession, isAdmin } from '@/lib/auth';
 import { useRouter } from 'next/navigation';
-import { Plus, Trash2, X, Building2, Search, FolderOpen, FileText, BarChart3, Settings, ExternalLink, Link as LinkIcon, Pencil } from 'lucide-react';
+import {
+  Plus, Trash2, X, Building2, Search, FolderOpen, FileText, BarChart3,
+  Settings, ExternalLink, Link as LinkIcon, Pencil, ChevronLeft, ChevronRight, Globe
+} from 'lucide-react';
 
 export default function BahrainCompanies() {
   const [companies, setCompanies] = useState<Company[]>([]);
@@ -13,6 +16,8 @@ export default function BahrainCompanies() {
   const [showModal, setShowModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [quickActionsCompany, setQuickActionsCompany] = useState<Company | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState<number | 'all'>(50);
   const quickActionsRef = useRef<HTMLDivElement>(null);
   const dataCountry = getDataCountry();
   const router = useRouter();
@@ -125,6 +130,7 @@ export default function BahrainCompanies() {
       
       setShowModal(false);
       setForm({ name: '', country: companyCountry, tax_registration: '', industry: '', compliance_type: '', google_drive_link: '', cr_number: '', cr_link: '' });
+      setCurrentPage(1);
       loadData();
     } catch (e: any) {
       alert('Error: ' + e.message);
@@ -142,6 +148,25 @@ export default function BahrainCompanies() {
   }
 
   const filtered = companies.filter(c => !searchTerm || c.company_name.toLowerCase().includes(searchTerm.toLowerCase()));
+
+  // ─── Pagination Calculations (Default: 50 companies per page) ───
+  const totalCompanies = filtered.length;
+  const totalPages = pageSize === 'all' ? 1 : Math.max(1, Math.ceil(totalCompanies / (pageSize as number)));
+  const safeCurrentPage = Math.min(Math.max(1, currentPage), totalPages);
+  const startIndex = pageSize === 'all' ? 0 : (safeCurrentPage - 1) * (pageSize as number);
+  const paginatedCompanies = pageSize === 'all' ? filtered : filtered.slice(startIndex, startIndex + (pageSize as number));
+
+  const handlePageChange = (newPage: number) => {
+    if (newPage < 1 || newPage > totalPages) return;
+    setCurrentPage(newPage);
+    setQuickActionsCompany(null);
+  };
+
+  const handlePageSizeChange = (newSize: number | 'all') => {
+    setPageSize(newSize);
+    setCurrentPage(1);
+    setQuickActionsCompany(null);
+  };
 
   const listCell = { padding: '14px 16px', fontSize: '13px', color: '#475569' };
 
@@ -175,7 +200,10 @@ export default function BahrainCompanies() {
             <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
             <input
               value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
+              onChange={e => {
+                setSearchTerm(e.target.value);
+                setCurrentPage(1);
+              }}
               placeholder="Search companies..."
               style={{ padding: '10px 14px 10px 36px', border: '1.5px solid #e2e8f0', borderRadius: '12px', fontSize: '13px', background: '#ffffff', color: '#334155', outline: 'none', transition: 'all 0.2s', width: '220px', fontWeight: 500 }}
             />
@@ -214,9 +242,9 @@ export default function BahrainCompanies() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((c, idx) => {
+              {paginatedCompanies.map((c, idx) => {
                 const colors = ['#3b82f6','#8b5cf6','#10b981','#f59e0b','#06b6d4','#ec4899','#6366f1','#ef4444'];
-                const accent = colors[idx % colors.length];
+                const accent = colors[(startIndex + idx) % colors.length];
                 return (
                   <tr key={c.id} style={{ borderBottom: '1px solid #f1f5f9', transition: 'background 0.15s', cursor: 'pointer', position: 'relative' }}
                     onMouseEnter={e => e.currentTarget.style.background = '#fafbfc'}
@@ -388,8 +416,163 @@ export default function BahrainCompanies() {
               })}
             </tbody>
           </table>
-          <div style={{ padding: '12px 16px', background: '#f8fafc', borderRadius: '0 0 18px 18px', fontSize: '12px', color: '#64748b', fontWeight: 600, borderTop: '1px solid #f1f5f9' }}>
-            Showing {filtered.length} of {companies.length} companies
+
+          {/* Pagination Controls Matching Task Management */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '14px 20px',
+            background: '#ffffff',
+            borderRadius: '0 0 18px 18px',
+            borderTop: '1.5px solid #f1f5f9',
+            flexWrap: 'wrap',
+            gap: '14px'
+          }}>
+            {/* Left: Summary & Per-Page Selector */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+              <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 500 }}>
+                Showing{' '}
+                <strong style={{ color: '#0f172a', fontWeight: 700 }}>
+                  {totalCompanies === 0 ? 0 : startIndex + 1}–{Math.min(startIndex + (pageSize === 'all' ? totalCompanies : (pageSize as number)), totalCompanies)}
+                </strong>{' '}
+                of <strong style={{ color: '#0f172a', fontWeight: 700 }}>{totalCompanies}</strong> companies
+                {totalCompanies !== companies.length && (
+                  <span style={{ color: '#94a3b8', marginLeft: '4px' }}>
+                    (filtered from {companies.length})
+                  </span>
+                )}
+              </div>
+
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: '#f8fafc', padding: '3px 6px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+                <span style={{ fontSize: '11.5px', color: '#64748b', fontWeight: 600, paddingLeft: '4px' }}>Per page:</span>
+                {([25, 50, 100, 'all'] as const).map(option => {
+                  const isSelected = pageSize === option;
+                  return (
+                    <button
+                      key={`pagesize-${option}`}
+                      type="button"
+                      onClick={() => handlePageSizeChange(option)}
+                      style={{
+                        padding: '3px 8px',
+                        borderRadius: '6px',
+                        border: 'none',
+                        background: isSelected ? '#3b82f6' : 'transparent',
+                        color: isSelected ? '#ffffff' : '#64748b',
+                        fontSize: '11.5px',
+                        fontWeight: isSelected ? 700 : 600,
+                        cursor: 'pointer',
+                        boxShadow: isSelected ? '0 1px 4px rgba(59,130,246,0.3)' : 'none',
+                        transition: 'all 0.15s ease'
+                      }}
+                    >
+                      {option === 'all' ? 'All' : option}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Right: Page Numbers & Previous / Next Controls */}
+            {pageSize !== 'all' && totalPages > 1 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <button
+                  type="button"
+                  onClick={() => handlePageChange(safeCurrentPage - 1)}
+                  disabled={safeCurrentPage <= 1}
+                  style={{
+                    padding: '6px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid #e2e8f0',
+                    background: safeCurrentPage <= 1 ? '#f8fafc' : '#ffffff',
+                    color: safeCurrentPage <= 1 ? '#cbd5e1' : '#334155',
+                    fontSize: '12px',
+                    fontWeight: 650,
+                    cursor: safeCurrentPage <= 1 ? 'not-allowed' : 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  <ChevronLeft size={14} /> Previous
+                </button>
+
+                {(() => {
+                  const pageNumbers: (number | string)[] = [];
+                  if (totalPages <= 7) {
+                    for (let i = 1; i <= totalPages; i++) pageNumbers.push(i);
+                  } else {
+                    pageNumbers.push(1);
+                    if (safeCurrentPage > 3) pageNumbers.push('...');
+                    const start = Math.max(2, safeCurrentPage - 1);
+                    const end = Math.min(totalPages - 1, safeCurrentPage + 1);
+                    for (let i = start; i <= end; i++) pageNumbers.push(i);
+                    if (safeCurrentPage < totalPages - 2) pageNumbers.push('...');
+                    pageNumbers.push(totalPages);
+                  }
+
+                  return pageNumbers.map((p, idx) => {
+                    if (p === '...') {
+                      return (
+                        <span key={`dots-${idx}`} style={{ padding: '0 4px', color: '#94a3b8', fontSize: '13px', fontWeight: 600 }}>
+                          …
+                        </span>
+                      );
+                    }
+
+                    const pageNum = p as number;
+                    const isCurrent = pageNum === safeCurrentPage;
+
+                    return (
+                      <button
+                        key={`page-${pageNum}`}
+                        type="button"
+                        onClick={() => handlePageChange(pageNum)}
+                        style={{
+                          minWidth: '32px',
+                          height: '32px',
+                          padding: '0 6px',
+                          borderRadius: '8px',
+                          border: isCurrent ? 'none' : '1px solid #e2e8f0',
+                          background: isCurrent ? '#3b82f6' : '#ffffff',
+                          color: isCurrent ? '#ffffff' : '#334155',
+                          fontSize: '12px',
+                          fontWeight: isCurrent ? 750 : 600,
+                          cursor: isCurrent ? 'default' : 'pointer',
+                          boxShadow: isCurrent ? '0 2px 6px rgba(59,130,246,0.3)' : 'none',
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        {pageNum}
+                      </button>
+                    );
+                  });
+                })()}
+
+                <button
+                  type="button"
+                  onClick={() => handlePageChange(safeCurrentPage + 1)}
+                  disabled={safeCurrentPage >= totalPages}
+                  style={{
+                    padding: '6px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid #e2e8f0',
+                    background: safeCurrentPage >= totalPages ? '#f8fafc' : '#ffffff',
+                    color: safeCurrentPage >= totalPages ? '#cbd5e1' : '#334155',
+                    fontSize: '12px',
+                    fontWeight: 650,
+                    cursor: safeCurrentPage >= totalPages ? 'not-allowed' : 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  Next <ChevronRight size={14} />
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
