@@ -36,6 +36,19 @@ export default function BahrainDailyTasks() {
   const searchParams = useSearchParams();
   const canUpdateStatus = isAdminUser || (currentUser?.permissions?.can_update_status ?? true);
 
+  const getActivePartnerIds = (t: { assigned_partners?: string[] | null; assigned_to?: string | null }): string[] => {
+    const ids: string[] = [];
+    if (Array.isArray(t.assigned_partners)) {
+      t.assigned_partners.forEach(id => {
+        if (id && !ids.includes(id)) ids.push(id);
+      });
+    }
+    if (t.assigned_to && !ids.includes(t.assigned_to)) {
+      ids.push(t.assigned_to);
+    }
+    return ids;
+  };
+
   const [tasks, setTasks] = useState<Task[]>([]);
   const [partners, setPartners] = useState<User[]>([]);
   const [dynamicStatuses, setDynamicStatuses] = useState<string[]>(BAHRAIN_STATUSES);
@@ -467,11 +480,9 @@ export default function BahrainDailyTasks() {
 
 
   const filtered = tasks.filter(t => {
-    const activePartnerIds = t.assigned_partners && t.assigned_partners.length > 0 
-      ? t.assigned_partners 
-      : (t.assigned_to ? [t.assigned_to] : []);
+    const activePartnerIds = getActivePartnerIds(t);
 
-    const isAssigned = activePartnerIds.includes(currentUser?.id || '');
+    const isAssigned = activePartnerIds.includes(currentUser?.id || '') || (currentUser?.username ? activePartnerIds.includes(currentUser.username) : false);
     if (!isAdminUser && !isAssigned) return false;
     
     if (filterStatus && t.status !== filterStatus) return false;
@@ -901,9 +912,7 @@ export default function BahrainDailyTasks() {
                 </td>
                 <td style={{ ...compactCell, width: '160px', minWidth: '150px' }}>
                   {(() => {
-                    const allAssignedIds = task.assigned_partners && task.assigned_partners.length > 0 
-                      ? task.assigned_partners 
-                      : (task.assigned_to ? [task.assigned_to] : []);
+                    const allAssignedIds = getActivePartnerIds(task);
                     const assignedPartners = allAssignedIds.map(id => partners.find(p => p.id === id)).filter((p): p is typeof partners[number] => Boolean(p));
 
                     if (isAdminUser) {
@@ -1150,9 +1159,7 @@ export default function BahrainDailyTasks() {
         );
 
         // Resolve assigned partners
-        const activePartnerIds = detailTask.assigned_partners && detailTask.assigned_partners.length > 0
-          ? detailTask.assigned_partners
-          : (detailTask.assigned_to ? [detailTask.assigned_to] : []);
+        const activePartnerIds = getActivePartnerIds(detailTask);
         const activePartnerObjects = activePartnerIds
           .map(id => partners.find(p => p.id === id))
           .filter((p): p is typeof partners[number] => Boolean(p));

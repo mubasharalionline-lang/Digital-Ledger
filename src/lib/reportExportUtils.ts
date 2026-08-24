@@ -9,13 +9,24 @@ interface ExportCtx {
   country: string;
 }
 
+export function getActivePartnerIds(task: { assigned_partners?: string[] | null; assigned_to?: string | null }): string[] {
+  const ids: string[] = [];
+  if (Array.isArray(task.assigned_partners)) {
+    task.assigned_partners.forEach(id => {
+      if (id && !ids.includes(id)) ids.push(id);
+    });
+  }
+  if (task.assigned_to && !ids.includes(task.assigned_to)) {
+    ids.push(task.assigned_to);
+  }
+  return ids;
+}
+
 function resolveTask(task: Task, ctx: ExportCtx) {
   const company = ctx.companies.find(c => c.id === task.company_id);
   const ttIds = task.task_type_ids?.length ? task.task_type_ids : (task.task_type_id ? task.task_type_id.split(',').map(s => s.trim()).filter(Boolean) : []);
   const ttNames = ttIds.map(id => ctx.taskTypes.find(t => t.id === id)?.name).filter(Boolean).join(', ');
-  const activePartnerIds = task.assigned_partners && task.assigned_partners.length > 0 
-    ? task.assigned_partners 
-    : (task.assigned_to ? [task.assigned_to] : []);
+  const activePartnerIds = getActivePartnerIds(task);
   const allNames = activePartnerIds.map(id => ctx.partners.find(p => p.id === id)?.username).filter(Boolean);
   const assigned = allNames.length > 0 ? allNames.join(', ') : 'Unassigned';
   const auditor = ctx.auditors.find(a => a.id === task.auditor_id)?.name || '';
@@ -83,9 +94,7 @@ export function filterTasks(tasks: Task[], filter: {
     }
     if (filter.status && t.status !== filter.status) return false;
     if (filter.partnerId) {
-      const activeIds = t.assigned_partners && t.assigned_partners.length > 0 
-        ? t.assigned_partners 
-        : (t.assigned_to ? [t.assigned_to] : []);
+      const activeIds = getActivePartnerIds(t);
       if (!activeIds.includes(filter.partnerId)) return false;
     }
     if (filter.auditorId && t.auditor_id !== filter.auditorId) return false;
@@ -189,9 +198,7 @@ export async function exportTaskManagementExcel(
     const company = ctx.companies.find(c => c.id === task.company_id);
     const ttIds = task.task_type_ids?.length ? task.task_type_ids : (task.task_type_id ? task.task_type_id.split(',').map(s => s.trim()).filter(Boolean) : []);
     const ttNames = ttIds.map(id => ctx.taskTypes.find(t => t.id === id)?.name).filter(Boolean).join(', ');
-    const activePartnerIds = task.assigned_partners && task.assigned_partners.length > 0 
-      ? task.assigned_partners 
-      : (task.assigned_to ? [task.assigned_to] : []);
+    const activePartnerIds = getActivePartnerIds(task);
     const allNames = activePartnerIds.map(id => ctx.partners.find(p => p.id === id)?.username).filter(Boolean);
     const assigned = allNames.length > 0 ? allNames.join(', ') : 'Unassigned';
     const auditor = ctx.auditors.find(a => a.id === task.auditor_id)?.name || '';

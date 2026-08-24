@@ -50,19 +50,34 @@ export default function BahrainTasks() {
   const { user: currentUser } = getSession();
   const isAdminUser = isAdmin(currentUser);
   const userAuditorAccess: string[] = currentUser?.permissions?.auditor_access || [];
+
+  const getActivePartnerIds = (t: { assigned_partners?: string[] | null; assigned_to?: string | null }): string[] => {
+    const ids: string[] = [];
+    if (Array.isArray(t.assigned_partners)) {
+      t.assigned_partners.forEach(id => {
+        if (id && !ids.includes(id)) ids.push(id);
+      });
+    }
+    if (t.assigned_to && !ids.includes(t.assigned_to)) {
+      ids.push(t.assigned_to);
+    }
+    return ids;
+  };
+
   const isTaskAllowed = (t: Task) => {
     if (isAdminUser) return true;
-    const activePartnerIds = t.assigned_partners && t.assigned_partners.length > 0
-      ? t.assigned_partners
-      : (t.assigned_to ? [t.assigned_to] : []);
-    const isAssigned = activePartnerIds.includes(currentUser?.id || '');
+    const activePartnerIds = getActivePartnerIds(t);
+    const isAssigned = activePartnerIds.includes(currentUser?.id || '') || (currentUser?.username ? activePartnerIds.includes(currentUser.username) : false);
     const hasAuditorAccess = t.auditor_id ? userAuditorAccess.includes(t.auditor_id) : false;
-    if (userAuditorAccess.length > 0) {
-      return hasAuditorAccess;
-    }
-    return isAssigned && !t.auditor_id;
+    return isAssigned || hasAuditorAccess;
   };
-  const canManageTask = (task: Task) => isAdminUser || userAuditorAccess.includes(task.auditor_id || '');
+  const canManageTask = (task: Task) => {
+    if (isAdminUser) return true;
+    const activePartnerIds = getActivePartnerIds(task);
+    const isAssigned = activePartnerIds.includes(currentUser?.id || '') || (currentUser?.username ? activePartnerIds.includes(currentUser.username) : false);
+    const hasAuditorAccess = task.auditor_id ? userAuditorAccess.includes(task.auditor_id) : false;
+    return isAssigned || hasAuditorAccess;
+  };
   const canUpdateStatus = isAdminUser || userAuditorAccess.length > 0 || (currentUser?.permissions?.can_update_status ?? true);
 
   const dataCountry = getDataCountry();
@@ -455,7 +470,7 @@ export default function BahrainTasks() {
         filteredCompanyList = companyList.filter(c => 
           filteredTaskList.some(t => t.company_id === c.id)
         );
-        filteredAuditorList = audList.filter(a => userAuditorAccess.includes(a.id));
+        filteredAuditorList = audList;
       }
 
       setCompanies(filteredCompanyList);
@@ -566,11 +581,9 @@ export default function BahrainTasks() {
       return false;
     }
 
-    const activePartnerIds = t.assigned_partners && t.assigned_partners.length > 0
-      ? t.assigned_partners
-      : (t.assigned_to ? [t.assigned_to] : []);
+    const activePartnerIds = getActivePartnerIds(t);
 
-    const isAssigned = activePartnerIds.includes(currentUser?.id || '');
+    const isAssigned = activePartnerIds.includes(currentUser?.id || '') || (currentUser?.username ? activePartnerIds.includes(currentUser.username) : false);
     const hasAuditorAccess = (currentUser?.permissions?.auditor_access || []).includes(t.auditor_id || '');
     if (!isAdminUser && !isAssigned && !hasAuditorAccess) return false;
 
@@ -1023,9 +1036,7 @@ export default function BahrainTasks() {
     if (selectedTasks.length === 0) return '';
 
     const getAssignedNames = (task: Task) => {
-      const activePartnerIds = task.assigned_partners && task.assigned_partners.length > 0 
-        ? task.assigned_partners 
-        : (task.assigned_to ? [task.assigned_to] : []);
+      const activePartnerIds = getActivePartnerIds(task);
       const allNames = activePartnerIds.map((id: string) => partners.find((p: any) => p.id === id)?.username).filter(Boolean);
       return allNames.length > 0 ? allNames.join(', ') : 'Unassigned';
     };
@@ -2300,9 +2311,7 @@ export default function BahrainTasks() {
                       const ttIds = task.task_type_ids && task.task_type_ids.length > 0 ? task.task_type_ids : (task.task_type_id ? task.task_type_id.split(',').map((s: string) => s.trim()).filter(Boolean) : []);
                       const ttNames = ttIds.map((id: string) => taskTypes.find(t => t.id === id)?.name).filter(Boolean).join(', ') || 'N/A';
                       const formattedDate = log.created_at ? new Date(log.created_at).toLocaleString() : 'N/A';
-                      const activePartnerIds = task.assigned_partners && task.assigned_partners.length > 0 
-                        ? task.assigned_partners 
-                        : (task.assigned_to ? [task.assigned_to] : []);
+                      const activePartnerIds = getActivePartnerIds(task);
                       const allNames = activePartnerIds.map((id: string) => partners.find((p: any) => p.id === id)?.username).filter(Boolean);
                       const assignedNames = allNames.length > 0 ? allNames.join(', ') : 'Unassigned';
                       
@@ -2656,9 +2665,7 @@ export default function BahrainTasks() {
 
               // Helper to resolve assigned names
               const getAssignedNames = (task: Task) => {
-                const activePartnerIds = task.assigned_partners && task.assigned_partners.length > 0 
-                  ? task.assigned_partners 
-                  : (task.assigned_to ? [task.assigned_to] : []);
+                const activePartnerIds = getActivePartnerIds(task);
                 const allNames = activePartnerIds.map((id: string) => partners.find((p: any) => p.id === id)?.username).filter(Boolean);
                 return allNames.length > 0 ? allNames.join(', ') : 'Unassigned';
               };
@@ -4369,9 +4376,7 @@ export default function BahrainTasks() {
                           );
 
                         case 'assigned_to':
-                          const activePartnerIds = task.assigned_partners && task.assigned_partners.length > 0 
-                            ? task.assigned_partners 
-                            : (task.assigned_to ? [task.assigned_to] : []);
+                          const activePartnerIds = getActivePartnerIds(task);
                           const activePartnerObjects = activePartnerIds.map((id: string) => partners.find((p: any) => p.id === id)).filter((p): p is typeof partners[number] => Boolean(p));
 
                           return (
@@ -4542,9 +4547,7 @@ export default function BahrainTasks() {
                                       const comp = companies.find(c => c.id === task.company_id);
                                       const ttIds = task.task_type_ids && task.task_type_ids.length > 0 ? task.task_type_ids : (task.task_type_id ? task.task_type_id.split(',').map((s: string) => s.trim()).filter(Boolean) : []);
                                       const ttNames = ttIds.map(id => taskTypes.find(t => t.id === id)?.name).filter(Boolean).join(', ') || 'N/A';
-                                      const activePartnerIds = task.assigned_partners && task.assigned_partners.length > 0 
-                                        ? task.assigned_partners 
-                                        : (task.assigned_to ? [task.assigned_to] : []);
+                                      const activePartnerIds = getActivePartnerIds(task);
                                       const allNames = activePartnerIds.map((id: string) => partners.find((p: any) => p.id === id)?.username).filter(Boolean);
                                       const assignedNames = allNames.length > 0 ? allNames.join(', ') : 'Unassigned';
                                       const msg = [
@@ -4797,9 +4800,7 @@ export default function BahrainTasks() {
                             const comp = companies.find(c => c.id === task.company_id);
                             const ttIds = task.task_type_ids && task.task_type_ids.length > 0 ? task.task_type_ids : (task.task_type_id ? task.task_type_id.split(',').map(s => s.trim()).filter(Boolean) : []);
                             const ttNames = ttIds.map(id => taskTypes.find(t => t.id === id)?.name).filter(Boolean).join(', ') || 'N/A';
-                            const activePartnerIds = task.assigned_partners && task.assigned_partners.length > 0 
-                              ? task.assigned_partners 
-                              : (task.assigned_to ? [task.assigned_to] : []);
+                            const activePartnerIds = getActivePartnerIds(task);
                             const allNames = activePartnerIds.map((id: string) => partners.find((p: any) => p.id === id)?.username).filter(Boolean);
                             const assignedNames = allNames.length > 0 ? allNames.join(', ') : 'Unassigned';
                             const msg = [
@@ -5149,9 +5150,7 @@ export default function BahrainTasks() {
                           </div>
                         );
                       })() : (() => {
-                        const activePartnerIds = task.assigned_partners && task.assigned_partners.length > 0 
-                          ? task.assigned_partners 
-                          : (task.assigned_to ? [task.assigned_to] : []);
+                        const activePartnerIds = getActivePartnerIds(task);
                         const activePartnerObjects = activePartnerIds.map((id: string) => partners.find((p: any) => p.id === id)).filter((p): p is typeof partners[number] => Boolean(p));
                         
                         if (activePartnerObjects.length === 0) {
@@ -5554,9 +5553,7 @@ export default function BahrainTasks() {
         const dttNames = dttIds.map(id => taskTypes.find(t => t.id === id)?.name).filter(Boolean);
 
         // Resolve assigned partners
-        const activePartnerIds = detailTask.assigned_partners && detailTask.assigned_partners.length > 0
-          ? detailTask.assigned_partners
-          : (detailTask.assigned_to ? [detailTask.assigned_to] : []);
+        const activePartnerIds = getActivePartnerIds(detailTask);
         const activePartnerObjects = activePartnerIds
           .map(id => partners.find(p => p.id === id))
           .filter((p): p is typeof partners[number] => Boolean(p));

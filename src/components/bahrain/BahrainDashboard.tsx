@@ -14,7 +14,6 @@ import {
   ArrowUpRight,
   CalendarDays,
   CheckCircle2,
-  BarChart3,
   Sparkles,
   Layers,
   Clock,
@@ -131,15 +130,18 @@ export default function BahrainDashboard() {
       const userAuditorAccess: string[] = u?.permissions?.auditor_access || [];
       if (!isAdminUser && u) {
         const isTaskAllowed = (t: Task) => {
-          const activePartnerIds = t.assigned_partners && t.assigned_partners.length > 0
-            ? t.assigned_partners
-            : (t.assigned_to ? [t.assigned_to] : []);
-          const isAssigned = activePartnerIds.includes(u.id);
-          const hasAuditorAccess = t.auditor_id ? userAuditorAccess.includes(t.auditor_id) : false;
-          if (userAuditorAccess.length > 0) {
-            return hasAuditorAccess;
+          const activePartnerIds: string[] = [];
+          if (Array.isArray(t.assigned_partners)) {
+            t.assigned_partners.forEach(id => {
+              if (id && !activePartnerIds.includes(id)) activePartnerIds.push(id);
+            });
           }
-          return isAssigned && !t.auditor_id;
+          if (t.assigned_to && !activePartnerIds.includes(t.assigned_to)) {
+            activePartnerIds.push(t.assigned_to);
+          }
+          const isAssigned = activePartnerIds.includes(u.id) || (u.username ? activePartnerIds.includes(u.username) : false);
+          const hasAuditorAccess = t.auditor_id ? userAuditorAccess.includes(t.auditor_id) : false;
+          return isAssigned || hasAuditorAccess;
         };
         allTasks = allTasks.filter(isTaskAllowed);
       }
@@ -441,38 +443,6 @@ export default function BahrainDashboard() {
                 onMouseLeave={e => { e.currentTarget.style.transform = 'none'; }}
               >
                 <ListTodo size={14} /> Task Management
-              </button>
-
-              <button
-                onClick={() => router.push('/dashboard/daily-tasks')}
-                style={{
-                  padding: '7px 14px', borderRadius: '10px',
-                  border: '1px solid rgba(255,255,255,0.15)',
-                  background: 'rgba(255,255,255,0.06)',
-                  color: '#ffffff', fontSize: '12.5px', fontWeight: 600, cursor: 'pointer',
-                  display: 'inline-flex', alignItems: 'center', gap: '5px', backdropFilter: 'blur(8px)',
-                  transition: 'all 0.15s'
-                }}
-                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.12)'; }}
-                onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; }}
-              >
-                <CalendarDays size={14} color="#a78bfa" /> Daily Routine
-              </button>
-
-              <button
-                onClick={() => router.push('/dashboard/reports')}
-                style={{
-                  padding: '7px 14px', borderRadius: '10px',
-                  border: '1px solid rgba(255,255,255,0.15)',
-                  background: 'rgba(255,255,255,0.06)',
-                  color: '#ffffff', fontSize: '12.5px', fontWeight: 600, cursor: 'pointer',
-                  display: 'inline-flex', alignItems: 'center', gap: '5px', backdropFilter: 'blur(8px)',
-                  transition: 'all 0.15s'
-                }}
-                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.12)'; }}
-                onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; }}
-              >
-                <BarChart3 size={14} color="#34d399" /> Reports
               </button>
             </div>
           </div>

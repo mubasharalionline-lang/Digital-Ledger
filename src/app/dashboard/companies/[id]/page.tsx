@@ -123,21 +123,25 @@ export default function CompanyDetailPage() {
 
     if (!isAdminUser && currentUser) {
       const isTaskAllowed = (t: Task) => {
-        const activePartnerIds = t.assigned_partners && t.assigned_partners.length > 0
-          ? t.assigned_partners
-          : (t.assigned_to ? [t.assigned_to] : []);
-        const isAssigned = activePartnerIds.includes(currentUser.id);
-        const hasAuditorAccess = t.auditor_id ? userAuditorAccess.includes(t.auditor_id) : false;
-        if (userAuditorAccess.length > 0) {
-          return hasAuditorAccess;
+        const activePartnerIds: string[] = [];
+        if (Array.isArray(t.assigned_partners)) {
+          t.assigned_partners.forEach(id => {
+            if (id && !activePartnerIds.includes(id)) activePartnerIds.push(id);
+          });
         }
-        return isAssigned && !t.auditor_id;
+        if (t.assigned_to && !activePartnerIds.includes(t.assigned_to)) {
+          activePartnerIds.push(t.assigned_to);
+        }
+        const isAssigned = activePartnerIds.includes(currentUser.id) || (currentUser.username ? activePartnerIds.includes(currentUser.username) : false);
+        const hasAuditorAccess = t.auditor_id ? userAuditorAccess.includes(t.auditor_id) : false;
+        return isAssigned || hasAuditorAccess;
       };
       
       filteredTasks = rawTasks.filter(isTaskAllowed);
       
-      // If there are tasks but none are allowed, the partner has no access to this company
-      if (rawTasks.length > 0 && filteredTasks.length === 0) {
+      const canViewCompanies = currentUser?.permissions?.can_view_companies === true;
+      // If there are tasks but none are allowed, and user cannot view all companies, block access
+      if (!canViewCompanies && rawTasks.length > 0 && filteredTasks.length === 0) {
         isCompanyAllowed = false;
       }
     }
@@ -572,7 +576,7 @@ export default function CompanyDetailPage() {
                           className="select"
                           value={task.status}
                           onChange={(e) => updateTaskStatus(task.id, e.target.value)}
-                          disabled={!isAdmin(user) && task.assigned_to !== user?.id}
+                          disabled={!isAdmin(user) && !(user?.permissions?.can_update_status ?? true) && !((user?.permissions?.auditor_access || []).includes(task.auditor_id || '')) && !(task.assigned_partners && task.assigned_partners.includes(user?.id || '')) && task.assigned_to !== user?.id}
                           onClick={(e) => e.stopPropagation()}
                           style={{
                             padding: '3px 26px 3px 8px',

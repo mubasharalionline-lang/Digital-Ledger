@@ -55,37 +55,36 @@ export default function BahrainCompanies() {
     const userAuditorAccess: string[] = currentUser?.permissions?.auditor_access || [];
     const canViewCompanies = currentUser?.permissions?.can_view_companies === true;
     
-    if (!isAdminUser && currentUser && companyRows.length > 0) {
-      if (userAuditorAccess.length > 0) {
-        const { data: countryTasks } = await supabase
-          .from('tasks')
-          .select('company_id, auditor_id')
-          .eq('country', dataCountry || 'Bahrain')
-          .neq('is_daily', true);
-        
-        if (countryTasks) {
-          const allowedCompanyIds = new Set(
-            countryTasks
-              .filter(t => t.auditor_id && userAuditorAccess.includes(t.auditor_id))
-              .map(t => t.company_id)
-              .filter(Boolean)
-          );
-          companyRows = companyRows.filter(c => allowedCompanyIds.has(c.id));
-        } else {
-          companyRows = [];
-        }
-      } else if (!canViewCompanies) {
-        const { data: userTasks } = await supabase
-          .from('tasks')
-          .select('company_id')
-          .eq('assigned_to', currentUser.id);
-        
-        if (userTasks) {
-          const assignedCompanyIds = new Set(userTasks.map(t => t.company_id));
-          companyRows = companyRows.filter(c => assignedCompanyIds.has(c.id));
-        } else {
-          companyRows = [];
-        }
+    if (!isAdminUser && currentUser && companyRows.length > 0 && !canViewCompanies) {
+      const { data: countryTasks } = await supabase
+        .from('tasks')
+        .select('company_id, auditor_id, assigned_to, assigned_partners')
+        .eq('country', dataCountry || 'Bahrain')
+        .neq('is_daily', true);
+      
+      if (countryTasks) {
+        const allowedCompanyIds = new Set(
+          countryTasks
+            .filter(t => {
+              const activePartners: string[] = [];
+              if (Array.isArray(t.assigned_partners)) {
+                t.assigned_partners.forEach(id => {
+                  if (id && !activePartners.includes(id)) activePartners.push(id);
+                });
+              }
+              if (t.assigned_to && !activePartners.includes(t.assigned_to)) {
+                activePartners.push(t.assigned_to);
+              }
+              const isAssigned = activePartners.includes(currentUser.id) || (currentUser.username ? activePartners.includes(currentUser.username) : false);
+              const hasAuditor = t.auditor_id ? userAuditorAccess.includes(t.auditor_id) : false;
+              return isAssigned || hasAuditor;
+            })
+            .map(t => t.company_id)
+            .filter(Boolean)
+        );
+        companyRows = companyRows.filter(c => allowedCompanyIds.has(c.id));
+      } else {
+        companyRows = [];
       }
     }
     
