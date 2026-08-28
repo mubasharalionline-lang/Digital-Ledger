@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import type { Task, Company, User, TaskType } from '@/lib/supabase';
 import { getDataCountry, getSession, isAdmin } from '@/lib/auth';
 import { useRouter } from 'next/navigation';
+import { formatDate } from '@/lib/dateUtils';
 import {
   AlertTriangle,
   Users as UsersIcon,
@@ -62,12 +63,9 @@ export default function BahrainDashboard() {
 
   const [formattedDate, setFormattedDate] = useState('');
   useEffect(() => {
-    setFormattedDate(new Date().toLocaleDateString('en-US', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    }));
+    const today = new Date();
+    const weekday = today.toLocaleDateString('en-GB', { weekday: 'long' });
+    setFormattedDate(`${weekday}, ${formatDate(today)}`);
   }, []);
 
   useEffect(() => {
@@ -856,7 +854,6 @@ function resolveCleanUpdater(val: string | undefined, assignedFallback?: string)
   return val;
 }
 
-// ─── Relative Time Formatter ───
 function formatRelativeTime(dateStr: string) {
   if (!dateStr) return '';
   const now = Date.now();
@@ -871,7 +868,7 @@ function formatRelativeTime(dateStr: string) {
   const diffDays = Math.floor(diffHours / 24);
   if (diffDays === 1) return 'Yesterday';
   if (diffDays < 7) return `${diffDays}d ago`;
-  return new Date(dateStr).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+  return formatDate(dateStr);
 }
 
 // ─── Component Helpers ───

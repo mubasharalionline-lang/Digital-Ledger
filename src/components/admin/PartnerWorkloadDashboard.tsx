@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase';
 import type { User, Task } from '@/lib/supabase';
 import CountryFlag, { getCountryCode, getCanonicalCountryName } from '@/components/CountryFlag';
 import * as XLSX from 'xlsx';
+import { formatDate } from '@/lib/dateUtils';
 import {
   Users,
   Briefcase,
@@ -2969,7 +2970,7 @@ export default function PartnerWorkloadDashboard({ isEmbedded = false }: Partner
                             )}
                             {task.deadline && (
                               <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-                                <Clock size={11} /> Due: {task.deadline}
+                                <Clock size={11} /> Due: {formatDate(task.deadline)}
                               </span>
                             )}
                           </div>

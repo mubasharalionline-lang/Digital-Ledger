@@ -205,7 +205,7 @@ export default function NetWorthCertificatePage() {
                 <div className="fld full"><label>Address Line 1</label><input type="text" placeholder="e.g. Mohalla Ahmadiyya" value={d.addr1} onChange={e => upd('addr1', e.target.value)} /></div>
                 <div className="fld full"><label>Address Line 2 (City, District, State – PIN)</label><input type="text" placeholder="e.g. Qadian, Gurdaspur, Punjab – 143516" value={d.addr2} onChange={e => upd('addr2', e.target.value)} /></div>
                 <div className="fld"><label>Passport Number</label><input type="text" placeholder="e.g. X5430995" value={d.passport} onChange={e => upd('passport', e.target.value)} /></div>
-                <div className="fld"><label>Certificate Date</label><input type="text" placeholder="e.g. 15.04.2026" value={d.certDate} onChange={e => upd('certDate', e.target.value)} /></div>
+                <div className="fld"><label>Certificate Date</label><input type="text" placeholder="e.g. 15/04/2026" value={d.certDate} onChange={e => upd('certDate', e.target.value)} /></div>
                 <div className="fld"><label>Ref No. (optional)</label><input type="text" placeholder="e.g. AMS/2026/001" value={d.refNo} onChange={e => upd('refNo', e.target.value)} /></div>
               </div>
               <div className="tog-row">
@@ -248,7 +248,7 @@ export default function NetWorthCertificatePage() {
                 <div className="fld"><label>Membership No.</label><input type="text" value={d.memNo} onChange={e => upd('memNo', e.target.value)} /></div>
                 <div className="fld"><label>UDIN</label><input type="text" value={d.udin} onChange={e => upd('udin', e.target.value)} /></div>
                 <div className="fld"><label>Place</label><input type="text" value={d.place} onChange={e => upd('place', e.target.value)} /></div>
-                <div className="fld"><label>Dated</label><input type="text" placeholder="e.g. 15.04.2026" value={d.dated} onChange={e => upd('dated', e.target.value)} /></div>
+                <div className="fld"><label>Dated</label><input type="text" placeholder="e.g. 15/04/2026" value={d.dated} onChange={e => upd('dated', e.target.value)} /></div>
               </div>
             </div>
           </div>
@@ -272,7 +272,7 @@ export default function NetWorthCertificatePage() {
                   </>
                 )}
                 <div className="fld"><label>1 Foreign = ₹ (Rate)</label><input type="number" step="0.01" placeholder="e.g. 110.05" value={d.exRate} onChange={e => upd('exRate', e.target.value)} /></div>
-                <div className="fld"><label>Rate Date</label><input type="text" placeholder="e.g. 15.04.2026" value={d.rateDate} onChange={e => upd('rateDate', e.target.value)} /></div>
+                <div className="fld"><label>Rate Date</label><input type="text" placeholder="e.g. 15/04/2026" value={d.rateDate} onChange={e => upd('rateDate', e.target.value)} /></div>
                 <div className="fld"><label>Rate Source</label><input type="text" value={d.rateSource} onChange={e => upd('rateSource', e.target.value)} /></div>
               </div>
             </div>
@@ -288,7 +288,7 @@ export default function NetWorthCertificatePage() {
                   <div className="g2">
                     <div className="fld full"><label>Property Description</label><textarea rows={2} placeholder="e.g. Residential Plot measuring 15 Marlas at Village Nangal Baghbana..." value={e.desc} onChange={ev => updArr('immovEntries', i, 'desc', ev.target.value)}></textarea></div>
                     <div className="fld"><label>Valuation Report By</label><input type="text" placeholder="e.g. Qmb Atelier Pvt. Ltd." value={e.by} onChange={ev => updArr('immovEntries', i, 'by', ev.target.value)} /></div>
-                    <div className="fld"><label>Valuation Report Date</label><input type="text" placeholder="e.g. 15.04.2026" value={e.vd} onChange={ev => updArr('immovEntries', i, 'vd', ev.target.value)} /></div>
+                    <div className="fld"><label>Valuation Report Date</label><input type="text" placeholder="e.g. 15/04/2026" value={e.vd} onChange={ev => updArr('immovEntries', i, 'vd', ev.target.value)} /></div>
                     <div className="fld"><label>Property Value (₹)</label><input type="number" step="0.01" placeholder="0" value={e.val} onChange={ev => updArr('immovEntries', i, 'val', ev.target.value)} /></div>
                   </div>
                 </div>
@@ -307,7 +307,7 @@ export default function NetWorthCertificatePage() {
                   <div className="g3">
                     <div className="fld"><label>Bank Name</label><input type="text" placeholder="e.g. State Bank of India" value={e.bank} onChange={ev => updArr('bankEntries', i, 'bank', ev.target.value)} /></div>
                     <div className="fld"><label>Account Number</label><input type="text" placeholder="e.g. 10776200344" value={e.acc} onChange={ev => updArr('bankEntries', i, 'acc', ev.target.value)} /></div>
-                    <div className="fld"><label>Statement Date</label><input type="text" placeholder="e.g. 13.04.2026" value={e.date} onChange={ev => updArr('bankEntries', i, 'date', ev.target.value)} /></div>
+                    <div className="fld"><label>Statement Date</label><input type="text" placeholder="e.g. 13/04/2026" value={e.date} onChange={ev => updArr('bankEntries', i, 'date', ev.target.value)} /></div>
                     <div className="fld"><label>Balance (₹)</label><input type="number" step="0.01" placeholder="0" value={e.bal} onChange={ev => updArr('bankEntries', i, 'bal', ev.target.value)} /></div>
                     <div className="fld"><label>Account Type</label>
                       <select value={e.type} onChange={ev => updArr('bankEntries', i, 'type', ev.target.value)}>
@@ -345,7 +345,7 @@ export default function NetWorthCertificatePage() {
                   <div className="g3">
                     <div className="fld"><label>Bank Name</label><input type="text" placeholder="e.g. HDFC Bank" value={e.bank} onChange={ev => updArr('bfdEntries', i, 'bank', ev.target.value)} /></div>
                     <div className="fld"><label>FD / Receipt No.</label><input type="text" placeholder="e.g. FD/2025/0001" value={e.no} onChange={ev => updArr('bfdEntries', i, 'no', ev.target.value)} /></div>
-                    <div className="fld"><label>Maturity Date</label><input type="text" placeholder="e.g. 31.03.2027" value={e.mdate} onChange={ev => updArr('bfdEntries', i, 'mdate', ev.target.value)} /></div>
+                    <div className="fld"><label>Maturity Date</label><input type="text" placeholder="e.g. 31/03/2027" value={e.mdate} onChange={ev => updArr('bfdEntries', i, 'mdate', ev.target.value)} /></div>
                     <div className="fld"><label>Amount (₹)</label><input type="number" step="0.01" placeholder="0" value={e.amt} onChange={ev => updArr('bfdEntries', i, 'amt', ev.target.value)} /></div>
                     <div className="fld"><label>Interest Rate</label><input type="text" placeholder="e.g. 7.25% p.a." value={e.rate} onChange={ev => updArr('bfdEntries', i, 'rate', ev.target.value)} /></div>
                   </div>
@@ -373,7 +373,7 @@ export default function NetWorthCertificatePage() {
                     </div>
                     <div className="fld"><label>Certificate / Account No.</label><input type="text" placeholder="e.g. NSC/2025/00001" value={e.no} onChange={ev => updArr('poEntries', i, 'no', ev.target.value)} /></div>
                     <div className="fld"><label>Post Office / Branch</label><input type="text" placeholder="e.g. Qadian PO" value={e.br} onChange={ev => updArr('poEntries', i, 'br', ev.target.value)} /></div>
-                    <div className="fld"><label>Maturity / Statement Date</label><input type="text" placeholder="e.g. 31.03.2028" value={e.date} onChange={ev => updArr('poEntries', i, 'date', ev.target.value)} /></div>
+                    <div className="fld"><label>Maturity / Statement Date</label><input type="text" placeholder="e.g. 31/03/2028" value={e.date} onChange={ev => updArr('poEntries', i, 'date', ev.target.value)} /></div>
                     <div className="fld"><label>Amount / Balance (₹)</label><input type="number" step="0.01" placeholder="0" value={e.amt} onChange={ev => updArr('poEntries', i, 'amt', ev.target.value)} /></div>
                   </div>
                 </div>
@@ -400,7 +400,7 @@ export default function NetWorthCertificatePage() {
                     </div>
                     <div className="fld"><label>Account No. / UAN</label><input type="text" placeholder="e.g. PPF/SBI/00001" value={e.no} onChange={ev => updArr('ppfEntries', i, 'no', ev.target.value)} /></div>
                     <div className="fld"><label>Bank / Institution</label><input type="text" placeholder="e.g. State Bank of India" value={e.bank} onChange={ev => updArr('ppfEntries', i, 'bank', ev.target.value)} /></div>
-                    <div className="fld"><label>Balance Date</label><input type="text" placeholder="e.g. 31.03.2026" value={e.date} onChange={ev => updArr('ppfEntries', i, 'date', ev.target.value)} /></div>
+                    <div className="fld"><label>Balance Date</label><input type="text" placeholder="e.g. 31/03/2026" value={e.date} onChange={ev => updArr('ppfEntries', i, 'date', ev.target.value)} /></div>
                     <div className="fld"><label>Balance (₹)</label><input type="number" step="0.01" placeholder="0" value={e.bal} onChange={ev => updArr('ppfEntries', i, 'bal', ev.target.value)} /></div>
                   </div>
                 </div>
@@ -425,7 +425,7 @@ export default function NetWorthCertificatePage() {
                       </select>
                     </div>
                     <div className="fld full"><label>Description / Folio / Demat Account</label><input type="text" placeholder="e.g. Demat Account No. IN123456 with Zerodha" value={e.desc} onChange={ev => updArr('shEntries', i, 'desc', ev.target.value)} /></div>
-                    <div className="fld"><label>Valuation Date</label><input type="text" placeholder="e.g. 15.04.2026" value={e.date} onChange={ev => updArr('shEntries', i, 'date', ev.target.value)} /></div>
+                    <div className="fld"><label>Valuation Date</label><input type="text" placeholder="e.g. 15/04/2026" value={e.date} onChange={ev => updArr('shEntries', i, 'date', ev.target.value)} /></div>
                     <div className="fld"><label>Market Value (₹)</label><input type="number" step="0.01" placeholder="0" value={e.val} onChange={ev => updArr('shEntries', i, 'val', ev.target.value)} /></div>
                   </div>
                 </div>
@@ -462,7 +462,7 @@ export default function NetWorthCertificatePage() {
                         <option value="Immovable">Immovable</option>
                       </select>
                     </div>
-                    <div className="fld"><label>Valuation / Statement Date</label><input type="text" placeholder="e.g. 15.04.2026" value={e.date} onChange={ev => updArr('oaEntries', i, 'date', ev.target.value)} /></div>
+                    <div className="fld"><label>Valuation / Statement Date</label><input type="text" placeholder="e.g. 15/04/2026" value={e.date} onChange={ev => updArr('oaEntries', i, 'date', ev.target.value)} /></div>
                     <div className="fld full"><label>Description / Details (optional)</label><input type="text" placeholder="e.g. Registration No., Policy No., Branch, etc." value={e.desc} onChange={ev => updArr('oaEntries', i, 'desc', ev.target.value)} /></div>
                     <div className="fld"><label>Value (Rs.)</label><input type="number" step="0.01" placeholder="0" value={e.val} onChange={ev => updArr('oaEntries', i, 'val', ev.target.value)} /></div>
                   </div>
@@ -481,7 +481,7 @@ export default function NetWorthCertificatePage() {
                 <div className="fld"><label>PAN Number</label><input type="text" placeholder="e.g. ABCDE1234F" value={d.pan} onChange={e => upd('pan', e.target.value)} /></div>
                 <div className="fld"><label>Financial Year</label><input type="text" placeholder="e.g. 2024-25" value={d.fy} onChange={e => upd('fy', e.target.value)} /></div>
                 <div className="fld"><label>Annual Income (₹) — 0 = leave blank</label><input type="number" step="0.01" placeholder="0" value={d.income} onChange={e => upd('income', e.target.value)} /></div>
-                <div className="fld"><label>ITR Filing Date</label><input type="text" placeholder="e.g. 31.07.2025" value={d.itrDate} onChange={e => upd('itrDate', e.target.value)} /></div>
+                <div className="fld"><label>ITR Filing Date</label><input type="text" placeholder="e.g. 31/07/2025" value={d.itrDate} onChange={e => upd('itrDate', e.target.value)} /></div>
                 <div className="fld full"><label>ITR Acknowledgement Number</label><input type="text" placeholder="e.g. 123456789012345" value={d.itrAck} onChange={e => upd('itrAck', e.target.value)} /></div>
               </div>
 
@@ -493,7 +493,7 @@ export default function NetWorthCertificatePage() {
                     <div className="fld"><label>PAN Number (Applicant 2)</label><input type="text" placeholder="e.g. FGHIJ5678K" value={d.pan2} onChange={e => upd('pan2', e.target.value)} /></div>
                     <div className="fld"><label>Financial Year</label><input type="text" placeholder="e.g. 2024-25" value={d.fy2} onChange={e => upd('fy2', e.target.value)} /></div>
                     <div className="fld"><label>Annual Income (₹) — 0 = leave blank</label><input type="number" step="0.01" placeholder="0" value={d.income2} onChange={e => upd('income2', e.target.value)} /></div>
-                    <div className="fld"><label>ITR Filing Date</label><input type="text" placeholder="e.g. 31.07.2025" value={d.itrDate2} onChange={e => upd('itrDate2', e.target.value)} /></div>
+                    <div className="fld"><label>ITR Filing Date</label><input type="text" placeholder="e.g. 31/07/2025" value={d.itrDate2} onChange={e => upd('itrDate2', e.target.value)} /></div>
                     <div className="fld full"><label>ITR Acknowledgement Number</label><input type="text" placeholder="e.g. 123456789012345" value={d.itrAck2} onChange={e => upd('itrAck2', e.target.value)} /></div>
                   </div>
                 </>

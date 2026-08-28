@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { getSession, getDataCountry } from '@/lib/auth';
+import { formatDate } from '@/lib/dateUtils';
 import {
   X, Loader2, Copy, CheckCircle2, RefreshCw,
   Link2, ShieldCheck, Globe, Clock, Check,
@@ -450,12 +451,12 @@ export function InviteManagementPanel() {
                     textTransform: 'capitalize',
                   }}>{inv.status}</span>
                   <span style={{ fontSize: '11px', color: '#94a3b8' }}>
-                    Created {new Date(inv.created_at).toLocaleDateString()}
+                    Created {formatDate(inv.created_at)}
                   </span>
                 </div>
                 <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>
                   by {inv.created_by} · {inv.country}
-                  {inv.used_at && ` · Used ${new Date(inv.used_at).toLocaleDateString()}`}
+                  {inv.used_at && ` · Used ${formatDate(inv.used_at)}`}
                 </div>
               </div>
             </div>

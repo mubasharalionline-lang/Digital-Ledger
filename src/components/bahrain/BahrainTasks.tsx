@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { EGRESS_OPTIMIZATION_MODE } from '@/lib/optimizationConfig';
 import { exportTaskManagementExcel, formatPlDateDisplay } from '@/lib/reportExportUtils';
+import { formatDate, formatDateTime } from '@/lib/dateUtils';
 import CountryFlag from '@/components/CountryFlag';
 
 function GoogleDriveIcon({ size = 14, style }: { size?: number; style?: React.CSSProperties }) {
@@ -144,14 +145,7 @@ export default function BahrainTasks() {
   const [descUpdateMap, setDescUpdateMap] = useState<Record<string, string>>({});
 
   const formatDescDate = (dateStr?: string | null) => {
-    if (!dateStr) return '—';
-    try {
-      const d = new Date(dateStr);
-      if (isNaN(d.getTime())) return '—';
-      return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-    } catch {
-      return '—';
-    }
+    return formatDate(dateStr);
   };
 
   // Sync column configurations across components & country switches
@@ -1070,7 +1064,7 @@ export default function BahrainTasks() {
         lines.push(`*Priority:* ${task.priority || 'Medium'}`);
       }
       if (bulkWaIncludeDueDate && task.deadline) {
-        lines.push(`*Due Date:* ${task.deadline}`);
+        lines.push(`*Due Date:* ${formatDate(task.deadline)}`);
       }
       lines.push(`*Status:* ${task.status || 'N/A'}`);
       if (bulkWaIncludeDesc && task.description && task.description.trim() !== '') {
@@ -2310,7 +2304,7 @@ export default function BahrainTasks() {
                       const comp = log.company;
                       const ttIds = task.task_type_ids && task.task_type_ids.length > 0 ? task.task_type_ids : (task.task_type_id ? task.task_type_id.split(',').map((s: string) => s.trim()).filter(Boolean) : []);
                       const ttNames = ttIds.map((id: string) => taskTypes.find(t => t.id === id)?.name).filter(Boolean).join(', ') || 'N/A';
-                      const formattedDate = log.created_at ? new Date(log.created_at).toLocaleString() : 'N/A';
+                      const formattedDate = log.created_at ? formatDateTime(log.created_at) : 'N/A';
                       const activePartnerIds = getActivePartnerIds(task);
                       const allNames = activePartnerIds.map((id: string) => partners.find((p: any) => p.id === id)?.username).filter(Boolean);
                       const assignedNames = allNames.length > 0 ? allNames.join(', ') : 'Unassigned';
@@ -2367,7 +2361,7 @@ export default function BahrainTasks() {
                         #{log.task_id?.slice(0, 6)} — {log.company?.company_name || 'Unknown Company'}
                       </span>
                       <span style={{ fontSize: '11px', color: '#94a3b8', whiteSpace: 'nowrap', marginLeft: '8px' }}>
-                        {new Date(log.created_at).toLocaleString()}
+                        {formatDateTime(log.created_at)}
                       </span>
                     </div>
                     <div style={{ fontSize: '12px', color: '#475569', marginBottom: '5px' }}>
@@ -2506,7 +2500,7 @@ export default function BahrainTasks() {
                           <td style={{ padding: '10px 12px' }}>
                             <span style={{ padding: '3px 8px', borderRadius: '20px', fontSize: '10px', fontWeight: 700, background: pc.bg, color: pc.color }}>{task.priority}</span>
                           </td>
-                          <td style={{ padding: '10px 12px', fontSize: '12px', color: '#475569' }}>{task.deadline || '—'}</td>
+                          <td style={{ padding: '10px 12px', fontSize: '12px', color: '#475569' }}>{formatDate(task.deadline)}</td>
                         </tr>
                       );
                     })}
@@ -2707,7 +2701,7 @@ export default function BahrainTasks() {
               const sections: string[] = [];
               const countryTitle = dataCountry ? ` • ${dataCountry}` : '';
               sections.push(`📋 *COMPLIANCE & TASK SUMMARY${countryTitle.toUpperCase()}*`);
-              sections.push(`Generated on: ${new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })} • Total: ${matchingTasks.length} task${matchingTasks.length !== 1 ? 's' : ''}`);
+              sections.push(`Generated on: ${formatDate(new Date())} • Total: ${matchingTasks.length} task${matchingTasks.length !== 1 ? 's' : ''}`);
               sections.push('');
 
               if (waGenGroupBy === 'compact') {
@@ -4005,14 +3999,14 @@ export default function BahrainTasks() {
                                 if (task.description && !isEditingDesc) {
                                   if (activeTooltipRef.current === task.id) return;
                                   const rect = e.currentTarget.getBoundingClientRect();
-                                  const tooltipWidth = 320;
+                                  const tooltipWidth = 330;
                                   let left = rect.left + (rect.width / 2) - (tooltipWidth / 2);
                                   if (left < 16) left = 16;
                                   if (left + tooltipWidth > window.innerWidth - 16) {
                                     left = window.innerWidth - tooltipWidth - 16;
                                   }
-                                  const top = rect.top - 6;
-                                  const align: 'top' | 'bottom' = 'top';
+                                  const align: 'top' | 'bottom' = rect.top < 220 ? 'bottom' : 'top';
+                                  const top = align === 'top' ? rect.top - 6 : rect.bottom + 6;
                                   activeTooltipRef.current = task.id;
                                   setTooltipPos({ x: left, y: top, align });
                                   setActiveTooltipTaskId(task.id);
@@ -4131,7 +4125,6 @@ export default function BahrainTasks() {
                                       whiteSpace: 'nowrap',
                                       cursor: canManageTask(task) ? 'pointer' : 'default'
                                     }}
-                                    title={task.description ? `${task.description} (Click to edit)` : (canManageTask(task) ? 'Click to add description' : '')}
                                   >
                                     {task.description || '—'}
                                   </span>
@@ -4193,7 +4186,7 @@ export default function BahrainTasks() {
                                 const isRecent = !isNaN(updateTime) && (currentTime - updateTime < 24 * 60 * 60 * 1000);
                                 return (
                                   <span
-                                    title={`Last updated: ${new Date(updateDate).toLocaleString()}`}
+                                    title={`Last updated: ${formatDateTime(updateDate)}`}
                                     style={{
                                       fontSize: '10px',
                                       color: isRecent ? (isDark ? '#22d3ee' : '#0284c7') : 'var(--text-secondary)',
@@ -4262,7 +4255,7 @@ export default function BahrainTasks() {
                                   gap: '3px'
                                 }}>
                                   <Calendar size={10} color={isOverdue ? (isDark ? '#fbbf24' : '#d97706') : (isDark ? '#94a3b8' : '#64748b')} style={{ flexShrink: 0 }} />
-                                  <span style={{ whiteSpace: 'nowrap' }}>{task.deadline}</span>
+                                  <span style={{ whiteSpace: 'nowrap' }}>{formatDate(task.deadline)}</span>
                                 </span>
                               ) : (
                                 <span style={{ fontSize: '10.5px', color: 'var(--text-tertiary)' }}>—</span>
@@ -4813,7 +4806,7 @@ export default function BahrainTasks() {
                               `*Audit Type:* ${ttNames}`,
                               `*Priority:* ${task.priority}`,
                               `*Status:* ${task.status}`,
-                              `*Due Date:* ${task.deadline || 'N/A'}`,
+                              `*Due Date:* ${task.deadline ? formatDate(task.deadline) : 'N/A'}`,
                               `*Description:* ${task.description || 'N/A'}`,
                               `*Assigned To:* ${assignedNames}`,
                               '',
@@ -5224,7 +5217,7 @@ export default function BahrainTasks() {
 
                   {/* Right: Due Date */}
                   <div style={{ flexShrink: 0, fontWeight: 650, fontSize: '11px', color: task.deadline ? '#fb923c' : 'var(--text-tertiary)', fontFamily: 'ui-monospace, monospace' }}>
-                    📅 {task.deadline || 'No date'}
+                    📅 {task.deadline ? formatDate(task.deadline) : 'No date'}
                   </div>
                 </div>
               </div>
@@ -5890,7 +5883,7 @@ export default function BahrainTasks() {
                     <div>
                       <div style={{ color: 'var(--text-tertiary)', fontSize: '10.5px', fontWeight: 600 }}>Due Date:</div>
                       <div style={{ fontWeight: 650, color: isOverdue ? '#ef4444' : 'var(--text-primary)', fontFamily: 'ui-monospace, monospace', marginTop: '1px' }}>
-                        {detailTask.deadline || '—'}
+                        {formatDate(detailTask.deadline)}
                       </div>
                     </div>
                     <div>
@@ -5902,7 +5895,7 @@ export default function BahrainTasks() {
                     <div>
                       <div style={{ color: 'var(--text-tertiary)', fontSize: '10.5px', fontWeight: 600 }}>Created:</div>
                       <div style={{ color: 'var(--text-secondary)', fontFamily: 'ui-monospace, monospace', marginTop: '1px' }}>
-                        {detailTask.created_at ? detailTask.created_at.slice(0, 10) : '—'}
+                        {formatDate(detailTask.created_at)}
                       </div>
                     </div>
                     <div>
@@ -6005,7 +5998,7 @@ export default function BahrainTasks() {
                                 {log.status}
                               </span>
                               <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', fontWeight: 500, fontFamily: 'ui-monospace, monospace' }}>
-                                {new Date(log.created_at).toLocaleString()}
+                                {formatDateTime(log.created_at)}
                               </div>
                             </div>
                             {log.remarks && (
@@ -6133,56 +6126,79 @@ export default function BahrainTasks() {
         );
       })()}
 
-      {activeTooltipTaskId && typeof window !== 'undefined' && createPortal(
-        <div
-          onMouseEnter={handleTooltipMouseEnter}
-          onMouseLeave={handleTooltipMouseLeave}
-          style={{
-            position: 'fixed',
-            top: tooltipPos.y,
-            left: tooltipPos.x,
-            width: '330px',
-            zIndex: 9999,
-            paddingTop: tooltipPos.align === 'bottom' ? '6px' : '0px',
-            paddingBottom: tooltipPos.align === 'top' ? '6px' : '0px',
-            marginTop: tooltipPos.align === 'bottom' ? '-6px' : '0px',
-            marginBottom: tooltipPos.align === 'top' ? '-6px' : '0px',
-            transform: tooltipPos.align === 'top' ? 'translateY(-100%)' : 'none',
-            pointerEvents: 'none',
-          }}
-        >
+      {activeTooltipTaskId && typeof window !== 'undefined' && (() => {
+        const descText = tasks.find(t => t.id === activeTooltipTaskId)?.description;
+        if (!descText) return null;
+
+        return createPortal(
           <div
-            className={`tooltip-glass-card ${
-              tooltipPos.align === 'bottom' ? 'animate-tooltip-down' : 'animate-tooltip-up'
-            }`}
+            onMouseEnter={handleTooltipMouseEnter}
+            onMouseLeave={handleTooltipMouseLeave}
             style={{
-              borderRadius: '14px',
-              padding: '16px',
-              textAlign: 'left',
+              position: 'fixed',
+              top: tooltipPos.y,
+              left: tooltipPos.x,
+              width: '330px',
+              maxWidth: 'calc(100vw - 24px)',
+              zIndex: 9999,
+              transform: tooltipPos.align === 'top' ? 'translateY(-100%)' : 'none',
+              pointerEvents: 'none',
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
-              <span style={{ fontSize: '12px' }}>📝</span>
-              <span style={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', color: '#64748b' }}>
-                Task Description
-              </span>
+            <div
+              className={tooltipPos.align === 'bottom' ? 'animate-tooltip-down' : 'animate-tooltip-up'}
+              style={{
+                borderRadius: '13px',
+                overflow: 'hidden',
+                background: isDark
+                  ? 'rgba(15, 23, 42, 0.96)'
+                  : 'rgba(255, 255, 255, 0.98)',
+                border: isDark
+                  ? '1px solid rgba(59, 130, 246, 0.35)'
+                  : '1px solid rgba(203, 213, 225, 0.9)',
+                boxShadow: isDark
+                  ? '0 20px 45px -8px rgba(0, 0, 0, 0.85), 0 8px 18px -6px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 0 20px rgba(59, 130, 246, 0.12)'
+                  : '0 16px 36px -8px rgba(15, 23, 42, 0.15), 0 4px 12px -2px rgba(15, 23, 42, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.95)',
+                backdropFilter: 'blur(20px)',
+                WebkitBackdropFilter: 'blur(20px)',
+                textAlign: 'left',
+                position: 'relative',
+              }}
+            >
+              {/* Subtle Luxury Top Gradient Accent Line */}
+              <div
+                style={{
+                  height: '2.5px',
+                  width: '100%',
+                  background: 'linear-gradient(90deg, #3b82f6 0%, #8b5cf6 50%, #06b6d4 100%)',
+                }}
+              />
+
+              <div style={{ padding: '12px 14px 13px 14px' }}>
+                <div
+                  className="desc-tooltip-scroll"
+                  style={{
+                    fontSize: '12.5px',
+                    lineHeight: '1.62',
+                    color: isDark ? '#f8fafc' : '#0f172a',
+                    maxHeight: '210px',
+                    overflowY: 'auto',
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                    fontWeight: 450,
+                    letterSpacing: '-0.01em',
+                    paddingRight: '4px',
+                    fontFamily: 'inherit',
+                  }}
+                >
+                  {descText}
+                </div>
+              </div>
             </div>
-            <div style={{
-              fontSize: '13px',
-              lineHeight: 1.6,
-              color: '#1e293b',
-              maxHeight: '220px',
-              overflowY: 'auto',
-              whiteSpace: 'pre-wrap',
-              wordBreak: 'break-word',
-              paddingRight: '4px'
-            }}>
-              {tasks.find(t => t.id === activeTooltipTaskId)?.description || ''}
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
+          </div>,
+          document.body
+        );
+      })()}
 
       {/* ─── Floating Bottom Batch Action Dock (Expert UI) ─── */}
       {selectedTaskIds.length > 0 && (

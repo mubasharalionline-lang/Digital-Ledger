@@ -10,6 +10,7 @@ import {
   Plus, X, Eye, Edit2, CheckCircle2, Search, Filter, Repeat, Trash2, MoreHorizontal, Check,
   Calendar, Clock, Users, Tag, FileText, Activity, AlertTriangle, Hash, Sparkles, ListTodo
 } from 'lucide-react';
+import { formatDate, formatDateTime } from '@/lib/dateUtils';
 
 // Fixed array of statuses so it alphabetically sorts correctly
 const BAHRAIN_STATUSES = [
@@ -805,7 +806,7 @@ export default function BahrainDailyTasks() {
                     </div>
                   ) : (
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px', minHeight: '24px' }}>
-                      <span style={{ fontSize: '11px', color: 'var(--text-secondary, #475569)', maxWidth: '160px', display: 'inline-block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={task.description || ''}>
+                      <span style={{ fontSize: '11px', color: 'var(--text-secondary, #475569)', maxWidth: '160px', display: 'inline-block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {task.description || '—'}
                       </span>
                       {hoveredDescTaskId === task.id && isAdminUser && (
@@ -907,7 +908,7 @@ export default function BahrainDailyTasks() {
                     alignItems: 'center',
                     gap: '4px'
                   }}>
-                    {task.deadline || <span style={{ color: 'var(--text-tertiary, #94a3b8)' }}>—</span>}
+                    {task.deadline ? formatDate(task.deadline) : <span style={{ color: 'var(--text-tertiary, #94a3b8)' }}>—</span>}
                   </span>
                 </td>
                 <td style={{ ...compactCell, width: '160px', minWidth: '150px' }}>
@@ -1417,13 +1418,13 @@ export default function BahrainDailyTasks() {
                       <div>
                         <div style={{ color: 'var(--text-tertiary)', fontSize: '10.5px', fontWeight: 600 }}>Due Date:</div>
                         <div style={{ fontWeight: 650, color: isOverdue ? '#ef4444' : 'var(--text-primary)', fontFamily: 'ui-monospace, monospace', marginTop: '1px' }}>
-                          {detailTask.deadline || '—'}
+                          {formatDate(detailTask.deadline)}
                         </div>
                       </div>
                       <div>
                         <div style={{ color: 'var(--text-tertiary)', fontSize: '10.5px', fontWeight: 600 }}>Created:</div>
                         <div style={{ color: 'var(--text-secondary)', fontFamily: 'ui-monospace, monospace', marginTop: '1px' }}>
-                          {detailTask.created_at ? detailTask.created_at.slice(0, 10) : '—'}
+                          {formatDate(detailTask.created_at)}
                         </div>
                       </div>
                     </div>
@@ -1520,7 +1521,7 @@ export default function BahrainDailyTasks() {
                                   {log.status}
                                 </span>
                                 <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', fontWeight: 500, fontFamily: 'ui-monospace, monospace' }}>
-                                  {new Date(log.created_at).toLocaleString()}
+                                  {formatDateTime(log.created_at)}
                                 </div>
                               </div>
                               {log.remarks && (

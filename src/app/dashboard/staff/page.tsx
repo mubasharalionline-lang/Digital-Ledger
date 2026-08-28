@@ -6,6 +6,7 @@ import { getSession, isAdmin, getDataCountry } from '@/lib/auth';
 import { getTerminology } from '@/lib/terminology';
 import { supabase } from '@/lib/supabase';
 import type { User } from '@/lib/supabase';
+import { formatDate } from '@/lib/dateUtils';
 import {
   Plus,
   X,
@@ -853,7 +854,7 @@ export default function StaffPage() {
                                   )}
                                 </div>
                                 <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '1px' }}>
-                                  Joined {member.created_at ? new Date(member.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Active'}
+                                  Joined {member.created_at ? formatDate(member.created_at) : 'Active'}
                                 </div>
                               </div>
                             </div>

@@ -6,6 +6,7 @@ import { getSession, isAdmin, getDataCountry } from '@/lib/auth';
 import { getTerminology } from '@/lib/terminology';
 import { supabase } from '@/lib/supabase';
 import type { User, Company, Task } from '@/lib/supabase';
+import { formatDate } from '@/lib/dateUtils';
 import {
   ArrowLeft,
   Building2,
@@ -498,7 +499,7 @@ export default function CompanyDetailPage() {
           )}
           {company.start_date && (
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 500 }}>
-              <Calendar size={12} color="var(--success)" /> Start: {new Date(company.start_date).toLocaleDateString()}
+              <Calendar size={12} color="var(--success)" /> Start: {formatDate(company.start_date)}
             </span>
           )}
           {company.due_date && (
@@ -507,12 +508,12 @@ export default function CompanyDetailPage() {
               color: (new Date(company.due_date) < new Date() && !company.status?.toLowerCase().includes('completed')) ? 'var(--danger)' : 'var(--text-secondary)',
             }}>
               <Clock size={12} color={(new Date(company.due_date) < new Date() && !company.status?.toLowerCase().includes('completed')) ? 'var(--danger)' : 'var(--warning)'} />
-              Due: {new Date(company.due_date).toLocaleDateString()}
+              Due: {formatDate(company.due_date)}
               {(new Date(company.due_date) < new Date() && !company.status?.toLowerCase().includes('completed')) && ' (Overdue)'}
             </span>
           )}
           <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>
-            Created {new Date(company.created_at).toLocaleDateString()}
+            Created {formatDate(company.created_at)}
           </span>
         </div>
       </div>
@@ -605,7 +606,7 @@ export default function CompanyDetailPage() {
                         </select>
                         {task.deadline && (
                           <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: 'var(--text-tertiary)' }}>
-                            <Calendar size={12} /> {new Date(task.deadline).toLocaleDateString()}
+                            <Calendar size={12} /> {formatDate(task.deadline)}
                           </span>
                         )}
                         {(task.assignee as unknown as User)?.username && (

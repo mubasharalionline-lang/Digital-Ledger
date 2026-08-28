@@ -1,4 +1,5 @@
 import type { Task, Company, User, TaskType } from './supabase';
+import { formatDate } from './dateUtils';
 
 interface ExportCtx {
   tasks: Task[];
@@ -33,9 +34,9 @@ function resolveTask(task: Task, ctx: ExportCtx) {
   return {
     'Task ID': task.id.slice(0, 8), 'Company': company?.company_name || 'Unknown',
     'Task Type': ttNames || '—', 'Description': task.description || '',
-    'Priority': task.priority, 'Status': task.status, 'Due Date': task.deadline || '',
+    'Priority': task.priority, 'Status': task.status, 'Due Date': task.deadline ? formatDate(task.deadline) : '',
     'Assigned To': assigned, 'Auditor': auditor,
-    'Created': task.created_at ? new Date(task.created_at).toLocaleDateString() : '',
+    'Created': task.created_at ? formatDate(task.created_at) : '',
     'Daily': task.is_daily ? 'Yes' : 'No',
   };
 }
@@ -47,25 +48,7 @@ const COL_WIDTHS = [
 
 export function formatPlDateDisplay(dateStr?: string | null): string {
   if (!dateStr) return '';
-  const trimmed = dateStr.trim();
-  const match = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (match) {
-    const [, yyyy, mm, dd] = match;
-    return `${dd}-${mm}-${yyyy}`;
-  }
-  if (/^\d{2}-\d{2}-\d{4}$/.test(trimmed)) {
-    return trimmed;
-  }
-  try {
-    const d = new Date(trimmed);
-    if (!isNaN(d.getTime())) {
-      const dd = String(d.getDate()).padStart(2, '0');
-      const mm = String(d.getMonth() + 1).padStart(2, '0');
-      const yyyy = d.getFullYear();
-      return `${dd}-${mm}-${yyyy}`;
-    }
-  } catch (e) {}
-  return trimmed;
+  return formatDate(dateStr);
 }
 
 function isCompleted(s: string) {
@@ -121,7 +104,7 @@ export async function exportExcel(filteredTasks: Task[], ctx: ExportCtx, label: 
     { Metric: 'Pending', Value: filteredTasks.length - completed },
     { Metric: 'Rate', Value: filteredTasks.length > 0 ? `${(completed / filteredTasks.length * 100).toFixed(1)}%` : '0%' },
     { Metric: 'Report', Value: label },
-    { Metric: 'Date', Value: new Date().toLocaleDateString() },
+    { Metric: 'Date', Value: formatDate(new Date()) },
     { Metric: 'Country', Value: ctx.country },
   ];
   const ws2 = XLSX.utils.json_to_sheet(summary);
@@ -163,7 +146,7 @@ export async function exportFullExcel(ctx: ExportCtx) {
   const compRows = ctx.companies.map(c => ({
     Name: c.company_name, Country: c.country, Status: c.status || '',
     'Tax Reg': c.tax_registration || '', Industry: c.industry || '',
-    'FY End': c.fy_end || '', Created: c.created_at?.slice(0, 10) || '',
+    'FY End': c.fy_end || '', Created: c.created_at ? formatDate(c.created_at) : '',
   }));
   const ws2 = XLSX.utils.json_to_sheet(compRows);
   ws2['!cols'] = [{ wch: 25 }, { wch: 12 }, { wch: 12 }, { wch: 16 }, { wch: 16 }, { wch: 10 }, { wch: 12 }];
@@ -204,7 +187,7 @@ export async function exportTaskManagementExcel(
     const auditor = ctx.auditors.find(a => a.id === task.auditor_id)?.name || '';
 
     const updateDate = (ctx.descUpdateMap && ctx.descUpdateMap[task.id]) || (task.description ? task.created_at : null);
-    const descUpdatedStr = updateDate ? new Date(updateDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '';
+    const descUpdatedStr = updateDate ? formatDate(updateDate) : '';
 
     return {
       'PL Date': formatPlDateDisplay(task.pl_date) || (task.pl_uploaded ? 'Yes' : ''),
@@ -215,12 +198,12 @@ export async function exportTaskManagementExcel(
       'Description': task.description || '',
       'Desc Updated': descUpdatedStr,
       'Priority': task.priority || 'Medium',
-      'Due Date': task.deadline || '',
+      'Due Date': task.deadline ? formatDate(task.deadline) : '',
       'Status': task.status || 'Pending',
       'Auditor': auditor,
       'Assigned To': assigned,
       'Task ID': task.id.slice(0, 8),
-      'Created Date': task.created_at ? new Date(task.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '',
+      'Created Date': task.created_at ? formatDate(task.created_at) : '',
       'Country': task.country || ctx.country || 'Bahrain',
     };
   });
@@ -271,7 +254,7 @@ export async function exportTaskManagementExcel(
     { Section: 'Overview', Item: 'Completed Tasks', Count: completedCount },
     { Section: 'Overview', Item: 'Pending Tasks', Count: taskList.length - completedCount },
     { Section: 'Overview', Item: 'Completion Rate', Count: taskList.length > 0 ? `${((completedCount / taskList.length) * 100).toFixed(1)}%` : '0%' },
-    { Section: 'Overview', Item: 'Export Date', Count: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) },
+    { Section: 'Overview', Item: 'Export Date', Count: formatDate(new Date()) },
     { Section: 'Overview', Item: 'Country', Count: ctx.country || 'Bahrain' },
     { Section: '', Item: '', Count: '' },
     { Section: '--- Status Breakdown ---', Item: '', Count: '' },

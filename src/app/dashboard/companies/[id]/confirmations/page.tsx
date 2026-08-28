@@ -16,15 +16,11 @@ import {
 } from 'lucide-react';
 import { CONFIRMATION_TEMPLATES } from '@/lib/confirmations/templates';
 import { exportConfirmationDocx } from '@/lib/confirmations/docxExporter';
+import { formatDate } from '@/lib/dateUtils';
 
-// Utility to get today's date formatted as DD-MMM-YY (e.g. 26-May-26)
+// Utility to get today's date formatted as DD/MM/YYYY (e.g. 28/08/2026)
 function getFormattedToday(): string {
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const today = new Date();
-  const dd = String(today.getDate()).padStart(2, '0');
-  const mmm = months[today.getMonth()];
-  const yy = String(today.getFullYear()).slice(-2);
-  return `${dd}-${mmm}-${yy}`;
+  return formatDate(new Date());
 }
 
 export default function ConfirmationsGeneratorPage() {
