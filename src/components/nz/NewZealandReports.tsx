@@ -111,7 +111,7 @@ export default function NewZealandReports() {
   const now = new Date();
   const [selectedYear, setSelectedYear] = useState<number>(now.getFullYear());
   const [selectedMonth, setSelectedMonth] = useState<number>(now.getMonth()); // 0-indexed (0 = Jan)
-  const [dateBasis, setDateBasis] = useState<'deadline' | 'created_at' | 'completed_at' | 'both'>('both');
+  const [dateBasis, setDateBasis] = useState<'deadline' | 'created_at' | 'both'>('both');
 
   // Filters & Search
   const [searchQuery, setSearchQuery] = useState('');
@@ -225,7 +225,6 @@ export default function NewZealandReports() {
     tasks.forEach(t => {
       const dDeadline = t.deadline?.slice(0, 7);
       const dCreated = t.created_at?.slice(0, 7);
-      const dCompleted = t.completed_at?.slice(0, 7);
       const targetPrefix = `${selectedYear}-`;
 
       for (let m = 0; m < 12; m++) {
@@ -235,10 +234,6 @@ export default function NewZealandReports() {
           if (dDeadline === monthKey) counts[m] = (counts[m] || 0) + 1;
         } else if (dateBasis === 'created_at') {
           if (dCreated === monthKey) counts[m] = (counts[m] || 0) + 1;
-        } else if (dateBasis === 'completed_at') {
-          if (dCompleted === monthKey || (isTaskCompleted(t.status) && (dDeadline === monthKey || dCreated === monthKey))) {
-            counts[m] = (counts[m] || 0) + 1;
-          }
         } else {
           if (dDeadline === monthKey || dCreated === monthKey) {
             counts[m] = (counts[m] || 0) + 1;
@@ -254,16 +249,12 @@ export default function NewZealandReports() {
     return tasks.filter(t => {
       const dDeadline = t.deadline?.slice(0, 7);
       const dCreated = t.created_at?.slice(0, 7);
-      const dCompleted = t.completed_at?.slice(0, 7);
 
       if (dateBasis === 'deadline') {
         return dDeadline === selectedMonthStr;
       }
       if (dateBasis === 'created_at') {
         return dCreated === selectedMonthStr;
-      }
-      if (dateBasis === 'completed_at') {
-        return dCompleted === selectedMonthStr || (isTaskCompleted(t.status) && (dDeadline === selectedMonthStr || dCreated === selectedMonthStr));
       }
       // 'both': matches either deadline or created_at
       return dDeadline === selectedMonthStr || dCreated === selectedMonthStr;
@@ -674,9 +665,9 @@ export default function NewZealandReports() {
               borderRadius: '9px',
               border: '1px solid var(--border)'
             }}>
-              {(['both', 'deadline', 'created_at', 'completed_at'] as const).map(basis => {
+              {(['both', 'deadline', 'created_at'] as const).map(basis => {
                 const isSelected = dateBasis === basis;
-                const label = basis === 'both' ? 'Active / Due' : basis === 'deadline' ? 'Due Date' : basis === 'created_at' ? 'Created Date' : 'Completed Date';
+                const label = basis === 'both' ? 'Active / Due' : basis === 'deadline' ? 'Due Date' : 'Created Date';
                 return (
                   <button
                     key={basis}
@@ -1473,29 +1464,21 @@ export default function NewZealandReports() {
 
                       {/* Status */}
                       <td style={{ padding: '12px 14px' }}>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                          <span style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '5px',
-                            fontSize: '11.5px',
-                            fontWeight: 700,
-                            padding: '3px 9px',
-                            borderRadius: '12px',
-                            background: statusStyle.bg,
-                            color: statusStyle.text,
-                            border: `1px solid ${statusStyle.border}`,
-                            width: 'fit-content'
-                          }}>
-                            <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: statusStyle.dot }} />
-                            {task.status || 'Pending'}
-                          </span>
-                          {isTaskCompleted(task.status) && task.completed_at && (
-                            <span style={{ fontSize: '10px', color: '#059669', fontWeight: 600, paddingLeft: '2px' }}>
-                              Completed: {formatDate(task.completed_at)}
-                            </span>
-                          )}
-                        </div>
+                        <span style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '5px',
+                          fontSize: '11.5px',
+                          fontWeight: 700,
+                          padding: '3px 9px',
+                          borderRadius: '12px',
+                          background: statusStyle.bg,
+                          color: statusStyle.text,
+                          border: `1px solid ${statusStyle.border}`
+                        }}>
+                          <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: statusStyle.dot }} />
+                          {task.status || 'Pending'}
+                        </span>
                       </td>
                     </tr>
                   );
