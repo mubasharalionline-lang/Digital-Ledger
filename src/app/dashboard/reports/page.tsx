@@ -4,23 +4,31 @@ import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { getSession, isAdmin, getDataCountry } from '@/lib/auth';
 import NewZealandReports from '@/components/nz/NewZealandReports';
-import BahrainReports from '@/components/bahrain/BahrainReports';
 import { Loader2 } from 'lucide-react';
 
 export default function ReportsPage() {
   const router = useRouter();
   const [authorized, setAuthorized] = useState<boolean | null>(null);
-  const [country, setCountry] = useState<string>('New Zealand');
 
   useEffect(() => {
     const { user, country: sessionCountry } = getSession();
     if (!user || !isAdmin(user)) {
-      router.push('/dashboard');
+      router.replace('/dashboard');
       return;
     }
     
-    const activeCountry = getDataCountry() || sessionCountry || 'New Zealand';
-    setCountry(activeCountry);
+    const activeCountry = getDataCountry() || sessionCountry || '';
+    const isNz =
+      activeCountry === 'New Zealand' ||
+      activeCountry === 'NZ' ||
+      activeCountry.toLowerCase() === 'new zealand' ||
+      activeCountry.toLowerCase() === 'nz';
+
+    if (!isNz) {
+      router.replace('/dashboard');
+      return;
+    }
+
     setAuthorized(true);
   }, [router]);
 
@@ -35,11 +43,5 @@ export default function ReportsPage() {
     );
   }
 
-  // Country Routing: New Zealand gets the dedicated NZ Monthly Report
-  if (country === 'New Zealand' || country === 'NZ') {
-    return <NewZealandReports />;
-  }
-
-  // Other countries retain their own report component
-  return <BahrainReports />;
+  return <NewZealandReports />;
 }

@@ -115,7 +115,7 @@ export default function SelectCountryPage() {
               <button onClick={() => setShowAdd(false)} style={{ background: 'var(--bg-tertiary)', border: 'none', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><X size={16} /></button>
             </div>
             <div style={{ padding: '24px' }}>
-              <p style={{ fontSize: '13px', color: '#6e6e73', marginBottom: '20px' }}>New countries automatically use the unified system with dashboard, tasks, reports, and partner management.</p>
+              <p style={{ fontSize: '13px', color: '#6e6e73', marginBottom: '20px' }}>New countries automatically use the unified system with dashboard, tasks, and partner management.</p>
               <div style={{ marginBottom: '14px' }}><label className="label">Country Name *</label><input className="input" placeholder="e.g. United Kingdom" value={newName} onChange={e => setNewName(e.target.value)} autoFocus /></div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
                 <div><label className="label">Code *</label><input className="input" placeholder="UK" value={newCode} onChange={e => setNewCode(e.target.value)} maxLength={4} style={{ textTransform: 'uppercase' }} /></div>

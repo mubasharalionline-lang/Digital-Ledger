@@ -6,7 +6,7 @@ import type { Company } from '@/lib/supabase';
 import { getDataCountry, getSession, isAdmin } from '@/lib/auth';
 import { useRouter } from 'next/navigation';
 import {
-  Plus, Trash2, X, Building2, Search, FolderOpen, FileText, BarChart3,
+  Plus, Trash2, X, Building2, Search, FolderOpen, FileText,
   Settings, ExternalLink, Link as LinkIcon, Pencil, ChevronLeft, ChevronRight, Globe
 } from 'lucide-react';
 
@@ -388,25 +388,6 @@ export default function BahrainCompanies() {
                               <ExternalLink size={14} color="#94a3b8" />
                             </button>
                           )}
-
-                          {/* Future Actions (disabled placeholders) */}
-                          {[
-                            { id: 'reports', label: 'Reports', icon: <BarChart3 size={16} color="#f59e0b" />, sub: 'Coming soon', iconBg: '#fffbeb', iconBorder: '#fef3c7' },
-                          ].map(action => (
-                            <div key={action.id} style={{
-                              display: 'flex', alignItems: 'center', gap: '12px',
-                              padding: '10px 14px', borderRadius: '10px', opacity: 0.65,
-                              cursor: 'not-allowed',
-                            }}>
-                              <div style={{ width: '34px', height: '34px', borderRadius: '10px', background: action.iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, border: `1px solid ${action.iconBorder}` }}>
-                                {action.icon}
-                              </div>
-                              <div style={{ flex: 1 }}>
-                                <div style={{ fontSize: '13px', fontWeight: 600, color: '#475569' }}>{action.label}</div>
-                                <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 500, marginTop: '1px' }}>{action.sub}</div>
-                              </div>
-                            </div>
-                          ))}
                         </div>
                       </td>
                     )}

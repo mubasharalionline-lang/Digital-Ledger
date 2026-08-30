@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useCallback, ReactNode, useMemo } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { getSession, clearSession, isAdmin, isSuperAdmin, setSession } from '@/lib/auth';
+import { getSession, clearSession, isAdmin, isSuperAdmin, setSession, getDataCountry } from '@/lib/auth';
 import { getTerminology } from '@/lib/terminology';
 import { supabase } from '@/lib/supabase';
 import type { User } from '@/lib/supabase';
@@ -20,7 +20,13 @@ interface CountryRecord { id: string; code: string; name: string; flag: string; 
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [country, setCountry] = useState<string | null>(null);
+  const [country, setCountry] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      const { user: u, country: c } = getSession();
+      return c || (u ? u.country : null) || null;
+    }
+    return null;
+  });
   const [collapsed, setCollapsed] = useState(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('dl_sidebar_collapsed');
@@ -57,7 +63,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     const { user: u, country: c } = getSession();
     if (!u) { router.push('/'); return; }
     setUser(u);
-    setCountry(c);
+    setCountry(c || (u ? u.country : null) || null);
     loadCountries();
 
     // Listen for cross-tab session changes
@@ -156,22 +162,39 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const currentCountryData = countries.find(c => c.name === country || c.code === country);
   const terms = useMemo(() => getTerminology(country), [country]);
 
-  // Unified nav — same for all countries
+  // Unified nav — Reports is only visible for New Zealand
   const navItems: NavItem[] = useMemo(() => {
     const canViewCompanies = user?.permissions?.can_view_companies === true;
-    return [
+    const activeCountry = country || getDataCountry() || user?.country || '';
+    const isNz =
+      activeCountry === 'New Zealand' ||
+      activeCountry === 'NZ' ||
+      activeCountry.toLowerCase() === 'new zealand' ||
+      activeCountry.toLowerCase() === 'nz' ||
+      currentCountryData?.code?.toUpperCase() === 'NZ' ||
+      currentCountryData?.name?.toLowerCase() === 'new zealand';
+
+    const items: NavItem[] = [
       { label: 'Dashboard', href: '/dashboard', icon: <LayoutGrid size={20} /> },
       { label: 'Partner Workload', href: '/dashboard/partner-workload', icon: <Activity size={20} />, adminOnly: true },
       { label: 'Companies', href: '/dashboard/companies', icon: <Landmark size={20} />, adminOnly: !canViewCompanies },
       { label: 'Tasks', href: '/dashboard/tasks', icon: <CheckCircle2 size={20} /> },
       { label: 'Task Types', href: '/dashboard/task-types', icon: <Boxes size={20} />, adminOnly: true, isSectionHeader: true },
       { label: 'Daily Tasks', href: '/dashboard/daily-tasks', icon: <CalendarCheck2 size={20} /> },
-      { label: 'Reports', href: '/dashboard/reports', icon: <BarChart3 size={20} />, adminOnly: true },
+    ];
+
+    if (isNz) {
+      items.push({ label: 'Reports', href: '/dashboard/reports', icon: <BarChart3 size={20} />, adminOnly: true });
+    }
+
+    items.push(
       { label: terms.staffSingular + 's', href: '/dashboard/staff', icon: <Contact2 size={20} />, adminOnly: true },
       { label: 'Edits', href: '/dashboard/edits', icon: <History size={20} />, adminOnly: true },
       { label: 'Settings', href: '/dashboard/settings', icon: <SlidersHorizontal size={20} />, adminOnly: true },
-    ];
-  }, [terms, user]);
+    );
+
+    return items;
+  }, [terms, user, country, currentCountryData]);
 
   if (!user) return null;
   const filteredNav = navItems.filter(item => !item.adminOnly || isAdmin(user));
@@ -537,7 +560,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             </div>
             <div style={{ padding: '24px' }}>
               <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '20px', lineHeight: 1.5 }}>
-                New countries automatically use the unified system with the same dashboard, task management, reports, and partner structure.
+                New countries automatically use the unified system with the same dashboard, task management, and partner structure.
               </p>
               <div style={{ marginBottom: '14px' }}>
                 <label className="label">Country Name *</label>
