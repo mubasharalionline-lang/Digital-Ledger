@@ -10,7 +10,7 @@ import {
   LayoutGrid, Landmark, CheckCircle2, CalendarCheck2, Boxes,
   Contact2, History, SlidersHorizontal, LogOut,
   ChevronLeft, ChevronRight, Menu, ChevronDown,
-  Plus, X, Loader2, Globe, Activity
+  Plus, X, Loader2, Globe, Activity, BarChart3
 } from 'lucide-react';
 import CountryFlag from '@/components/CountryFlag';
 import { initTheme } from '@/lib/theme';
@@ -166,6 +166,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       { label: 'Tasks', href: '/dashboard/tasks', icon: <CheckCircle2 size={20} /> },
       { label: 'Task Types', href: '/dashboard/task-types', icon: <Boxes size={20} />, adminOnly: true, isSectionHeader: true },
       { label: 'Daily Tasks', href: '/dashboard/daily-tasks', icon: <CalendarCheck2 size={20} /> },
+      { label: 'Reports', href: '/dashboard/reports', icon: <BarChart3 size={20} />, adminOnly: true },
       { label: terms.staffSingular + 's', href: '/dashboard/staff', icon: <Contact2 size={20} />, adminOnly: true },
       { label: 'Edits', href: '/dashboard/edits', icon: <History size={20} />, adminOnly: true },
       { label: 'Settings', href: '/dashboard/settings', icon: <SlidersHorizontal size={20} />, adminOnly: true },

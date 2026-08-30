@@ -280,3 +280,108 @@ export async function exportTaskManagementExcel(
   const safeCountry = (ctx.country || 'Bahrain').replace(/\s+/g, '_');
   XLSX.writeFile(wb, `${prefix}_${safeCountry}_${dateStr}.xlsx`);
 }
+
+export interface NzPartnerSummaryRow {
+  partnerId: string;
+  name: string;
+  role: string;
+  totalTasks: number;
+  completedTasks: number;
+  completionRate: string;
+}
+
+export async function exportNzMonthlyReportExcel(
+  taskList: Task[],
+  ctx: ExportCtx,
+  monthLabel: string,
+  options?: {
+    partnerSummary?: NzPartnerSummaryRow[];
+  }
+) {
+  const XLSX = await import('xlsx');
+
+  // Sheet 1: NZ Monthly Tasks (CR Number and Hours Spent omitted)
+  const rows = taskList.map(task => {
+    const company = ctx.companies.find(c => c.id === task.company_id);
+    const ttIds = task.task_type_ids?.length ? task.task_type_ids : (task.task_type_id ? task.task_type_id.split(',').map(s => s.trim()).filter(Boolean) : []);
+    const ttNames = ttIds.map(id => ctx.taskTypes.find(t => t.id === id)?.name).filter(Boolean).join(', ');
+    const activePartnerIds = getActivePartnerIds(task);
+    const allNames = activePartnerIds.map(id => ctx.partners.find(p => p.id === id)?.username).filter(Boolean);
+    const assigned = allNames.length > 0 ? allNames.join(', ') : 'Unassigned';
+
+    return {
+      'Company': company?.company_name || 'Unknown',
+      'Task Type': ttNames || '—',
+      'Description': task.description || '',
+      'Assigned Partner(s)': assigned,
+      'Priority': task.priority || 'Medium',
+      'Due Date': task.deadline ? formatDate(task.deadline) : '',
+      'Status': task.status || 'Pending',
+      'Created Date': task.created_at ? formatDate(task.created_at) : '',
+    };
+  });
+
+  const wb = XLSX.utils.book_new();
+  const wsTasks = XLSX.utils.json_to_sheet(rows);
+
+  wsTasks['!cols'] = [
+    { wch: 30 }, // Company
+    { wch: 22 }, // Task Type
+    { wch: 42 }, // Description
+    { wch: 26 }, // Assigned Partner(s)
+    { wch: 12 }, // Priority
+    { wch: 14 }, // Due Date
+    { wch: 20 }, // Status
+    { wch: 16 }, // Created Date
+  ];
+
+  if (rows.length > 0) {
+    const range = XLSX.utils.decode_range(wsTasks['!ref'] || 'A1:H1');
+    wsTasks['!autofilter'] = { ref: `A1:H${range.e.r + 1}` };
+  }
+
+  XLSX.utils.book_append_sheet(wb, wsTasks, 'NZ Monthly Tasks');
+
+  // Sheet 2: Executive Summary & Partner Breakdown
+  let totalCompleted = 0;
+  taskList.forEach(t => {
+    if (isCompleted(t.status || '')) totalCompleted++;
+  });
+
+  const completionRate = taskList.length > 0
+    ? `${((totalCompleted / taskList.length) * 100).toFixed(1)}%`
+    : '0%';
+
+  const summarySheetData: any[] = [
+    { Section: 'Report Scope', Metric: 'Country', Value: 'New Zealand' },
+    { Section: 'Report Scope', Metric: 'Report Month', Value: monthLabel },
+    { Section: 'Report Scope', Metric: 'Generated On', Value: formatDate(new Date()) },
+    { Section: '', Metric: '', Value: '' },
+    { Section: 'Monthly Totals', Metric: 'Total Tasks', Value: taskList.length },
+    { Section: 'Monthly Totals', Metric: 'Total Tasks Completed', Value: totalCompleted },
+    { Section: 'Monthly Totals', Metric: 'Pending Tasks', Value: taskList.length - totalCompleted },
+    { Section: 'Monthly Totals', Metric: 'Completion Rate', Value: completionRate },
+    { Section: '', Metric: '', Value: '' },
+  ];
+
+  if (options?.partnerSummary && options.partnerSummary.length > 0) {
+    summarySheetData.push({ Section: '--- PARTNER-WISE BREAKDOWN ---', Metric: '', Value: '' });
+    options.partnerSummary.forEach(p => {
+      summarySheetData.push({
+        Section: `Partner: ${p.name}`,
+        Metric: `Role: ${p.role} | Tasks: ${p.totalTasks} (Completed: ${p.completedTasks})`,
+        Value: `Completion Rate: ${p.completionRate}`,
+      });
+    });
+  }
+
+  const wsSummary = XLSX.utils.json_to_sheet(summarySheetData);
+  wsSummary['!cols'] = [{ wch: 30 }, { wch: 45 }, { wch: 24 }];
+  XLSX.utils.book_append_sheet(wb, wsSummary, 'Summary & Partners');
+
+  const cleanMonth = monthLabel.replace(/[^a-zA-Z0-9_-]/g, '_');
+  const dateStr = new Date().toISOString().split('T')[0];
+  XLSX.writeFile(wb, `NZ_Monthly_Report_${cleanMonth}_${dateStr}.xlsx`);
+}
+
+
