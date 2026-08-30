@@ -309,7 +309,13 @@ export default function CompanyDetailPage() {
   }
 
   async function updateTaskStatus(taskId: string, status: string) {
-    await supabase.from('tasks').update({ status }).eq('id', taskId);
+    const sLower = (status || '').toLowerCase();
+    const isCompleted = sLower === 'completed' || sLower === 'complete' || sLower === 'closed' || sLower === 'filed' || sLower === 'done' || sLower.includes('complete') || sLower.includes('closed') || sLower.includes('filed');
+    const completedAt = isCompleted ? new Date().toISOString() : null;
+    const { error } = await supabase.from('tasks').update({ status, completed_at: completedAt }).eq('id', taskId);
+    if (error && (error.message?.includes('completed_at') || error.message?.includes('schema cache'))) {
+      await supabase.from('tasks').update({ status }).eq('id', taskId);
+    }
     loadData();
   }
 

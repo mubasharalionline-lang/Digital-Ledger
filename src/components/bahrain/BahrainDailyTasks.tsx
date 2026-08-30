@@ -262,14 +262,20 @@ export default function BahrainDailyTasks() {
 
   async function handleStatusChange(taskId: string, newStatus: string) {
     if (!canUpdateStatus) return;
+    const sLower = (newStatus || '').toLowerCase();
+    const isCompleted = sLower === 'completed' || sLower === 'complete' || sLower === 'closed' || sLower === 'filed' || sLower === 'done' || sLower.includes('complete') || sLower.includes('closed') || sLower.includes('filed');
+    const completedAt = isCompleted ? new Date().toISOString() : null;
     try {
-      await supabase.from('tasks').update({ status: newStatus }).eq('id', taskId);
+      const { error } = await supabase.from('tasks').update({ status: newStatus, completed_at: completedAt }).eq('id', taskId);
+      if (error && (error.message?.includes('completed_at') || error.message?.includes('schema cache'))) {
+        await supabase.from('tasks').update({ status: newStatus }).eq('id', taskId);
+      }
       await supabase.from('status_log').insert({
         task_id: taskId,
         status: newStatus,
         remarks: 'Quick status update'
       });
-      setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: newStatus } : t));
+      setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: newStatus, completed_at: completedAt } : t));
       // Invalidate caches so other pages (Staff, Dashboard) fetch fresh data
       sessionStorage.removeItem('dashboard_data_time_v2');
       sessionStorage.removeItem('tasks_data_time');

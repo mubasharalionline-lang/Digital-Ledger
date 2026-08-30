@@ -707,12 +707,21 @@ export default function BahrainTasks() {
     const task = tasks.find(t => t.id === taskId);
     if (!task || task.status === newStatus) return;
     const previousStatus = task.status;
+    const sLower = (newStatus || '').toLowerCase();
+    const isCompleted = sLower === 'completed' || sLower === 'complete' || sLower === 'closed' || sLower === 'filed' || sLower === 'done' || sLower.includes('complete') || sLower.includes('closed') || sLower.includes('filed');
+    const completedAt = isCompleted ? new Date().toISOString() : null;
 
     // Optimistic update — UI changes instantly
-    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: newStatus } : t));
+    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: newStatus, completed_at: completedAt } : t));
 
     // Fire DB calls in the background
-    supabase.from('tasks').update({ status: newStatus }).eq('id', taskId).select('id').then(async ({ data, error }) => {
+    supabase.from('tasks').update({ status: newStatus, completed_at: completedAt }).eq('id', taskId).select('id').then(async ({ data, error }) => {
+      if (error && (error.message?.includes('completed_at') || error.message?.includes('schema cache'))) {
+        // Fallback without completed_at if column not yet added in Supabase
+        const fb = await supabase.from('tasks').update({ status: newStatus }).eq('id', taskId).select('id');
+        data = fb.data;
+        error = fb.error;
+      }
       if (error) {
         console.error('Status update error:', error);
         setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: previousStatus } : t));

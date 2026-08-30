@@ -74,6 +74,7 @@ export interface Task {
   country?: string;
   pl_uploaded?: boolean;
   pl_date?: string | null;
+  completed_at?: string | null;
   created_at: string;
   // joined fields
   company?: Company;

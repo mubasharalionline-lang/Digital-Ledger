@@ -317,6 +317,7 @@ export async function exportNzMonthlyReportExcel(
       'Priority': task.priority || 'Medium',
       'Due Date': task.deadline ? formatDate(task.deadline) : '',
       'Status': task.status || 'Pending',
+      'Completed Date': task.completed_at ? formatDate(task.completed_at) : '',
       'Created Date': task.created_at ? formatDate(task.created_at) : '',
     };
   });
@@ -332,12 +333,13 @@ export async function exportNzMonthlyReportExcel(
     { wch: 12 }, // Priority
     { wch: 14 }, // Due Date
     { wch: 20 }, // Status
+    { wch: 16 }, // Completed Date
     { wch: 16 }, // Created Date
   ];
 
   if (rows.length > 0) {
-    const range = XLSX.utils.decode_range(wsTasks['!ref'] || 'A1:H1');
-    wsTasks['!autofilter'] = { ref: `A1:H${range.e.r + 1}` };
+    const range = XLSX.utils.decode_range(wsTasks['!ref'] || 'A1:I1');
+    wsTasks['!autofilter'] = { ref: `A1:I${range.e.r + 1}` };
   }
 
   XLSX.utils.book_append_sheet(wb, wsTasks, 'NZ Monthly Tasks');
