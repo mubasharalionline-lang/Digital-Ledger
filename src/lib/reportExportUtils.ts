@@ -309,10 +309,16 @@ export async function exportNzMonthlyReportExcel(
     const allNames = activePartnerIds.map(id => ctx.partners.find(p => p.id === id)?.username).filter(Boolean);
     const assigned = allNames.length > 0 ? allNames.join(', ') : 'Unassigned';
 
+    const auditor = ctx.auditors.find(a => a.id === task.auditor_id)?.name || 'Direct / None';
+    const completedDate = isTaskCompleted(task.status)
+      ? (task.completed_at ? formatDate(task.completed_at) : (task.created_at ? formatDate(task.created_at) : 'Completed'))
+      : '—';
+
     return {
       'Company': company?.company_name || 'Unknown',
       'Task Type': ttNames || '—',
       'Description': task.description || '',
+      'Auditor (Delegated By)': auditor,
       'Assigned Partner(s)': assigned,
       'Priority': task.priority || 'Medium',
       'Due Date': task.deadline ? formatDate(task.deadline) : '',
@@ -328,6 +334,7 @@ export async function exportNzMonthlyReportExcel(
     { wch: 30 }, // Company
     { wch: 22 }, // Task Type
     { wch: 42 }, // Description
+    { wch: 24 }, // Auditor (Delegated By)
     { wch: 26 }, // Assigned Partner(s)
     { wch: 12 }, // Priority
     { wch: 14 }, // Due Date
@@ -336,8 +343,8 @@ export async function exportNzMonthlyReportExcel(
   ];
 
   if (rows.length > 0) {
-    const range = XLSX.utils.decode_range(wsTasks['!ref'] || 'A1:H1');
-    wsTasks['!autofilter'] = { ref: `A1:H${range.e.r + 1}` };
+    const range = XLSX.utils.decode_range(wsTasks['!ref'] || 'A1:I1');
+    wsTasks['!autofilter'] = { ref: `A1:I${range.e.r + 1}` };
   }
 
   XLSX.utils.book_append_sheet(wb, wsTasks, 'NZ Monthly Tasks');
@@ -382,6 +389,161 @@ export async function exportNzMonthlyReportExcel(
   const cleanMonth = monthLabel.replace(/[^a-zA-Z0-9_-]/g, '_');
   const dateStr = new Date().toISOString().split('T')[0];
   XLSX.writeFile(wb, `NZ_Monthly_Report_${cleanMonth}_${dateStr}.xlsx`);
+}
+
+export interface AuditorSummaryRow {
+  auditorId: string;
+  name: string;
+  totalTasks: number;
+  completedTasks: number;
+  completionRate: string;
+}
+
+export function isTaskCompleted(status?: string | null): boolean {
+  if (!status) return false;
+  const s = status.toLowerCase().trim();
+  return (
+    s.includes('completed') ||
+    s.includes('complete') ||
+    s.includes('closed') ||
+    s.includes('filed') ||
+    s.includes('done')
+  );
+}
+
+export async function exportComprehensiveReportExcel(
+  taskList: Task[],
+  ctx: ExportCtx,
+  periodLabel: string,
+  options?: {
+    auditorSummary?: AuditorSummaryRow[];
+    partnerSummary?: NzPartnerSummaryRow[];
+    timeframeType?: 'monthly' | 'yearly' | 'range';
+    fileNamePrefix?: string;
+  }
+) {
+  const XLSX = await import('xlsx');
+
+  // Sort tasks: Completed first, then in progress
+  const sortedTasks = [...taskList].sort((a, b) => {
+    const aComp = isTaskCompleted(a.status);
+    const bComp = isTaskCompleted(b.status);
+    if (aComp && !bComp) return -1;
+    if (!aComp && bComp) return 1;
+    // If both completed, sort by completed_at descending (or deadline/created_at)
+    if (aComp && bComp) {
+      const aDate = a.completed_at || a.created_at || '';
+      const bDate = b.completed_at || b.created_at || '';
+      return bDate.localeCompare(aDate);
+    }
+    // If both in progress, sort by deadline ascending
+    const aDead = a.deadline || '9999-99-99';
+    const bDead = b.deadline || '9999-99-99';
+    return aDead.localeCompare(bDead);
+  });
+
+  // Sheet 1: Tasks
+  const rows = sortedTasks.map(task => {
+    const company = ctx.companies.find(c => c.id === task.company_id);
+    const ttIds = task.task_type_ids?.length ? task.task_type_ids : (task.task_type_id ? task.task_type_id.split(',').map(s => s.trim()).filter(Boolean) : []);
+    const ttNames = ttIds.map(id => ctx.taskTypes.find(t => t.id === id)?.name).filter(Boolean).join(', ');
+    const activePartnerIds = getActivePartnerIds(task);
+    const allNames = activePartnerIds.map(id => ctx.partners.find(p => p.id === id)?.username).filter(Boolean);
+    const assigned = allNames.length > 0 ? allNames.join(', ') : 'Unassigned';
+    const auditorName = ctx.auditors.find(a => a.id === task.auditor_id)?.name || 'Direct / None';
+    const completedDate = isTaskCompleted(task.status)
+      ? (task.completed_at ? formatDate(task.completed_at) : (task.created_at ? formatDate(task.created_at) : 'Completed'))
+      : '—';
+
+    return {
+      'Company': company?.company_name || 'Unknown',
+      'Task Type': ttNames || '—',
+      'Description': task.description || '',
+      'Auditor (Delegated By)': auditorName,
+      'Assigned Partner(s)': assigned,
+      'Priority': task.priority || 'Medium',
+      'Due Date': task.deadline ? formatDate(task.deadline) : '—',
+      'Status': task.status || 'Pending',
+      'Created Date': task.created_at ? formatDate(task.created_at) : '',
+    };
+  });
+
+  const wb = XLSX.utils.book_new();
+  const wsTasks = XLSX.utils.json_to_sheet(rows);
+
+  wsTasks['!cols'] = [
+    { wch: 28 }, // Company
+    { wch: 22 }, // Task Type
+    { wch: 42 }, // Description
+    { wch: 24 }, // Auditor (Delegated By)
+    { wch: 26 }, // Assigned Partner(s)
+    { wch: 12 }, // Priority
+    { wch: 14 }, // Due Date
+    { wch: 20 }, // Status
+    { wch: 16 }, // Created Date
+  ];
+
+  if (rows.length > 0) {
+    const range = XLSX.utils.decode_range(wsTasks['!ref'] || 'A1:I1');
+    wsTasks['!autofilter'] = { ref: `A1:I${range.e.r + 1}` };
+  }
+
+  XLSX.utils.book_append_sheet(wb, wsTasks, 'Tasks Report');
+
+  // Sheet 2: Executive Summary & Breakdown
+  let totalCompleted = 0;
+  sortedTasks.forEach(t => {
+    if (isTaskCompleted(t.status || '')) totalCompleted++;
+  });
+
+  const completionRate = sortedTasks.length > 0
+    ? `${((totalCompleted / sortedTasks.length) * 100).toFixed(1)}%`
+    : '0%';
+
+  const summarySheetData: any[] = [
+    { Section: 'Report Scope', Metric: 'Country', Value: ctx.country || 'Bahrain' },
+    { Section: 'Report Scope', Metric: 'Timeframe', Value: periodLabel },
+    { Section: 'Report Scope', Metric: 'Generated On', Value: formatDate(new Date()) },
+    { Section: '', Metric: '', Value: '' },
+    { Section: 'Totals', Metric: 'Total Tasks', Value: sortedTasks.length },
+    { Section: 'Totals', Metric: 'Completed Tasks', Value: totalCompleted },
+    { Section: 'Totals', Metric: 'In Progress / Pending Tasks', Value: sortedTasks.length - totalCompleted },
+    { Section: 'Totals', Metric: 'Overall Completion Rate', Value: completionRate },
+    { Section: '', Metric: '', Value: '' },
+  ];
+
+  if (options?.auditorSummary && options.auditorSummary.length > 0) {
+    summarySheetData.push({ Section: '--- AUDITOR-WISE WORKLOAD (DELEGATED WORK) ---', Metric: '', Value: '' });
+    options.auditorSummary.forEach(a => {
+      summarySheetData.push({
+        Section: `Auditor: ${a.name}`,
+        Metric: `Tasks Delegated: ${a.totalTasks} | Completed: ${a.completedTasks}`,
+        Value: `Completion Rate: ${a.completionRate}`,
+      });
+    });
+    summarySheetData.push({ Section: '', Metric: '', Value: '' });
+  }
+
+  if (options?.partnerSummary && options.partnerSummary.length > 0) {
+    summarySheetData.push({ Section: '--- PARTNER-WISE BREAKDOWN ---', Metric: '', Value: '' });
+    options.partnerSummary.forEach(p => {
+      summarySheetData.push({
+        Section: `Partner: ${p.name}`,
+        Metric: `Role: ${p.role} | Tasks: ${p.totalTasks} (Completed: ${p.completedTasks})`,
+        Value: `Completion Rate: ${p.completionRate}`,
+      });
+    });
+  }
+
+  const wsSummary = XLSX.utils.json_to_sheet(summarySheetData);
+  wsSummary['!cols'] = [{ wch: 32 }, { wch: 48 }, { wch: 24 }];
+  XLSX.utils.book_append_sheet(wb, wsSummary, 'Summary & Analytics');
+
+  const cleanPeriod = periodLabel.replace(/[^a-zA-Z0-9_-]/g, '_');
+  const dateStr = new Date().toISOString().split('T')[0];
+  const countryPrefix = (ctx.country || 'Bahrain').replace(/\s+/g, '_');
+  const prefix = options?.fileNamePrefix || `${countryPrefix}_Report`;
+  XLSX.writeFile(wb, `${prefix}_${cleanPeriod}_${dateStr}.xlsx`);
 }
 
 

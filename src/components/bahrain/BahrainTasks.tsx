@@ -417,9 +417,9 @@ export default function BahrainTasks() {
       })();
 
       const tasksPromise = (async () => {
-        const { data: t, error: tErr } = await supabase.from('tasks').select('id, title, company_id, assigned_to, assigned_partners, status, priority, deadline, admin_note, task_type_id, task_type_ids, auditor_id, description, is_daily, country, pl_uploaded, pl_date, created_at').eq('country', targetCountry).neq('is_daily', true);
+        const { data: t, error: tErr } = await supabase.from('tasks').select('id, title, company_id, assigned_to, assigned_partners, status, priority, deadline, admin_note, task_type_id, task_type_ids, auditor_id, description, is_daily, country, pl_uploaded, pl_date, completed_at, created_at').eq('country', targetCountry).neq('is_daily', true);
         if (tErr) {
-          console.warn('pl_date column query fallback:', tErr.message);
+          console.warn('pl_date / completed_at column query fallback:', tErr.message);
           const { data: fallbackTasks } = await supabase.from('tasks').select('id, title, company_id, assigned_to, assigned_partners, status, priority, deadline, admin_note, task_type_id, task_type_ids, auditor_id, description, is_daily, country, pl_uploaded, created_at').eq('country', targetCountry).neq('is_daily', true);
           return fallbackTasks || [];
         }

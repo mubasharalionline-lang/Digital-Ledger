@@ -181,11 +181,8 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       { label: 'Tasks', href: '/dashboard/tasks', icon: <CheckCircle2 size={20} /> },
       { label: 'Task Types', href: '/dashboard/task-types', icon: <Boxes size={20} />, adminOnly: true, isSectionHeader: true },
       { label: 'Daily Tasks', href: '/dashboard/daily-tasks', icon: <CalendarCheck2 size={20} /> },
+      { label: 'Reports', href: '/dashboard/reports', icon: <BarChart3 size={20} />, adminOnly: true },
     ];
-
-    if (isNz) {
-      items.push({ label: 'Reports', href: '/dashboard/reports', icon: <BarChart3 size={20} />, adminOnly: true });
-    }
 
     items.push(
       { label: terms.staffSingular + 's', href: '/dashboard/staff', icon: <Contact2 size={20} />, adminOnly: true },

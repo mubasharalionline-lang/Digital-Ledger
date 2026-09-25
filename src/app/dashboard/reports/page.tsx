@@ -4,11 +4,13 @@ import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { getSession, isAdmin, getDataCountry } from '@/lib/auth';
 import NewZealandReports from '@/components/nz/NewZealandReports';
+import BahrainReports from '@/components/bahrain/BahrainReports';
 import { Loader2 } from 'lucide-react';
 
 export default function ReportsPage() {
   const router = useRouter();
   const [authorized, setAuthorized] = useState<boolean | null>(null);
+  const [isNzCountry, setIsNzCountry] = useState<boolean>(false);
 
   useEffect(() => {
     const { user, country: sessionCountry } = getSession();
@@ -24,11 +26,7 @@ export default function ReportsPage() {
       activeCountry.toLowerCase() === 'new zealand' ||
       activeCountry.toLowerCase() === 'nz';
 
-    if (!isNz) {
-      router.replace('/dashboard');
-      return;
-    }
-
+    setIsNzCountry(isNz);
     setAuthorized(true);
   }, [router]);
 
@@ -43,5 +41,5 @@ export default function ReportsPage() {
     );
   }
 
-  return <NewZealandReports />;
+  return isNzCountry ? <NewZealandReports /> : <BahrainReports />;
 }
