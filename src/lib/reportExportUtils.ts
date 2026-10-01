@@ -411,6 +411,92 @@ export function isTaskCompleted(status?: string | null): boolean {
   );
 }
 
+export function calculateTimeTaken(task: Task, completedDateStr?: string | null): {
+  formatted: string;
+  totalHours: number;
+  totalDays: number;
+  isCompleted: boolean;
+  rawMs: number;
+} {
+  const isComp = isTaskCompleted(task.status);
+  const startIso = task.created_at;
+  const endIso = completedDateStr || task.completed_at;
+
+  if (!startIso) {
+    return { formatted: '—', totalHours: 0, totalDays: 0, isCompleted: isComp, rawMs: 0 };
+  }
+
+  const startTime = new Date(startIso).getTime();
+  if (isNaN(startTime)) {
+    return { formatted: '—', totalHours: 0, totalDays: 0, isCompleted: isComp, rawMs: 0 };
+  }
+
+  if (isComp) {
+    const endTime = endIso ? new Date(endIso).getTime() : null;
+    if (!endTime || isNaN(endTime)) {
+      return { formatted: 'Completed', totalHours: 0, totalDays: 0, isCompleted: true, rawMs: 0 };
+    }
+
+    const diffMs = Math.max(0, endTime - startTime);
+    const totalMinutes = Math.floor(diffMs / (1000 * 60));
+    const totalHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const days = Math.floor(totalHours / 24);
+    const remainingHours = totalHours % 24;
+    const remainingMins = totalMinutes % 60;
+
+    let formatted = '';
+    if (days > 0) {
+      if (remainingHours > 0) {
+        formatted = `${days} day${days === 1 ? '' : 's'} ${remainingHours} hour${remainingHours === 1 ? '' : 's'}`;
+      } else {
+        formatted = `${days} day${days === 1 ? '' : 's'}`;
+      }
+    } else if (totalHours > 0) {
+      if (remainingMins > 0) {
+        formatted = `${totalHours} hour${totalHours === 1 ? '' : 's'} ${remainingMins} min${remainingMins === 1 ? '' : 's'}`;
+      } else {
+        formatted = `${totalHours} hour${totalHours === 1 ? '' : 's'}`;
+      }
+    } else if (totalMinutes > 0) {
+      formatted = `${totalMinutes} min${totalMinutes === 1 ? '' : 's'}`;
+    } else {
+      formatted = '< 1 min';
+    }
+
+    return {
+      formatted,
+      totalHours,
+      totalDays: days,
+      isCompleted: true,
+      rawMs: diffMs
+    };
+  } else {
+    // In progress / ongoing
+    const nowTime = Date.now();
+    const diffMs = Math.max(0, nowTime - startTime);
+    const totalHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const days = Math.floor(totalHours / 24);
+    const remainingHours = totalHours % 24;
+
+    let formatted = '';
+    if (days > 0) {
+      formatted = `${days} day${days === 1 ? '' : 's'} ${remainingHours} hour${remainingHours === 1 ? '' : 's'} (ongoing)`;
+    } else if (totalHours > 0) {
+      formatted = `${totalHours} hour${totalHours === 1 ? '' : 's'} (ongoing)`;
+    } else {
+      formatted = '< 1 hour (ongoing)';
+    }
+
+    return {
+      formatted,
+      totalHours,
+      totalDays: days,
+      isCompleted: false,
+      rawMs: diffMs
+    };
+  }
+}
+
 export async function exportComprehensiveReportExcel(
   taskList: Task[],
   ctx: ExportCtx,
@@ -451,9 +537,11 @@ export async function exportComprehensiveReportExcel(
     const allNames = activePartnerIds.map(id => ctx.partners.find(p => p.id === id)?.username).filter(Boolean);
     const assigned = allNames.length > 0 ? allNames.join(', ') : 'Unassigned';
     const auditorName = ctx.auditors.find(a => a.id === task.auditor_id)?.name || 'Direct / None';
-    const completedDate = isTaskCompleted(task.status)
-      ? (task.completed_at ? formatDate(task.completed_at) : (task.created_at ? formatDate(task.created_at) : 'Completed'))
+    const isComp = isTaskCompleted(task.status);
+    const completedDate = isComp
+      ? (task.completed_at ? formatDate(task.completed_at) : 'Completed')
       : '—';
+    const timeTaken = calculateTimeTaken(task, task.completed_at);
 
     return {
       'Company': company?.company_name || 'Unknown',
@@ -463,6 +551,7 @@ export async function exportComprehensiveReportExcel(
       'Assigned Partner(s)': assigned,
       'Priority': task.priority || 'Medium',
       'Due Date': task.deadline ? formatDate(task.deadline) : '—',
+      'Time Taken': isComp ? timeTaken.formatted : timeTaken.formatted,
       'Status': task.status || 'Pending',
       'Created Date': task.created_at ? formatDate(task.created_at) : '',
     };
@@ -479,7 +568,8 @@ export async function exportComprehensiveReportExcel(
     { wch: 26 }, // Assigned Partner(s)
     { wch: 12 }, // Priority
     { wch: 14 }, // Due Date
-    { wch: 20 }, // Status
+    { wch: 20 }, // Time Taken
+    { wch: 18 }, // Status
     { wch: 16 }, // Created Date
   ];
 

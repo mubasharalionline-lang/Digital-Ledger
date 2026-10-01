@@ -10,6 +10,7 @@ import {
   exportComprehensiveReportExcel,
   isTaskCompleted,
   getActivePartnerIds,
+  calculateTimeTaken,
   AuditorSummaryRow,
   NzPartnerSummaryRow
 } from '@/lib/reportExportUtils';
@@ -140,6 +141,7 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
   // Filters
   const [filterAuditor, setFilterAuditor] = useState<string>('all'); // 'all' | 'direct' | auditorId
   const [filterPartner, setFilterPartner] = useState<string>('all'); // 'all' | 'unassigned' | partnerId
+  const [filterTaskType, setFilterTaskType] = useState<string>('all'); // 'all' | taskTypeId
   const [filterStatus, setFilterStatus] = useState<string>('all');   // 'all' | 'completed' | 'pending' | specific status
   const [filterPriority, setFilterPriority] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -207,25 +209,29 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
       )).sort();
       setAvailableStatuses(statusNames);
 
-      // 7. Fetch Status Log to backfill completion timestamps if completed_at is null
+      // 7. Fetch Status Log to backfill completion timestamps if completed_at is null or identical to created_at
       const completedTaskIds = (taskData || [])
-        .filter(t => isTaskCompleted(t.status) && !t.completed_at)
+        .filter(t => isTaskCompleted(t.status) && (!t.completed_at || t.completed_at === t.created_at))
         .map(t => t.id);
 
       const statusMap: Record<string, string> = {};
       if (completedTaskIds.length > 0) {
-        const { data: logData } = await supabase
-          .from('status_log')
-          .select('task_id, status, created_at')
-          .in('task_id', completedTaskIds.slice(0, 100))
-          .order('created_at', { ascending: false });
+        for (let i = 0; i < completedTaskIds.length; i += 100) {
+          const chunk = completedTaskIds.slice(i, i + 100);
+          const { data: logData } = await supabase
+            .from('status_log')
+            .select('task_id, status, remarks, created_at')
+            .in('task_id', chunk)
+            .order('created_at', { ascending: false });
 
-        if (logData) {
-          logData.forEach(log => {
-            if (isTaskCompleted(log.status) && !statusMap[log.task_id]) {
-              statusMap[log.task_id] = log.created_at;
-            }
-          });
+          if (logData) {
+            logData.forEach(log => {
+              const remarksSl = (log.remarks || '').toLowerCase();
+              if ((isTaskCompleted(log.status) || remarksSl.includes('completed')) && !statusMap[log.task_id]) {
+                statusMap[log.task_id] = log.created_at;
+              }
+            });
+          }
         }
       }
       setStatusLogCompletedMap(statusMap);
@@ -325,7 +331,10 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
   // Helper to resolve completion date of a task
   const getTaskCompletedDate = useCallback((task: Task): string | null => {
     if (!isTaskCompleted(task.status)) return null;
-    return task.completed_at || statusLogCompletedMap[task.id] || task.created_at || null;
+    if (task.completed_at && task.completed_at !== task.created_at) {
+      return task.completed_at;
+    }
+    return statusLogCompletedMap[task.id] || task.completed_at || null;
   }, [statusLogCompletedMap]);
 
   // Filter tasks based on Timeframe
@@ -548,7 +557,20 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
         }
       }
 
-      // 3. Status Filter
+      // 3. Task Type Filter
+      if (filterTaskType !== 'all') {
+        const ids: string[] = [];
+        if (Array.isArray(task.task_type_ids) && task.task_type_ids.length > 0) {
+          ids.push(...task.task_type_ids);
+        }
+        if (task.task_type_id) {
+          const split = task.task_type_id.split(',').map(s => s.trim()).filter(Boolean);
+          ids.push(...split);
+        }
+        if (!ids.includes(filterTaskType)) return false;
+      }
+
+      // 4. Status Filter
       if (filterStatus !== 'all') {
         if (filterStatus === 'completed') {
           if (!isTaskCompleted(task.status)) return false;
@@ -559,12 +581,12 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
         }
       }
 
-      // 4. Priority Filter
+      // 5. Priority Filter
       if (filterPriority !== 'all') {
         if ((task.priority || '').toLowerCase() !== filterPriority.toLowerCase()) return false;
       }
 
-      // 5. Search Query
+      // 6. Search Query
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
         const comp = companyMap.get(task.company_id)?.company_name?.toLowerCase() || '';
@@ -588,7 +610,7 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
 
       return true;
     });
-  }, [timeframeTasks, filterAuditor, filterPartner, filterStatus, filterPriority, searchQuery, companyMap, auditorMap, partnerMap]);
+  }, [timeframeTasks, filterAuditor, filterPartner, filterTaskType, filterStatus, filterPriority, searchQuery, companyMap, auditorMap, partnerMap]);
 
   // STRICT SORTING RULE:
   // "The report shall be sorted like first only completed then in progress"
@@ -664,7 +686,9 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
   const [printRangeEnd, setPrintRangeEnd] = useState<string>(currentDayStr);
   const [printAuditor, setPrintAuditor] = useState<string>('all');
   const [printPartner, setPrintPartner] = useState<string>('all');
+  const [printTaskType, setPrintTaskType] = useState<string>('all');
   const [printStatus, setPrintStatus] = useState<string>('all');
+  const [printRecipient, setPrintRecipient] = useState<string>('Finex');
 
   const openPrintModal = () => {
     setPrintTimeframeMode(timeframeMode);
@@ -674,7 +698,18 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
     setPrintRangeEnd(rangeEndDate);
     setPrintAuditor(filterAuditor);
     setPrintPartner(filterPartner);
+    setPrintTaskType(filterTaskType);
     setPrintStatus(filterStatus);
+
+    // Smart recipient pre-population
+    if (filterAuditor !== 'all' && filterAuditor !== 'direct') {
+      const aud = auditorMap.get(filterAuditor);
+      setPrintRecipient(aud?.name || 'Finex');
+    } else if (filterAuditor === 'direct') {
+      setPrintRecipient('Direct Clients');
+    } else {
+      setPrintRecipient('Finex');
+    }
     setShowPdfModal(true);
   };
 
@@ -738,6 +773,19 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
         }
       }
 
+      // Task Type Filter
+      if (printTaskType !== 'all') {
+        const ids: string[] = [];
+        if (Array.isArray(task.task_type_ids) && task.task_type_ids.length > 0) {
+          ids.push(...task.task_type_ids);
+        }
+        if (task.task_type_id) {
+          const split = task.task_type_id.split(',').map(s => s.trim()).filter(Boolean);
+          ids.push(...split);
+        }
+        if (!ids.includes(printTaskType)) return false;
+      }
+
       if (printStatus !== 'all') {
         if (printStatus === 'completed') {
           if (!isTaskCompleted(task.status)) return false;
@@ -750,7 +798,7 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
 
       return true;
     });
-  }, [printTimeframeTasks, printAuditor, printPartner, printStatus, partnerMap]);
+  }, [printTimeframeTasks, printAuditor, printPartner, printTaskType, printStatus, partnerMap]);
 
   // STRICT PRINT SORTING RULE AS REQUESTED:
   // 1. Completed tasks should appear first
@@ -790,6 +838,95 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
     }
     return `${formatDate(printRangeStart)} – ${formatDate(printRangeEnd)}`;
   }, [printTimeframeMode, printMonth, printYear, printRangeStart, printRangeEnd]);
+
+  // Task Types Breakdown & Counts for Page 1 of the Printed/PDF Report
+  const printTaskTypeStats = useMemo(() => {
+    const map: Record<string, {
+      id: string;
+      name: string;
+      total: number;
+      completed: number;
+      pending: number;
+    }> = {};
+
+    printSortedTasks.forEach(task => {
+      const isComp = isTaskCompleted(task.status);
+      const ttIds = task.task_type_ids?.length
+        ? task.task_type_ids
+        : (task.task_type_id ? task.task_type_id.split(',').map(s => s.trim()).filter(Boolean) : []);
+
+      if (ttIds.length === 0) {
+        const key = 'unassigned';
+        if (!map[key]) {
+          map[key] = { id: key, name: 'General / Uncategorized', total: 0, completed: 0, pending: 0 };
+        }
+        map[key].total++;
+        if (isComp) map[key].completed++;
+        else map[key].pending++;
+      } else {
+        ttIds.forEach(id => {
+          const typeObj = taskTypes.find(t => t.id === id);
+          const typeName = typeObj?.name || 'Uncategorized';
+          if (!map[id]) {
+            map[id] = { id, name: typeName, total: 0, completed: 0, pending: 0 };
+          }
+          map[id].total++;
+          if (isComp) map[id].completed++;
+          else map[id].pending++;
+        });
+      }
+    });
+
+    return Object.values(map).sort((a, b) => b.total - a.total || b.completed - a.completed);
+  }, [printSortedTasks, taskTypes]);
+
+  // Executive Overview Summary for Page 1 of the Printed/PDF Report
+  const printExecutiveStats = useMemo(() => {
+    const total = printSortedTasks.length;
+    const completedTasks = printSortedTasks.filter(t => isTaskCompleted(t.status));
+    const completed = completedTasks.length;
+    const pending = total - completed;
+    const completionRate = total > 0 ? ((completed / total) * 100).toFixed(1) : '0';
+    const pendingRate = total > 0 ? ((pending / total) * 100).toFixed(1) : '0';
+
+    // Calculate Average Time Taken across completed tasks with valid completion timestamps
+    const completedTimes = completedTasks.map(t => {
+      const compDate = getTaskCompletedDate(t);
+      return calculateTimeTaken(t, compDate);
+    }).filter(r => r.rawMs > 0);
+
+    let avgTimeTakenFormatted = '—';
+    if (completedTimes.length > 0) {
+      const avgMs = completedTimes.reduce((acc, cur) => acc + cur.rawMs, 0) / completedTimes.length;
+      const totalHours = Math.floor(avgMs / (1000 * 60 * 60));
+      const days = Math.floor(totalHours / 24);
+      const remainingHours = totalHours % 24;
+      if (days > 0) {
+        avgTimeTakenFormatted = `${days} day${days === 1 ? '' : 's'}${remainingHours > 0 ? ` ${remainingHours} hour${remainingHours === 1 ? '' : 's'}` : ''}`;
+      } else if (totalHours > 0) {
+        avgTimeTakenFormatted = `${totalHours} hour${totalHours === 1 ? '' : 's'}`;
+      } else {
+        avgTimeTakenFormatted = '< 1 hour';
+      }
+    }
+
+    const activePartners = new Set<string>();
+    printSortedTasks.forEach(t => {
+      getActivePartnerIds(t).forEach(id => {
+        if (partnerMap.has(id)) activePartners.add(id);
+      });
+    });
+
+    return {
+      total,
+      completed,
+      pending,
+      completionRate,
+      pendingRate,
+      avgTimeTakenFormatted,
+      activePartnersCount: activePartners.size
+    };
+  }, [printSortedTasks, getTaskCompletedDate, partnerMap]);
 
   // Date Range Presets
   const applyDatePreset = (preset: 'thisMonth' | 'lastMonth' | 'thisQuarter' | 'last30Days' | 'ytd') => {
@@ -1887,7 +2024,30 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
                 </select>
               </div>
 
-              {/* 3. Status Filter */}
+              {/* 3. Task Type Filter */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                <span style={{ fontSize: '12px', fontWeight: 650, color: 'var(--text-secondary)' }}>Type:</span>
+                <select
+                  value={filterTaskType}
+                  onChange={e => setFilterTaskType(e.target.value)}
+                  className="input"
+                  style={{
+                    height: '38px',
+                    fontSize: '12.5px',
+                    padding: '4px 10px',
+                    borderRadius: '8px',
+                    minWidth: '140px',
+                    borderColor: filterTaskType !== 'all' ? '#f59e0b' : undefined
+                  }}
+                >
+                  <option value="all">All Task Types</option>
+                  {taskTypes.map(tt => (
+                    <option key={tt.id} value={tt.id}>{tt.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* 4. Status Filter */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                 <span style={{ fontSize: '12px', fontWeight: 650, color: 'var(--text-secondary)' }}>Status:</span>
                 <select
@@ -1912,7 +2072,7 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
                 </select>
               </div>
 
-              {/* 4. Priority Filter */}
+              {/* 5. Priority Filter */}
               <select
                 value={filterPriority}
                 onChange={e => setFilterPriority(e.target.value)}
@@ -1927,11 +2087,12 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
               </select>
 
               {/* Clear All Filters */}
-              {(filterAuditor !== 'all' || filterPartner !== 'all' || filterStatus !== 'all' || filterPriority !== 'all' || searchQuery) && (
+              {(filterAuditor !== 'all' || filterPartner !== 'all' || filterTaskType !== 'all' || filterStatus !== 'all' || filterPriority !== 'all' || searchQuery) && (
                 <button
                   onClick={() => {
                     setFilterAuditor('all');
                     setFilterPartner('all');
+                    setFilterTaskType('all');
                     setFilterStatus('all');
                     setFilterPriority('all');
                     setSearchQuery('');
@@ -1996,6 +2157,12 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
                     </th>
                     <th style={{ padding: '12px 14px', fontWeight: 750, color: 'var(--text-secondary)', width: '90px' }}>Priority</th>
                     <th style={{ padding: '12px 14px', fontWeight: 750, color: 'var(--text-secondary)', minWidth: '110px' }}>Due Date</th>
+                    <th style={{ padding: '12px 14px', fontWeight: 750, color: '#059669', minWidth: '140px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                        <Clock size={14} />
+                        <span>Time Taken</span>
+                      </div>
+                    </th>
                     <th style={{ padding: '12px 14px', fontWeight: 750, color: 'var(--text-secondary)', minWidth: '130px' }}>Status</th>
                   </tr>
                 </thead>
@@ -2139,6 +2306,51 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
                         {/* Due Date */}
                         <td style={{ padding: '12px 14px', fontSize: '12.5px', color: 'var(--text-secondary)' }}>
                           {task.deadline ? formatDate(task.deadline) : '—'}
+                        </td>
+
+                        {/* Time Taken */}
+                        <td style={{ padding: '12px 14px' }}>
+                          {(() => {
+                            const timeRes = calculateTimeTaken(task, completedDateStr);
+                            if (isComp) {
+                              return (
+                                <span
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '5px',
+                                    fontSize: '12px',
+                                    fontWeight: 700,
+                                    color: '#059669',
+                                    background: 'rgba(16, 185, 129, 0.08)',
+                                    padding: '3px 9px',
+                                    borderRadius: '6px',
+                                    border: '1px solid rgba(16, 185, 129, 0.22)'
+                                  }}
+                                  title={task.created_at && completedDateStr ? `Created: ${formatDateTime(task.created_at)}\nCompleted: ${formatDateTime(completedDateStr)}\nTotal Hours: ${timeRes.totalHours} hrs` : undefined}
+                                >
+                                  <Clock size={12} color="#059669" />
+                                  {timeRes.formatted}
+                                </span>
+                              );
+                            }
+                            return (
+                              <span
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  fontSize: '11.5px',
+                                  color: 'var(--text-tertiary)',
+                                  fontStyle: 'italic'
+                                }}
+                                title={task.created_at ? `Created: ${formatDateTime(task.created_at)}` : undefined}
+                              >
+                                <Clock size={11} />
+                                {timeRes.formatted}
+                              </span>
+                            );
+                          })()}
                         </td>
 
                         {/* Status */}
@@ -2385,14 +2597,38 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
                 )}
               </div>
 
-              {/* Core 3 Dropdown Filters: Auditor, Partner, Status */}
+              {/* Dropdown Filters: Recipient, Auditor, Partner, Task Type, Status */}
               <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
-                {/* 1. Auditor */}
+                {/* 1. Recipient (Addressed To) */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ fontSize: '12px', fontWeight: 650, color: 'var(--text-secondary)' }}>Report To:</span>
+                  <input
+                    type="text"
+                    value={printRecipient}
+                    onChange={e => setPrintRecipient(e.target.value)}
+                    placeholder="e.g. Finex"
+                    className="input"
+                    style={{ height: '34px', fontSize: '12.5px', borderRadius: '8px', minWidth: '150px', fontWeight: 600 }}
+                  />
+                </div>
+
+                {/* 2. Auditor */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <span style={{ fontSize: '12px', fontWeight: 650, color: 'var(--text-secondary)' }}>Auditor:</span>
                   <select
                     value={printAuditor}
-                    onChange={e => setPrintAuditor(e.target.value)}
+                    onChange={e => {
+                      const val = e.target.value;
+                      setPrintAuditor(val);
+                      if (val !== 'all' && val !== 'direct') {
+                        const aud = auditorMap.get(val);
+                        if (aud?.name) setPrintRecipient(aud.name);
+                      } else if (val === 'direct') {
+                        setPrintRecipient('Direct Clients');
+                      } else {
+                        setPrintRecipient('Finex');
+                      }
+                    }}
                     className="input"
                     style={{ height: '34px', fontSize: '12.5px', borderRadius: '8px', minWidth: '150px' }}
                   >
@@ -2402,7 +2638,7 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
                   </select>
                 </div>
 
-                {/* 2. Partner */}
+                {/* 3. Partner */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <span style={{ fontSize: '12px', fontWeight: 650, color: 'var(--text-secondary)' }}>Partner:</span>
                   <select
@@ -2417,7 +2653,23 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
                   </select>
                 </div>
 
-                {/* 3. Status */}
+                {/* 4. Task Type */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ fontSize: '12px', fontWeight: 650, color: 'var(--text-secondary)' }}>Task Type:</span>
+                  <select
+                    value={printTaskType}
+                    onChange={e => setPrintTaskType(e.target.value)}
+                    className="input"
+                    style={{ height: '34px', fontSize: '12.5px', borderRadius: '8px', minWidth: '140px' }}
+                  >
+                    <option value="all">All Task Types</option>
+                    {taskTypes.map(tt => (
+                      <option key={tt.id} value={tt.id}>{tt.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* 5. Status */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <span style={{ fontSize: '12px', fontWeight: 650, color: 'var(--text-secondary)' }}>Status:</span>
                   <select
@@ -2468,129 +2720,553 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
               flexDirection: 'column',
               gap: '16px'
             }}>
-              {/* Document Header */}
-              <div className="doc-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '2px solid #0f172a', paddingBottom: '14px' }}>
-                <div>
-                  <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 800, color: '#0f172a' }}>
-                    The Digital Ledger
-                  </h2>
-                  <div style={{ fontSize: '14px', fontWeight: 700, color: '#334155', marginTop: '2px' }}>
-                    {activeCountry} Tasks & Execution Report &bull; {printPeriodLabel}
-                  </div>
-                  <div style={{ fontSize: '11.5px', color: '#64748b', marginTop: '4px' }}>
-                    Filter Scope: Auditor: {printAuditor === 'all' ? 'All' : (printAuditor === 'direct' ? 'Direct Clients' : (auditorMap.get(printAuditor)?.name || printAuditor))} &bull; Partner: {printPartner === 'all' ? 'All' : (partnerMap.get(printPartner)?.username || printPartner)} &bull; Status: {printStatus}
-                  </div>
-                </div>
-                <div style={{ textAlign: 'right', fontSize: '11px', color: '#64748b' }}>
-                  <div>Report Generated: {formatDate(new Date())}</div>
-                  <div>Official Print Document</div>
-                </div>
-              </div>
-
-              {/* Summary Stats */}
-              <div className="doc-stats" style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(4, 1fr)',
-                gap: '8px',
-                background: '#f8fafc',
-                border: '1px solid #e2e8f0',
-                borderRadius: '8px',
-                padding: '10px 14px',
-                textAlign: 'center'
+              {/* ================= PAGE 1: EXECUTIVE REPORT OVERVIEW ================= */}
+              <div className="report-overview-page print-page-1" style={{
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+                minHeight: '880px',
+                boxSizing: 'border-box',
+                gap: '16px'
               }}>
-                <div>
-                  <div style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase' }}>Total Tasks</div>
-                  <div style={{ fontSize: '17px', fontWeight: 800, color: '#0f172a' }}>{printSortedTasks.length}</div>
-                </div>
-                <div>
-                  <div style={{ fontSize: '11px', color: '#059669', textTransform: 'uppercase' }}>Completed</div>
-                  <div style={{ fontSize: '17px', fontWeight: 800, color: '#059669' }}>
-                    {printSortedTasks.filter(t => isTaskCompleted(t.status)).length}
-                  </div>
-                </div>
-                <div>
-                  <div style={{ fontSize: '11px', color: '#d97706', textTransform: 'uppercase' }}>Remaining / In Progress (A-Z)</div>
-                  <div style={{ fontSize: '17px', fontWeight: 800, color: '#d97706' }}>
-                    {printSortedTasks.filter(t => !isTaskCompleted(t.status)).length}
-                  </div>
-                </div>
-                <div>
-                  <div style={{ fontSize: '11px', color: '#2563eb', textTransform: 'uppercase' }}>Completion Rate</div>
-                  <div style={{ fontSize: '17px', fontWeight: 800, color: '#2563eb' }}>
-                    {printSortedTasks.length > 0 ? `${((printSortedTasks.filter(t => isTaskCompleted(t.status)).length / printSortedTasks.length) * 100).toFixed(1)}%` : '0%'}
-                  </div>
-                </div>
-              </div>
+                {/* 1. Header & Metadata Section */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                  {/* Page 1 Document Header */}
+                  <div className="doc-header" style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'flex-start',
+                    borderBottom: '2.5px solid #0f172a',
+                    paddingBottom: '14px'
+                  }}>
+                    <div>
+                      <div style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        fontSize: '11px',
+                        fontWeight: 800,
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.08em',
+                        color: '#2563eb',
+                        marginBottom: '4px'
+                      }}>
+                        <span>The Digital Ledger</span>
+                        <span>&bull;</span>
+                        <span>Official Operations & Compliance Report</span>
+                      </div>
+                      <h1 style={{
+                        margin: 0,
+                        fontSize: '24px',
+                        fontWeight: 900,
+                        color: '#0f172a',
+                        letterSpacing: '-0.02em',
+                        lineHeight: 1.2
+                      }}>
+                        Digital Ledger Report to {printRecipient || 'Finex'}
+                      </h1>
+                      <div style={{ fontSize: '13.5px', fontWeight: 650, color: '#475569', marginTop: '4px' }}>
+                        {activeCountry} Operations & Task Execution Overview &bull; <strong>{printPeriodLabel}</strong>
+                      </div>
+                    </div>
 
-              {/* Printable Tasks Table */}
-              {printSortedTasks.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '30px', color: '#64748b', fontSize: '13px' }}>
-                  No tasks matched the selected criteria for this report.
-                </div>
-              ) : (
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11.5px', textAlign: 'left' }}>
-                  <thead>
-                    <tr style={{ background: '#f1f5f9', borderBottom: '1.5px solid #cbd5e1' }}>
-                      <th style={{ padding: '6px 8px', width: '30px' }}>#</th>
-                      <th style={{ padding: '6px 8px', minWidth: '140px' }}>Company Name</th>
-                      <th style={{ padding: '6px 8px', minWidth: '100px' }}>Task Type</th>
-                      <th style={{ padding: '6px 8px', minWidth: '130px' }}>Description</th>
-                      <th style={{ padding: '6px 8px', minWidth: '110px' }}>Auditor (Delegated By)</th>
-                      <th style={{ padding: '6px 8px', minWidth: '110px' }}>Assigned Partner(s)</th>
-                      <th style={{ padding: '6px 8px', width: '65px' }}>Priority</th>
-                      <th style={{ padding: '6px 8px', width: '80px' }}>Due Date</th>
-                      <th style={{ padding: '6px 8px', width: '85px' }}>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {printSortedTasks.map((task, idx) => {
-                      const comp = companyMap.get(task.company_id);
-                      const ttIds = task.task_type_ids?.length ? task.task_type_ids : (task.task_type_id ? task.task_type_id.split(',').map(s => s.trim()) : []);
-                      const ttNames = ttIds.map(id => taskTypes.find(t => t.id === id)?.name).filter(Boolean).join(', ');
-                      const aud = task.auditor_id ? auditorMap.get(task.auditor_id) : null;
-                      const pIds = getActivePartnerIds(task);
-                      const pNames = pIds.map(id => partnerMap.get(id)?.username).filter(Boolean).join(', ');
-                      const isComp = isTaskCompleted(task.status);
-                      const compDate = getTaskCompletedDate(task);
+                    <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '3px' }}>
+                      <span style={{
+                        fontSize: '10.5px',
+                        fontWeight: 800,
+                        letterSpacing: '0.06em',
+                        textTransform: 'uppercase',
+                        padding: '4px 10px',
+                        borderRadius: '5px',
+                        background: '#f1f5f9',
+                        color: '#1e293b',
+                        border: '1.5px solid #cbd5e1'
+                      }}>
+                        EXECUTIVE OVERVIEW &bull; PAGE 1
+                      </span>
+                      <span style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>
+                        Generated: {formatDate(new Date())}
+                      </span>
+                      <span style={{ fontSize: '11px', color: '#64748b' }}>
+                        Jurisdiction: {activeCountry}
+                      </span>
+                    </div>
+                  </div>
 
-                      return (
-                        <tr key={task.id} style={{ borderBottom: '1px solid #e2e8f0', background: isComp ? '#f0fdf4' : (idx % 2 === 1 ? '#f8fafc' : '#ffffff') }}>
-                          <td style={{ padding: '6px 8px', color: '#64748b' }}>{idx + 1}</td>
-                          <td style={{ padding: '6px 8px', fontWeight: 650 }}>{comp?.company_name || 'No Company'}</td>
-                          <td style={{ padding: '6px 8px' }}>{ttNames || '—'}</td>
-                          <td style={{ padding: '6px 8px', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {task.description || '—'}
-                          </td>
-                          <td style={{ padding: '6px 8px' }}>{aud ? aud.name : 'Direct Client'}</td>
-                          <td style={{ padding: '6px 8px' }}>{pNames || 'Unassigned'}</td>
-                          <td style={{ padding: '6px 8px' }}>{task.priority || 'Medium'}</td>
-                          <td style={{ padding: '6px 8px' }}>{task.deadline ? formatDate(task.deadline) : '—'}</td>
-                          <td style={{ padding: '6px 8px' }}>
-                            <span style={{
-                              display: 'inline-block',
-                              padding: '2px 6px',
-                              borderRadius: '4px',
-                              fontSize: '10.5px',
-                              fontWeight: 700,
-                              background: isComp ? '#dcfce7' : '#e0e7ff',
-                              color: isComp ? '#15803d' : '#3730a3',
-                              border: `1px solid ${isComp ? '#bbf7d0' : '#c7d2fe'}`
-                            }}>
-                              {task.status || 'Pending'}
-                            </span>
+                  {/* Summary Scope Metadata Bar */}
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(4, 1fr)',
+                    gap: '12px',
+                    background: '#f8fafc',
+                    border: '1.5px solid #e2e8f0',
+                    borderRadius: '10px',
+                    padding: '12px 18px'
+                  }}>
+                    <div>
+                      <div style={{ fontSize: '10.5px', fontWeight: 750, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                        Report Addressed To
+                      </div>
+                      <div style={{ fontSize: '14.5px', fontWeight: 800, color: '#0f172a', marginTop: '3px' }}>
+                        {printRecipient || 'Finex'}
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '10.5px', fontWeight: 750, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                        Auditor / Client Delegator
+                      </div>
+                      <div style={{ fontSize: '14.5px', fontWeight: 800, color: '#0f172a', marginTop: '3px' }}>
+                        {printAuditor === 'all'
+                          ? 'All Delegating Auditors'
+                          : (printAuditor === 'direct' ? 'Direct Clients' : (auditorMap.get(printAuditor)?.name || printAuditor))}
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '10.5px', fontWeight: 750, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                        Reporting Period
+                      </div>
+                      <div style={{ fontSize: '14.5px', fontWeight: 800, color: '#0f172a', marginTop: '3px' }}>
+                        {printPeriodLabel}
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '10.5px', fontWeight: 750, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                        Task Type Scope
+                      </div>
+                      <div style={{ fontSize: '14.5px', fontWeight: 800, color: '#0f172a', marginTop: '3px' }}>
+                        {printTaskType === 'all'
+                          ? 'All Task Types'
+                          : (taskTypes.find(tt => tt.id === printTaskType)?.name || printTaskType)}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2. Large Summary Metric KPI Cards */}
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(5, 1fr)',
+                  gap: '12px'
+                }}>
+                  {/* Total Tasks Card */}
+                  <div style={{
+                    background: '#f8fafc',
+                    border: '2px solid #cbd5e1',
+                    borderRadius: '10px',
+                    padding: '18px 14px',
+                    textAlign: 'center',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'center',
+                    minHeight: '110px',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
+                  }}>
+                    <div style={{ fontSize: '11px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      Total Tasks
+                    </div>
+                    <div style={{ fontSize: '36px', fontWeight: 900, color: '#0f172a', lineHeight: 1.1, margin: '8px 0 6px 0' }}>
+                      {printExecutiveStats.total}
+                    </div>
+                    <div style={{ fontSize: '11px', fontWeight: 650, color: '#64748b' }}>
+                      In Total Scope
+                    </div>
+                  </div>
+
+                  {/* Completed Card */}
+                  <div style={{
+                    background: '#f0fdf4',
+                    border: '2px solid #86efac',
+                    borderRadius: '10px',
+                    padding: '18px 14px',
+                    textAlign: 'center',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'center',
+                    minHeight: '110px',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
+                  }}>
+                    <div style={{ fontSize: '11px', fontWeight: 800, color: '#15803d', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      Completed
+                    </div>
+                    <div style={{ fontSize: '36px', fontWeight: 900, color: '#16a34a', lineHeight: 1.1, margin: '8px 0 6px 0' }}>
+                      {printExecutiveStats.completed}
+                    </div>
+                    <div style={{ fontSize: '11px', fontWeight: 700, color: '#15803d' }}>
+                      {printExecutiveStats.completionRate}% Done
+                    </div>
+                  </div>
+
+                  {/* Pending / In Progress Card */}
+                  <div style={{
+                    background: '#fffbeb',
+                    border: '2px solid #fde68a',
+                    borderRadius: '10px',
+                    padding: '18px 14px',
+                    textAlign: 'center',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'center',
+                    minHeight: '110px',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
+                  }}>
+                    <div style={{ fontSize: '11px', fontWeight: 800, color: '#b45309', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      Pending / In Progress
+                    </div>
+                    <div style={{ fontSize: '36px', fontWeight: 900, color: '#d97706', lineHeight: 1.1, margin: '8px 0 6px 0' }}>
+                      {printExecutiveStats.pending}
+                    </div>
+                    <div style={{ fontSize: '11px', fontWeight: 700, color: '#b45309' }}>
+                      {printExecutiveStats.pendingRate}% Remaining
+                    </div>
+                  </div>
+
+                  {/* Avg Time Taken Card */}
+                  <div style={{
+                    background: '#eff6ff',
+                    border: '2px solid #bfdbfe',
+                    borderRadius: '10px',
+                    padding: '18px 12px',
+                    textAlign: 'center',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'center',
+                    minHeight: '110px',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
+                  }}>
+                    <div style={{ fontSize: '11px', fontWeight: 800, color: '#1d4ed8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      Avg Time Taken
+                    </div>
+                    <div style={{
+                      fontSize: printExecutiveStats.avgTimeTakenFormatted.length > 15 ? '20px' : (printExecutiveStats.avgTimeTakenFormatted.length > 10 ? '24px' : '30px'),
+                      fontWeight: 900,
+                      color: '#2563eb',
+                      lineHeight: 1.15,
+                      margin: '8px 0 6px 0'
+                    }}>
+                      {printExecutiveStats.avgTimeTakenFormatted}
+                    </div>
+                    <div style={{ fontSize: '11px', fontWeight: 650, color: '#1d4ed8' }}>
+                      Created → Completed
+                    </div>
+                  </div>
+
+                  {/* Task Types Card */}
+                  <div style={{
+                    background: '#faf5ff',
+                    border: '2px solid #e9d5ff',
+                    borderRadius: '10px',
+                    padding: '18px 14px',
+                    textAlign: 'center',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'center',
+                    minHeight: '110px',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
+                  }}>
+                    <div style={{ fontSize: '11px', fontWeight: 800, color: '#7e22ce', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      Task Types
+                    </div>
+                    <div style={{ fontSize: '36px', fontWeight: 900, color: '#9333ea', lineHeight: 1.1, margin: '8px 0 6px 0' }}>
+                      {printTaskTypeStats.length}
+                    </div>
+                    <div style={{ fontSize: '11px', fontWeight: 650, color: '#7e22ce' }}>
+                      Distinct Categories
+                    </div>
+                  </div>
+                </div>
+
+                {/* 3. Task Types and Their Counts Table */}
+                <div style={{
+                  border: '1.5px solid #cbd5e1',
+                  borderRadius: '10px',
+                  overflow: 'hidden',
+                  background: '#ffffff'
+                }}>
+                  <div style={{
+                    background: '#0f172a',
+                    color: '#ffffff',
+                    padding: '9px 14px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between'
+                  }}>
+                    <div style={{ fontSize: '12px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      Task Types and Their Counts
+                    </div>
+                    <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 600 }}>
+                      {printTaskTypeStats.length} Unique Categories
+                    </div>
+                  </div>
+
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left' }}>
+                    <thead>
+                      <tr style={{ background: '#f8fafc', borderBottom: '1.5px solid #cbd5e1', color: '#475569', fontSize: '11px' }}>
+                        <th style={{ padding: '8px 12px', width: '32px' }}>#</th>
+                        <th style={{ padding: '8px 12px' }}>Task Type</th>
+                        <th style={{ padding: '8px 12px', textAlign: 'center', width: '90px' }}>Total Tasks</th>
+                        <th style={{ padding: '8px 12px', textAlign: 'center', width: '90px', color: '#16a34a' }}>Completed</th>
+                        <th style={{ padding: '8px 12px', textAlign: 'center', width: '100px', color: '#d97706' }}>In Progress</th>
+                        <th style={{ padding: '8px 12px', textAlign: 'right', width: '140px' }}>Completion Rate</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {printTaskTypeStats.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} style={{ padding: '20px', textAlign: 'center', color: '#64748b' }}>
+                            No tasks found matching current filters.
                           </td>
                         </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              )}
+                      ) : (
+                        printTaskTypeStats.map((stat, idx) => {
+                          const rate = stat.total > 0 ? (stat.completed / stat.total) * 100 : 0;
+                          return (
+                            <tr key={stat.id + idx} style={{ borderBottom: '1px solid #e2e8f0', background: idx % 2 === 1 ? '#f8fafc' : '#ffffff' }}>
+                              <td style={{ padding: '8px 12px', color: '#64748b', fontWeight: 600 }}>{idx + 1}</td>
+                              <td style={{ padding: '8px 12px', fontWeight: 700, color: '#0f172a' }}>{stat.name}</td>
+                              <td style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 800 }}>{stat.total}</td>
+                              <td style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 750, color: '#16a34a' }}>{stat.completed}</td>
+                              <td style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 750, color: '#d97706' }}>{stat.pending}</td>
+                              <td style={{ padding: '8px 12px', textAlign: 'right' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px' }}>
+                                  <span style={{ fontWeight: 800, color: rate === 100 ? '#16a34a' : (rate > 50 ? '#2563eb' : '#d97706') }}>
+                                    {rate.toFixed(1)}%
+                                  </span>
+                                  <div style={{ width: '55px', height: '6px', background: '#e2e8f0', borderRadius: '4px', overflow: 'hidden' }}>
+                                    <div style={{ width: `${rate}%`, height: '100%', background: rate === 100 ? '#16a34a' : (rate > 50 ? '#2563eb' : '#d97706') }} />
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                    {printTaskTypeStats.length > 0 && (
+                      <tfoot>
+                        <tr style={{ background: '#f1f5f9', borderTop: '2px solid #cbd5e1', fontWeight: 850 }}>
+                          <td style={{ padding: '8px 12px' }} colSpan={2}>Total Overall</td>
+                          <td style={{ padding: '8px 12px', textAlign: 'center' }}>{printExecutiveStats.total}</td>
+                          <td style={{ padding: '8px 12px', textAlign: 'center', color: '#16a34a' }}>{printExecutiveStats.completed}</td>
+                          <td style={{ padding: '8px 12px', textAlign: 'center', color: '#d97706' }}>{printExecutiveStats.pending}</td>
+                          <td style={{ padding: '8px 12px', textAlign: 'right', color: '#2563eb' }}>{printExecutiveStats.completionRate}%</td>
+                        </tr>
+                      </tfoot>
+                    )}
+                  </table>
+                </div>
 
-              {/* Document Footer */}
-              <div className="doc-footer" style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #cbd5e1', paddingTop: '10px', fontSize: '10.5px', color: '#64748b' }}>
-                <div>The Digital Ledger &bull; {activeCountry} Operational Reports</div>
-                <div>Confidential Business Document</div>
-                <div>Generated: {formatDate(new Date())}</div>
+                {/* 4. Priority Breakdown & Operational Scope */}
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1.25fr 1fr',
+                  gap: '12px'
+                }}>
+                  {/* Priority Box */}
+                  <div style={{
+                    border: '1.5px solid #e2e8f0',
+                    borderRadius: '10px',
+                    padding: '12px 14px',
+                    background: '#ffffff'
+                  }}>
+                    <div style={{ fontSize: '11px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>
+                      Priority Breakdown & Distribution
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      {['Urgent', 'High', 'Medium', 'Low'].map(p => {
+                        const count = printSortedTasks.filter(t => (t.priority || 'Medium').toLowerCase() === p.toLowerCase()).length;
+                        const badge = getPriorityBadge(p);
+                        return (
+                          <div key={p} style={{
+                            flex: 1,
+                            padding: '8px 6px',
+                            borderRadius: '8px',
+                            background: badge.bg,
+                            border: `1px solid ${badge.text}33`,
+                            textAlign: 'center'
+                          }}>
+                            <div style={{ fontSize: '10.5px', fontWeight: 750, color: badge.text }}>{p}</div>
+                            <div style={{ fontSize: '18px', fontWeight: 900, color: '#0f172a', marginTop: '2px' }}>{count}</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Operational Highlights */}
+                  <div style={{
+                    border: '1.5px solid #e2e8f0',
+                    borderRadius: '10px',
+                    padding: '12px 16px',
+                    background: '#ffffff'
+                  }}>
+                    <div style={{ fontSize: '11px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>
+                      Operational Scope & Highlights
+                    </div>
+                    <div style={{ fontSize: '11.5px', color: '#334155', lineHeight: '1.6' }}>
+                      <div>&bull; Delegating Firm: <strong>{printAuditor === 'all' ? 'Multiple / All Auditors' : (printAuditor === 'direct' ? 'Direct Clients' : (auditorMap.get(printAuditor)?.name || printAuditor))}</strong></div>
+                      <div>&bull; Team Assignees: <strong>{printExecutiveStats.activePartnersCount} Partners active</strong></div>
+                      <div>&bull; Filtered Status: <strong>{printStatus === 'all' ? 'All Task Statuses' : printStatus}</strong></div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 5. Page 1 Bottom Sign-off Footer & Next Page Indicator */}
+                <div style={{
+                  borderTop: '2px solid #0f172a',
+                  paddingTop: '10px',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  fontSize: '11px',
+                  color: '#64748b'
+                }}>
+                  <div>
+                    <strong>The Digital Ledger</strong> &bull; Confidential Executive Report &bull; Addressed to <strong>{printRecipient || 'Finex'}</strong>
+                  </div>
+                  <div style={{
+                    fontWeight: 750,
+                    color: '#2563eb',
+                    background: '#eff6ff',
+                    padding: '4px 10px',
+                    borderRadius: '6px',
+                    border: '1px solid #bfdbfe'
+                  }}>
+                    Page 1: Executive Overview &bull; Detailed Task Report Continues on Page 2 →
+                  </div>
+                </div>
+              </div>
+
+              {/* Visual On-Screen Divider between Page 1 and Page 2 in preview */}
+              <div className="print-hide" style={{
+                margin: '18px 0',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                color: 'var(--text-tertiary)',
+                fontSize: '12px',
+                fontWeight: 700
+              }}>
+                <div style={{ flex: 1, height: '2px', background: 'var(--border)' }} />
+                <span style={{ padding: '4px 12px', borderRadius: '12px', background: 'var(--bg-tertiary)', border: '1px solid var(--border)' }}>
+                  📄 Page 2 Onward: Detailed Task Report
+                </span>
+                <div style={{ flex: 1, height: '2px', background: 'var(--border)' }} />
+              </div>
+
+              {/* ================= PAGE 2+: DETAILED TASK REPORT ================= */}
+              <div className="report-details-page print-page-2-plus" style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '12px'
+              }}>
+                {/* Page 2 Running Header */}
+                <div className="doc-header" style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'flex-start',
+                  borderBottom: '2px solid #0f172a',
+                  paddingBottom: '10px'
+                }}>
+                  <div>
+                    <div style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', color: '#2563eb' }}>
+                      The Digital Ledger &bull; Detailed Task Execution Ledger
+                    </div>
+                    <h2 style={{ margin: '2px 0 0', fontSize: '18px', fontWeight: 800, color: '#0f172a' }}>
+                      Task Details & Timelines &bull; {printRecipient || 'Finex'}
+                    </h2>
+                    <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
+                      Reporting Period: {printPeriodLabel} &bull; Scope: {printSortedTasks.length} Tasks &bull; Completed Tasks First, then Alphabetical (A-Z)
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right', fontSize: '10.5px', color: '#64748b' }}>
+                    <div>Report Generated: {formatDate(new Date())}</div>
+                    <div style={{ fontWeight: 700, color: '#0f172a' }}>Page 2 Onward</div>
+                  </div>
+                </div>
+
+                {/* Printable Tasks Table with Time Taken Column */}
+                {printSortedTasks.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '30px', color: '#64748b', fontSize: '13px' }}>
+                    No tasks matched the selected criteria for this report.
+                  </div>
+                ) : (
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px', textAlign: 'left' }}>
+                    <thead>
+                      <tr style={{ background: '#f1f5f9', borderBottom: '1.5px solid #cbd5e1' }}>
+                        <th style={{ padding: '6px 7px', width: '25px' }}>#</th>
+                        <th style={{ padding: '6px 7px', minWidth: '130px' }}>Company Name</th>
+                        <th style={{ padding: '6px 7px', minWidth: '95px' }}>Task Type</th>
+                        <th style={{ padding: '6px 7px', minWidth: '120px' }}>Description</th>
+                        <th style={{ padding: '6px 7px', minWidth: '95px' }}>Auditor (Delegated By)</th>
+                        <th style={{ padding: '6px 7px', minWidth: '95px' }}>Assigned Partner(s)</th>
+                        <th style={{ padding: '6px 7px', width: '60px' }}>Priority</th>
+                        <th style={{ padding: '6px 7px', width: '75px' }}>Due Date</th>
+                        <th style={{ padding: '6px 7px', width: '95px' }}>Time Taken</th>
+                        <th style={{ padding: '6px 7px', width: '80px' }}>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {printSortedTasks.map((task, idx) => {
+                        const comp = companyMap.get(task.company_id);
+                        const ttIds = task.task_type_ids?.length ? task.task_type_ids : (task.task_type_id ? task.task_type_id.split(',').map(s => s.trim()) : []);
+                        const ttNames = ttIds.map(id => taskTypes.find(t => t.id === id)?.name).filter(Boolean).join(', ');
+                        const aud = task.auditor_id ? auditorMap.get(task.auditor_id) : null;
+                        const pIds = getActivePartnerIds(task);
+                        const pNames = pIds.map(id => partnerMap.get(id)?.username).filter(Boolean).join(', ');
+                        const isComp = isTaskCompleted(task.status);
+                        const compDate = getTaskCompletedDate(task);
+                        const timeTaken = calculateTimeTaken(task, compDate);
+
+                        return (
+                          <tr key={task.id} style={{ borderBottom: '1px solid #e2e8f0', background: isComp ? '#f0fdf4' : (idx % 2 === 1 ? '#f8fafc' : '#ffffff') }}>
+                            <td style={{ padding: '5px 7px', color: '#64748b' }}>{idx + 1}</td>
+                            <td style={{ padding: '5px 7px', fontWeight: 650 }}>{comp?.company_name || 'No Company'}</td>
+                            <td style={{ padding: '5px 7px' }}>{ttNames || '—'}</td>
+                            <td style={{ padding: '5px 7px', maxWidth: '160px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {task.description || '—'}
+                            </td>
+                            <td style={{ padding: '5px 7px' }}>{aud ? aud.name : 'Direct Client'}</td>
+                            <td style={{ padding: '5px 7px' }}>{pNames || 'Unassigned'}</td>
+                            <td style={{ padding: '5px 7px' }}>{task.priority || 'Medium'}</td>
+                            <td style={{ padding: '5px 7px' }}>{task.deadline ? formatDate(task.deadline) : '—'}</td>
+                            <td style={{ padding: '5px 7px', fontSize: '10.5px' }}>
+                              {isComp ? (
+                                <span style={{ fontWeight: 700, color: '#059669' }}>
+                                  {timeTaken.formatted}
+                                </span>
+                              ) : (
+                                <span style={{ color: '#64748b', fontStyle: 'italic' }}>
+                                  {timeTaken.formatted}
+                                </span>
+                              )}
+                            </td>
+                            <td style={{ padding: '5px 7px' }}>
+                              <span style={{
+                                display: 'inline-block',
+                                padding: '2px 5px',
+                                borderRadius: '4px',
+                                fontSize: '10px',
+                                fontWeight: 700,
+                                background: isComp ? '#dcfce7' : '#e0e7ff',
+                                color: isComp ? '#15803d' : '#3730a3',
+                                border: `1px solid ${isComp ? '#bbf7d0' : '#c7d2fe'}`
+                              }}>
+                                {task.status || 'Pending'}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
+
+                {/* Document Footer */}
+                <div className="doc-footer" style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #cbd5e1', paddingTop: '8px', fontSize: '10px', color: '#64748b' }}>
+                  <div>The Digital Ledger &bull; {activeCountry} Operational Reports &bull; Report to {printRecipient || 'Finex'}</div>
+                  <div>Confidential Business Document</div>
+                  <div>Generated: {formatDate(new Date())}</div>
+                </div>
               </div>
             </div>
 
@@ -2707,49 +3383,62 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
             background: #ffffff !important;
             color: #0f172a !important;
             box-shadow: none !important;
-            page-break-after: avoid !important;
-            break-after: avoid !important;
           }
 
-          #printable-report-content .doc-header {
+          /* Page 1: Overview Page */
+          .print-page-1 {
+            display: flex !important;
+            flex-direction: column !important;
+            justify-content: space-between !important;
+            page-break-after: always !important;
+            break-after: page !important;
             page-break-inside: avoid !important;
             break-inside: avoid !important;
-            margin-bottom: 12px !important;
+            min-height: 260mm !important;
+            height: 262mm !important;
+            box-sizing: border-box !important;
+            margin: 0 !important;
+            padding: 0 0 2mm 0 !important;
           }
 
-          #printable-report-content .doc-stats {
+          /* Page 2 Onward: Detailed Task Report */
+          .print-page-2-plus {
+            display: block !important;
+            page-break-before: always !important;
+            break-before: page !important;
+            padding-top: 2mm !important;
+          }
+
+          .print-page-2-plus .doc-header {
             page-break-inside: avoid !important;
             break-inside: avoid !important;
-            margin-bottom: 14px !important;
+            margin-bottom: 10px !important;
           }
 
-          #printable-report-content table {
+          .print-page-2-plus table {
             width: 100% !important;
             border-collapse: collapse !important;
             page-break-inside: auto !important;
             margin-bottom: 12px !important;
           }
 
-          #printable-report-content thead {
+          .print-page-2-plus thead {
             display: table-header-group !important;
           }
 
-          #printable-report-content tbody {
+          .print-page-2-plus tbody {
             display: table-row-group !important;
           }
 
-          #printable-report-content tr {
+          .print-page-2-plus tr {
             page-break-inside: avoid !important;
             break-inside: avoid !important;
           }
 
-          #printable-report-content .doc-footer {
+          .doc-footer {
             page-break-inside: avoid !important;
             break-inside: avoid !important;
-            page-break-after: avoid !important;
-            break-after: avoid !important;
-            margin-top: 10px !important;
-            padding-top: 8px !important;
+            margin-top: 8px !important;
           }
         }
       `}</style>
