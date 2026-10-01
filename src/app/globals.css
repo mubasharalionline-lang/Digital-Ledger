@@ -1106,7 +1106,7 @@ tr:hover td {
 @media print {
   @page {
     size: A4 portrait;
-    margin: 10mm 12mm 10mm 12mm;
+    margin: 8mm 12mm 8mm 12mm;
   }
 
   /* Hide entire page outside the print modal */
@@ -1186,28 +1186,29 @@ tr:hover td {
     box-shadow: none !important;
   }
 
-  /* Page 1: Executive Overview Page */
+  /* Page 1: Executive Overview Page - Firmly anchored to A4 page height */
   .print-page-1 {
-    display: block !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: space-between !important;
     position: relative !important;
     box-sizing: border-box !important;
     page-break-after: always !important;
     break-after: page !important;
     page-break-inside: avoid !important;
     break-inside: avoid !important;
-    /* A4 height = 297mm. With 10mm top & 10mm bottom margin, the printable area is 277mm.
-       272mm gives a full A4 page with 5mm breathing room before page break. */
-    height: 272mm !important;
-    min-height: 272mm !important;
-    max-height: 275mm !important;
+    height: 254mm !important;
+    min-height: 254mm !important;
+    max-height: 256mm !important;
     margin: 0 !important;
-    padding: 0 0 22mm 0 !important;
+    padding: 0 0 34px 0 !important;
   }
 
   .print-page-1-content {
     display: flex !important;
     flex-direction: column !important;
-    gap: 14px !important;
+    gap: 16px !important;
+    flex: 1 !important;
   }
 
   /* Page 1 Bottom Sign-off Footer & Divider Line: Pinned to bottom of Page 1 */

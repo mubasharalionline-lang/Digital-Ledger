@@ -2726,7 +2726,10 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
                 display: 'flex',
                 flexDirection: 'column',
                 justifyContent: 'space-between',
-                boxSizing: 'border-box'
+                minHeight: '254mm',
+                height: '254mm',
+                boxSizing: 'border-box',
+                paddingBottom: '38px'
               }}>
                 <div className="print-page-1-content" style={{
                   display: 'flex',
@@ -3114,10 +3117,18 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
                     </div>
                   </div>
                 </div>
+
+                {/* Flexible spacer that pushes footer down to the very bottom */}
+                <div style={{ flex: 1, minHeight: '16px' }} />
               </div>
 
                 {/* 5. Page 1 Bottom Sign-off Footer & Next Page Indicator */}
                 <div className="print-page-1-footer" style={{
+                  position: 'absolute',
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  width: '100%',
                   marginTop: 'auto',
                   borderTop: '2px solid #0f172a',
                   paddingTop: '10px',
@@ -3126,8 +3137,9 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
                   alignItems: 'center',
                   fontSize: '11px',
                   color: '#64748b',
-                  width: '100%',
-                  boxSizing: 'border-box'
+                  background: '#ffffff',
+                  boxSizing: 'border-box',
+                  zIndex: 10
                 }}>
                   <div>
                     <strong>The Digital Ledger</strong> &bull; Confidential Executive Report &bull; Addressed to <strong>{printRecipient || 'Finex'}</strong>
@@ -3318,7 +3330,7 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
         @media print {
           @page {
             size: A4 portrait;
-            margin: 10mm 12mm 10mm 12mm;
+            margin: 8mm 12mm 8mm 12mm;
           }
 
           /* Hide entire main document tree so it consumes 0 height and 0 pages */
@@ -3401,26 +3413,29 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
             box-shadow: none !important;
           }
 
-          /* Page 1: Overview Page */
+          /* Page 1: Overview Page - Firmly anchored to A4 page height */
           .print-page-1 {
-            display: block !important;
+            display: flex !important;
+            flex-direction: column !important;
+            justify-content: space-between !important;
             position: relative !important;
             box-sizing: border-box !important;
             page-break-after: always !important;
             break-after: page !important;
             page-break-inside: avoid !important;
             break-inside: avoid !important;
-            min-height: 272mm !important;
-            height: 272mm !important;
-            max-height: 275mm !important;
+            height: 254mm !important;
+            min-height: 254mm !important;
+            max-height: 256mm !important;
             margin: 0 !important;
-            padding: 0 0 22mm 0 !important;
+            padding: 0 0 34px 0 !important;
           }
 
           .print-page-1-content {
             display: flex !important;
             flex-direction: column !important;
-            gap: 14px !important;
+            gap: 16px !important;
+            flex: 1 !important;
           }
 
           /* Page 1 Bottom Sign-off Footer & Top Divider Line: Pinned to bottom of Page 1 */
