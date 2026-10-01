@@ -1099,3 +1099,169 @@ tr:hover td {
     font-size: 11px !important;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   PRINT & PDF EXPORT STYLESHEET (A4 PORTRAIT DEFAULT)
+   ═══════════════════════════════════════════════════════════════════════ */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 10mm 12mm 10mm 12mm;
+  }
+
+  /* Hide entire page outside the print modal */
+  body > *:not(.print-modal-overlay) {
+    display: none !important;
+    height: 0 !important;
+    max-height: 0 !important;
+    overflow: hidden !important;
+  }
+
+  html,
+  body {
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .print-modal-overlay {
+    position: static !important;
+    display: block !important;
+    inset: auto !important;
+    width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: transparent !important;
+    backdrop-filter: none !important;
+    overflow: visible !important;
+  }
+
+  .print-modal-container {
+    position: static !important;
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: transparent !important;
+    overflow: visible !important;
+  }
+
+  .print-hide,
+  .no-print,
+  aside,
+  nav,
+  header {
+    display: none !important;
+    height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  #printable-report-content {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    border-radius: 0 !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+    box-shadow: none !important;
+  }
+
+  /* Page 1: Executive Overview Page */
+  .print-page-1 {
+    display: block !important;
+    position: relative !important;
+    box-sizing: border-box !important;
+    page-break-after: always !important;
+    break-after: page !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    /* A4 height = 297mm. With 10mm top & 10mm bottom margin, the printable area is 277mm.
+       272mm gives a full A4 page with 5mm breathing room before page break. */
+    height: 272mm !important;
+    min-height: 272mm !important;
+    max-height: 275mm !important;
+    margin: 0 !important;
+    padding: 0 0 22mm 0 !important;
+  }
+
+  .print-page-1-content {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 14px !important;
+  }
+
+  /* Page 1 Bottom Sign-off Footer & Divider Line: Pinned to bottom of Page 1 */
+  .print-page-1-footer {
+    position: absolute !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    width: 100% !important;
+    border-top: 2px solid #0f172a !important;
+    padding-top: 8px !important;
+    background: #ffffff !important;
+    box-sizing: border-box !important;
+    margin: 0 !important;
+    z-index: 100 !important;
+  }
+
+  /* Page 2 Onward: Detailed Task Report */
+  .print-page-2-plus {
+    display: block !important;
+    page-break-before: always !important;
+    break-before: page !important;
+    padding-top: 2mm !important;
+  }
+
+  .print-page-2-plus .doc-header {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    margin-bottom: 10px !important;
+  }
+
+  .print-page-2-plus table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    page-break-inside: auto !important;
+    margin-bottom: 12px !important;
+  }
+
+  .print-page-2-plus thead {
+    display: table-header-group !important;
+  }
+
+  .print-page-2-plus tbody {
+    display: table-row-group !important;
+  }
+
+  .print-page-2-plus tr {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  .doc-footer {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    margin-top: 8px !important;
+  }
+}

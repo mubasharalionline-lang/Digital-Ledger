@@ -2726,7 +2726,6 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
                 display: 'flex',
                 flexDirection: 'column',
                 justifyContent: 'space-between',
-                minHeight: '880px',
                 boxSizing: 'border-box'
               }}>
                 <div className="print-page-1-content" style={{
@@ -3308,7 +3307,14 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
       )}
 
       {/* ─── Global Print Stylesheet ─── */}
-      <style jsx global>{`
+      <style dangerouslySetInnerHTML={{
+        __html: `
+        @media screen {
+          .report-overview-page {
+            min-height: 880px;
+          }
+        }
+
         @media print {
           @page {
             size: A4 portrait;
@@ -3404,11 +3410,11 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
             break-after: page !important;
             page-break-inside: avoid !important;
             break-inside: avoid !important;
-            min-height: 268mm !important;
-            height: 268mm !important;
-            max-height: 270mm !important;
+            min-height: 272mm !important;
+            height: 272mm !important;
+            max-height: 275mm !important;
             margin: 0 !important;
-            padding: 0 0 20mm 0 !important;
+            padding: 0 0 22mm 0 !important;
           }
 
           .print-page-1-content {
@@ -3429,7 +3435,7 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
             background: #ffffff !important;
             box-sizing: border-box !important;
             margin: 0 !important;
-            z-index: 10 !important;
+            z-index: 100 !important;
           }
 
           /* Page 2 Onward: Detailed Task Report */
@@ -3472,7 +3478,7 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
             margin-top: 8px !important;
           }
         }
-      `}</style>
+      `}} />
 
     </div>
   );
