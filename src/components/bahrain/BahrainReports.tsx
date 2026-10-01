@@ -2848,131 +2848,256 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
                 <div style={{
                   display: 'grid',
                   gridTemplateColumns: 'repeat(5, 1fr)',
-                  gap: '12px'
+                  gap: '14px',
+                  margin: '4px 0 8px 0'
                 }}>
                   {/* Total Tasks Card */}
                   <div style={{
-                    background: '#f8fafc',
+                    background: 'linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)',
                     border: '2px solid #cbd5e1',
-                    borderRadius: '10px',
-                    padding: '18px 14px',
+                    borderRadius: '12px',
+                    padding: '20px 14px 18px',
                     textAlign: 'center',
                     display: 'flex',
                     flexDirection: 'column',
-                    justifyContent: 'center',
-                    minHeight: '110px',
-                    boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    minHeight: '140px',
+                    boxShadow: '0 2px 5px rgba(0,0,0,0.04)'
                   }}>
-                    <div style={{ fontSize: '11px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                      Total Tasks
+                    <div style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      fontSize: '11px',
+                      fontWeight: 850,
+                      color: '#475569',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.06em'
+                    }}>
+                      <Layers size={14} color="#64748b" />
+                      <span>Total Tasks</span>
                     </div>
-                    <div style={{ fontSize: '36px', fontWeight: 900, color: '#0f172a', lineHeight: 1.1, margin: '8px 0 6px 0' }}>
+                    <div style={{
+                      fontSize: '46px',
+                      fontWeight: 900,
+                      color: '#0f172a',
+                      lineHeight: 1.05,
+                      letterSpacing: '-0.03em',
+                      margin: '6px 0 6px 0'
+                    }}>
                       {printExecutiveStats.total}
                     </div>
-                    <div style={{ fontSize: '11px', fontWeight: 650, color: '#64748b' }}>
+                    <div style={{
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      color: '#475569',
+                      background: '#f1f5f9',
+                      border: '1px solid #cbd5e1',
+                      padding: '3px 10px',
+                      borderRadius: '12px'
+                    }}>
                       In Total Scope
                     </div>
                   </div>
 
                   {/* Completed Card */}
                   <div style={{
-                    background: '#f0fdf4',
+                    background: 'linear-gradient(180deg, #ffffff 0%, #f0fdf4 100%)',
                     border: '2px solid #86efac',
-                    borderRadius: '10px',
-                    padding: '18px 14px',
+                    borderRadius: '12px',
+                    padding: '20px 14px 18px',
                     textAlign: 'center',
                     display: 'flex',
                     flexDirection: 'column',
-                    justifyContent: 'center',
-                    minHeight: '110px',
-                    boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    minHeight: '140px',
+                    boxShadow: '0 2px 5px rgba(22,163,74,0.06)'
                   }}>
-                    <div style={{ fontSize: '11px', fontWeight: 800, color: '#15803d', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                      Completed
+                    <div style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      fontSize: '11px',
+                      fontWeight: 850,
+                      color: '#15803d',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.06em'
+                    }}>
+                      <CheckCheck size={15} color="#16a34a" />
+                      <span>Completed</span>
                     </div>
-                    <div style={{ fontSize: '36px', fontWeight: 900, color: '#16a34a', lineHeight: 1.1, margin: '8px 0 6px 0' }}>
+                    <div style={{
+                      fontSize: '46px',
+                      fontWeight: 900,
+                      color: '#16a34a',
+                      lineHeight: 1.05,
+                      letterSpacing: '-0.03em',
+                      margin: '6px 0 6px 0'
+                    }}>
                       {printExecutiveStats.completed}
                     </div>
-                    <div style={{ fontSize: '11px', fontWeight: 700, color: '#15803d' }}>
+                    <div style={{
+                      fontSize: '11px',
+                      fontWeight: 750,
+                      color: '#15803d',
+                      background: '#dcfce7',
+                      border: '1px solid #86efac',
+                      padding: '3px 10px',
+                      borderRadius: '12px'
+                    }}>
                       {printExecutiveStats.completionRate}% Done
                     </div>
                   </div>
 
                   {/* Pending / In Progress Card */}
                   <div style={{
-                    background: '#fffbeb',
+                    background: 'linear-gradient(180deg, #ffffff 0%, #fffbeb 100%)',
                     border: '2px solid #fde68a',
-                    borderRadius: '10px',
-                    padding: '18px 14px',
+                    borderRadius: '12px',
+                    padding: '20px 14px 18px',
                     textAlign: 'center',
                     display: 'flex',
                     flexDirection: 'column',
-                    justifyContent: 'center',
-                    minHeight: '110px',
-                    boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    minHeight: '140px',
+                    boxShadow: '0 2px 5px rgba(217,119,6,0.06)'
                   }}>
-                    <div style={{ fontSize: '11px', fontWeight: 800, color: '#b45309', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                      Pending / In Progress
+                    <div style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      fontSize: '11px',
+                      fontWeight: 850,
+                      color: '#b45309',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.06em'
+                    }}>
+                      <Clock size={14} color="#d97706" />
+                      <span>In Progress</span>
                     </div>
-                    <div style={{ fontSize: '36px', fontWeight: 900, color: '#d97706', lineHeight: 1.1, margin: '8px 0 6px 0' }}>
+                    <div style={{
+                      fontSize: '46px',
+                      fontWeight: 900,
+                      color: '#d97706',
+                      lineHeight: 1.05,
+                      letterSpacing: '-0.03em',
+                      margin: '6px 0 6px 0'
+                    }}>
                       {printExecutiveStats.pending}
                     </div>
-                    <div style={{ fontSize: '11px', fontWeight: 700, color: '#b45309' }}>
+                    <div style={{
+                      fontSize: '11px',
+                      fontWeight: 750,
+                      color: '#b45309',
+                      background: '#fef3c7',
+                      border: '1px solid #fde68a',
+                      padding: '3px 10px',
+                      borderRadius: '12px'
+                    }}>
                       {printExecutiveStats.pendingRate}% Remaining
                     </div>
                   </div>
 
                   {/* Avg Time Taken Card */}
                   <div style={{
-                    background: '#eff6ff',
+                    background: 'linear-gradient(180deg, #ffffff 0%, #eff6ff 100%)',
                     border: '2px solid #bfdbfe',
-                    borderRadius: '10px',
-                    padding: '18px 12px',
+                    borderRadius: '12px',
+                    padding: '20px 10px 18px',
                     textAlign: 'center',
                     display: 'flex',
                     flexDirection: 'column',
-                    justifyContent: 'center',
-                    minHeight: '110px',
-                    boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    minHeight: '140px',
+                    boxShadow: '0 2px 5px rgba(37,99,235,0.06)'
                   }}>
-                    <div style={{ fontSize: '11px', fontWeight: 800, color: '#1d4ed8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                      Avg Time Taken
+                    <div style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      fontSize: '11px',
+                      fontWeight: 850,
+                      color: '#1d4ed8',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.06em'
+                    }}>
+                      <TrendingUp size={14} color="#2563eb" />
+                      <span>Avg Time Taken</span>
                     </div>
                     <div style={{
-                      fontSize: printExecutiveStats.avgTimeTakenFormatted.length > 15 ? '20px' : (printExecutiveStats.avgTimeTakenFormatted.length > 10 ? '24px' : '30px'),
+                      fontSize: printExecutiveStats.avgTimeTakenFormatted.length > 15 ? '22px' : (printExecutiveStats.avgTimeTakenFormatted.length > 10 ? '28px' : '36px'),
                       fontWeight: 900,
                       color: '#2563eb',
                       lineHeight: 1.15,
-                      margin: '8px 0 6px 0'
+                      letterSpacing: '-0.02em',
+                      margin: '6px 0 6px 0'
                     }}>
                       {printExecutiveStats.avgTimeTakenFormatted}
                     </div>
-                    <div style={{ fontSize: '11px', fontWeight: 650, color: '#1d4ed8' }}>
-                      Created → Completed
+                    <div style={{
+                      fontSize: '11px',
+                      fontWeight: 750,
+                      color: '#1d4ed8',
+                      background: '#dbeafe',
+                      border: '1px solid #bfdbfe',
+                      padding: '3px 10px',
+                      borderRadius: '12px'
+                    }}>
+                      Created → Done
                     </div>
                   </div>
 
                   {/* Task Types Card */}
                   <div style={{
-                    background: '#faf5ff',
+                    background: 'linear-gradient(180deg, #ffffff 0%, #faf5ff 100%)',
                     border: '2px solid #e9d5ff',
-                    borderRadius: '10px',
-                    padding: '18px 14px',
+                    borderRadius: '12px',
+                    padding: '20px 14px 18px',
                     textAlign: 'center',
                     display: 'flex',
                     flexDirection: 'column',
-                    justifyContent: 'center',
-                    minHeight: '110px',
-                    boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    minHeight: '140px',
+                    boxShadow: '0 2px 5px rgba(147,51,234,0.06)'
                   }}>
-                    <div style={{ fontSize: '11px', fontWeight: 800, color: '#7e22ce', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                      Task Types
+                    <div style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      fontSize: '11px',
+                      fontWeight: 850,
+                      color: '#7e22ce',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.06em'
+                    }}>
+                      <Briefcase size={14} color="#9333ea" />
+                      <span>Task Types</span>
                     </div>
-                    <div style={{ fontSize: '36px', fontWeight: 900, color: '#9333ea', lineHeight: 1.1, margin: '8px 0 6px 0' }}>
+                    <div style={{
+                      fontSize: '46px',
+                      fontWeight: 900,
+                      color: '#9333ea',
+                      lineHeight: 1.05,
+                      letterSpacing: '-0.03em',
+                      margin: '6px 0 6px 0'
+                    }}>
                       {printTaskTypeStats.length}
                     </div>
-                    <div style={{ fontSize: '11px', fontWeight: 650, color: '#7e22ce' }}>
-                      Distinct Categories
+                    <div style={{
+                      fontSize: '11px',
+                      fontWeight: 750,
+                      color: '#7e22ce',
+                      background: '#f3e8ff',
+                      border: '1px solid #e9d5ff',
+                      padding: '3px 10px',
+                      borderRadius: '12px'
+                    }}>
+                      {printTaskTypeStats.length} {printTaskTypeStats.length === 1 ? 'Category' : 'Categories'}
                     </div>
                   </div>
                 </div>
