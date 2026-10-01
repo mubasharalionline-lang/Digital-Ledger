@@ -2722,15 +2722,21 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
             }}>
               {/* ================= PAGE 1: EXECUTIVE REPORT OVERVIEW ================= */}
               <div className="report-overview-page print-page-1" style={{
+                position: 'relative',
                 display: 'flex',
                 flexDirection: 'column',
                 justifyContent: 'space-between',
                 minHeight: '880px',
-                boxSizing: 'border-box',
-                gap: '16px'
+                boxSizing: 'border-box'
               }}>
-                {/* 1. Header & Metadata Section */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div className="print-page-1-content" style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '16px',
+                  flex: 1
+                }}>
+                  {/* 1. Header & Metadata Section */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                   {/* Page 1 Document Header */}
                   <div className="doc-header" style={{
                     display: 'flex',
@@ -3109,16 +3115,20 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
                     </div>
                   </div>
                 </div>
+              </div>
 
                 {/* 5. Page 1 Bottom Sign-off Footer & Next Page Indicator */}
-                <div style={{
+                <div className="print-page-1-footer" style={{
+                  marginTop: 'auto',
                   borderTop: '2px solid #0f172a',
                   paddingTop: '10px',
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'center',
                   fontSize: '11px',
-                  color: '#64748b'
+                  color: '#64748b',
+                  width: '100%',
+                  boxSizing: 'border-box'
                 }}>
                   <div>
                     <strong>The Digital Ledger</strong> &bull; Confidential Executive Report &bull; Addressed to <strong>{printRecipient || 'Finex'}</strong>
@@ -3387,18 +3397,39 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
 
           /* Page 1: Overview Page */
           .print-page-1 {
-            display: flex !important;
-            flex-direction: column !important;
-            justify-content: space-between !important;
+            display: block !important;
+            position: relative !important;
+            box-sizing: border-box !important;
             page-break-after: always !important;
             break-after: page !important;
             page-break-inside: avoid !important;
             break-inside: avoid !important;
-            min-height: 260mm !important;
-            height: 262mm !important;
+            min-height: 268mm !important;
+            height: 268mm !important;
+            max-height: 270mm !important;
+            margin: 0 !important;
+            padding: 0 0 20mm 0 !important;
+          }
+
+          .print-page-1-content {
+            display: flex !important;
+            flex-direction: column !important;
+            gap: 14px !important;
+          }
+
+          /* Page 1 Bottom Sign-off Footer & Top Divider Line: Pinned to bottom of Page 1 */
+          .print-page-1-footer {
+            position: absolute !important;
+            bottom: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            width: 100% !important;
+            border-top: 2px solid #0f172a !important;
+            padding-top: 8px !important;
+            background: #ffffff !important;
             box-sizing: border-box !important;
             margin: 0 !important;
-            padding: 0 0 2mm 0 !important;
+            z-index: 10 !important;
           }
 
           /* Page 2 Onward: Detailed Task Report */
