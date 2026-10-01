@@ -1186,44 +1186,20 @@ tr:hover td {
     box-shadow: none !important;
   }
 
-  /* Page 1: Executive Overview Page - Firmly anchored to A4 page height */
+  /* Page 1: Executive Overview Page */
   .print-page-1 {
-    display: flex !important;
-    flex-direction: column !important;
-    justify-content: space-between !important;
-    position: relative !important;
-    box-sizing: border-box !important;
+    display: block !important;
     page-break-after: always !important;
     break-after: page !important;
     page-break-inside: avoid !important;
     break-inside: avoid !important;
-    height: 254mm !important;
-    min-height: 254mm !important;
-    max-height: 256mm !important;
     margin: 0 !important;
-    padding: 0 0 34px 0 !important;
   }
 
   .print-page-1-content {
     display: flex !important;
     flex-direction: column !important;
     gap: 16px !important;
-    flex: 1 !important;
-  }
-
-  /* Page 1 Bottom Sign-off Footer & Divider Line: Pinned to bottom of Page 1 */
-  .print-page-1-footer {
-    position: absolute !important;
-    bottom: 0 !important;
-    left: 0 !important;
-    right: 0 !important;
-    width: 100% !important;
-    border-top: 2px solid #0f172a !important;
-    padding-top: 8px !important;
-    background: #ffffff !important;
-    box-sizing: border-box !important;
-    margin: 0 !important;
-    z-index: 100 !important;
   }
 
   /* Page 2 Onward: Detailed Task Report */

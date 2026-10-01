@@ -2722,20 +2722,14 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
             }}>
               {/* ================= PAGE 1: EXECUTIVE REPORT OVERVIEW ================= */}
               <div className="report-overview-page print-page-1" style={{
-                position: 'relative',
                 display: 'flex',
                 flexDirection: 'column',
-                justifyContent: 'space-between',
-                minHeight: '254mm',
-                height: '254mm',
-                boxSizing: 'border-box',
-                paddingBottom: '38px'
+                gap: '16px'
               }}>
                 <div className="print-page-1-content" style={{
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: '16px',
-                  flex: 1
+                  gap: '16px'
                 }}>
                   {/* 1. Header & Metadata Section */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
@@ -3117,45 +3111,8 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
                     </div>
                   </div>
                 </div>
-
-                {/* Flexible spacer that pushes footer down to the very bottom */}
-                <div style={{ flex: 1, minHeight: '16px' }} />
               </div>
-
-                {/* 5. Page 1 Bottom Sign-off Footer & Next Page Indicator */}
-                <div className="print-page-1-footer" style={{
-                  position: 'absolute',
-                  bottom: 0,
-                  left: 0,
-                  right: 0,
-                  width: '100%',
-                  marginTop: 'auto',
-                  borderTop: '2px solid #0f172a',
-                  paddingTop: '10px',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  fontSize: '11px',
-                  color: '#64748b',
-                  background: '#ffffff',
-                  boxSizing: 'border-box',
-                  zIndex: 10
-                }}>
-                  <div>
-                    <strong>The Digital Ledger</strong> &bull; Confidential Executive Report &bull; Addressed to <strong>{printRecipient || 'Finex'}</strong>
-                  </div>
-                  <div style={{
-                    fontWeight: 750,
-                    color: '#2563eb',
-                    background: '#eff6ff',
-                    padding: '4px 10px',
-                    borderRadius: '6px',
-                    border: '1px solid #bfdbfe'
-                  }}>
-                    Page 1: Executive Overview &bull; Detailed Task Report Continues on Page 2 →
-                  </div>
-                </div>
-              </div>
+            </div>
 
               {/* Visual On-Screen Divider between Page 1 and Page 2 in preview */}
               <div className="print-hide" style={{
@@ -3413,44 +3370,20 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
             box-shadow: none !important;
           }
 
-          /* Page 1: Overview Page - Firmly anchored to A4 page height */
+          /* Page 1: Overview Page */
           .print-page-1 {
-            display: flex !important;
-            flex-direction: column !important;
-            justify-content: space-between !important;
-            position: relative !important;
-            box-sizing: border-box !important;
+            display: block !important;
             page-break-after: always !important;
             break-after: page !important;
             page-break-inside: avoid !important;
             break-inside: avoid !important;
-            height: 254mm !important;
-            min-height: 254mm !important;
-            max-height: 256mm !important;
             margin: 0 !important;
-            padding: 0 0 34px 0 !important;
           }
 
           .print-page-1-content {
             display: flex !important;
             flex-direction: column !important;
             gap: 16px !important;
-            flex: 1 !important;
-          }
-
-          /* Page 1 Bottom Sign-off Footer & Top Divider Line: Pinned to bottom of Page 1 */
-          .print-page-1-footer {
-            position: absolute !important;
-            bottom: 0 !important;
-            left: 0 !important;
-            right: 0 !important;
-            width: 100% !important;
-            border-top: 2px solid #0f172a !important;
-            padding-top: 8px !important;
-            background: #ffffff !important;
-            box-sizing: border-box !important;
-            margin: 0 !important;
-            z-index: 100 !important;
           }
 
           /* Page 2 Onward: Detailed Task Report */
