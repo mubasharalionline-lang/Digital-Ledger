@@ -35,6 +35,7 @@ function resolveTask(task: Task, ctx: ExportCtx) {
     'Task ID': task.id.slice(0, 8), 'Company': company?.company_name || 'Unknown',
     'Task Type': ttNames || '—', 'Description': task.description || '',
     'Priority': task.priority, 'Status': task.status, 'Due Date': task.deadline ? formatDate(task.deadline) : '',
+    'Time Taken': task.time_taken || '—',
     'Assigned To': assigned, 'Auditor': auditor,
     'Created': task.created_at ? formatDate(task.created_at) : '',
     'Daily': task.is_daily ? 'Yes' : 'No',
@@ -43,7 +44,7 @@ function resolveTask(task: Task, ctx: ExportCtx) {
 
 const COL_WIDTHS = [
   { wch: 10 }, { wch: 25 }, { wch: 20 }, { wch: 35 }, { wch: 10 },
-  { wch: 18 }, { wch: 12 }, { wch: 22 }, { wch: 16 }, { wch: 12 }, { wch: 8 },
+  { wch: 18 }, { wch: 12 }, { wch: 16 }, { wch: 22 }, { wch: 16 }, { wch: 12 }, { wch: 8 },
 ];
 
 export function formatPlDateDisplay(dateStr?: string | null): string {
@@ -497,6 +498,47 @@ export function calculateTimeTaken(task: Task, completedDateStr?: string | null)
   }
 }
 
+export function parseManualTimeToHours(timeStr?: string | null): number | null {
+  if (!timeStr) return null;
+  const s = timeStr.trim().toLowerCase();
+  if (!s || s === '—' || s === '-') return null;
+
+  let totalHours = 0;
+  let matched = false;
+
+  // Match days: e.g. "2 days", "2d", "1.5 day"
+  const dayMatch = s.match(/(\d+(?:\.\d+)?)\s*(?:days?|d\b)/);
+  if (dayMatch) {
+    totalHours += parseFloat(dayMatch[1]) * 24;
+    matched = true;
+  }
+
+  // Match hours: e.g. "4 hours", "4 hrs", "4h", "1.5 hr"
+  const hourMatch = s.match(/(\d+(?:\.\d+)?)\s*(?:hours?|hrs?|h\b)/);
+  if (hourMatch) {
+    totalHours += parseFloat(hourMatch[1]);
+    matched = true;
+  }
+
+  // Match minutes: e.g. "30 mins", "30m", "45 minutes"
+  const minMatch = s.match(/(\d+(?:\.\d+)?)\s*(?:minutes?|mins?|m\b)/);
+  if (minMatch) {
+    totalHours += parseFloat(minMatch[1]) / 60;
+    matched = true;
+  }
+
+  // If no unit matched, check if it's just a raw number (treat as hours)
+  if (!matched) {
+    const numOnly = parseFloat(s);
+    if (!isNaN(numOnly) && numOnly >= 0) {
+      totalHours = numOnly;
+      matched = true;
+    }
+  }
+
+  return matched ? totalHours : null;
+}
+
 export async function exportComprehensiveReportExcel(
   taskList: Task[],
   ctx: ExportCtx,
@@ -538,10 +580,6 @@ export async function exportComprehensiveReportExcel(
     const assigned = allNames.length > 0 ? allNames.join(', ') : 'Unassigned';
     const auditorName = ctx.auditors.find(a => a.id === task.auditor_id)?.name || 'Direct / None';
     const isComp = isTaskCompleted(task.status);
-    const completedDate = isComp
-      ? (task.completed_at ? formatDate(task.completed_at) : 'Completed')
-      : '—';
-    const timeTaken = calculateTimeTaken(task, task.completed_at);
 
     return {
       'Company': company?.company_name || 'Unknown',
@@ -551,7 +589,7 @@ export async function exportComprehensiveReportExcel(
       'Assigned Partner(s)': assigned,
       'Priority': task.priority || 'Medium',
       'Due Date': task.deadline ? formatDate(task.deadline) : '—',
-      'Time Taken': isComp ? timeTaken.formatted : timeTaken.formatted,
+      'Time Taken': task.time_taken || '—',
       'Status': task.status || 'Pending',
       'Created Date': task.created_at ? formatDate(task.created_at) : '',
     };

@@ -75,6 +75,7 @@ export interface Task {
   pl_uploaded?: boolean;
   pl_date?: string | null;
   completed_at?: string | null;
+  time_taken?: string | null;
   created_at: string;
   // joined fields
   company?: Company;

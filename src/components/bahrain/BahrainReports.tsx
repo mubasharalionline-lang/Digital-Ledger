@@ -10,7 +10,7 @@ import {
   exportComprehensiveReportExcel,
   isTaskCompleted,
   getActivePartnerIds,
-  calculateTimeTaken,
+  parseManualTimeToHours,
   AuditorSummaryRow,
   NzPartnerSummaryRow
 } from '@/lib/reportExportUtils';
@@ -41,7 +41,12 @@ import {
   CheckCheck,
   Layers,
   CalendarRange,
-  CalendarDays
+  CalendarDays,
+  Edit2,
+  Check,
+  Loader2,
+  SlidersHorizontal,
+  RotateCcw
 } from 'lucide-react';
 
 const MONTH_NAMES = [
@@ -101,6 +106,54 @@ function getPriorityBadge(priority?: string | null) {
   return { bg: 'rgba(107, 114, 128, 0.12)', text: '#6b7280', label: 'Low' };
 }
 
+// ─── Print Report Columns Configuration Types & Defaults ───
+export type PrintColumnId =
+  | 'company'
+  | 'taskType'
+  | 'description'
+  | 'dueDate'
+  | 'auditor'
+  | 'partner'
+  | 'status'
+  | 'timeTaken'
+  | 'priority'
+  | 'createdDate';
+
+export interface PrintColumnDef {
+  id: PrintColumnId;
+  label: string;
+  headerLabel: string;
+  defaultSelected: boolean;
+  baseWeight: number; // Used for proportional % width calculation
+  align?: 'left' | 'center' | 'right';
+}
+
+export const AVAILABLE_PRINT_COLUMNS: PrintColumnDef[] = [
+  { id: 'company', label: 'Company Name', headerLabel: 'Company Name', defaultSelected: true, baseWeight: 17, align: 'left' },
+  { id: 'taskType', label: 'Task Type', headerLabel: 'Task Type', defaultSelected: true, baseWeight: 12, align: 'left' },
+  { id: 'description', label: 'Description', headerLabel: 'Description', defaultSelected: true, baseWeight: 20, align: 'left' },
+  { id: 'dueDate', label: 'Due Date', headerLabel: 'Due Date', defaultSelected: true, baseWeight: 9, align: 'left' },
+  { id: 'auditor', label: 'Auditor', headerLabel: 'Auditor (Delegated By)', defaultSelected: true, baseWeight: 13, align: 'left' },
+  { id: 'partner', label: 'Assigned Partner', headerLabel: 'Assigned Partner(s)', defaultSelected: true, baseWeight: 13, align: 'left' },
+  { id: 'status', label: 'Status', headerLabel: 'Status', defaultSelected: true, baseWeight: 10, align: 'center' },
+  { id: 'timeTaken', label: 'Time Taken', headerLabel: 'Time Taken', defaultSelected: true, baseWeight: 9, align: 'left' },
+  { id: 'priority', label: 'Priority', headerLabel: 'Priority', defaultSelected: false, baseWeight: 8, align: 'center' },
+  { id: 'createdDate', label: 'Created Date', headerLabel: 'Created Date', defaultSelected: false, baseWeight: 9, align: 'left' },
+];
+
+export const DEFAULT_PRINT_COLUMNS: Record<PrintColumnId, boolean> = {
+  company: true,
+  taskType: true,
+  description: true,
+  dueDate: true,
+  auditor: true,
+  partner: true,
+  status: true,
+  timeTaken: true,
+  priority: false,
+  createdDate: false,
+};
+
 export default function BahrainReports({ countryOverride }: { countryOverride?: string } = {}) {
   const dataCountry = getDataCountry();
   const activeCountry = countryOverride || dataCountry || 'Bahrain';
@@ -149,6 +202,82 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
   // Active view tab: 'tasks' | 'auditor-breakdown' | 'partner-breakdown'
   const [activeTab, setActiveTab] = useState<'tasks' | 'auditor-breakdown' | 'partner-breakdown'>('tasks');
   const [showPdfModal, setShowPdfModal] = useState<boolean>(false);
+
+  // Manual Time Taken editing state
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+  const [editingTimeValue, setEditingTimeValue] = useState<string>('');
+  const [isSavingTime, setIsSavingTime] = useState<boolean>(false);
+  const [timeToast, setTimeToast] = useState<{ message: string; type: 'success' | 'warning' | 'error' } | null>(null);
+
+  // Manual Time Taken handlers
+  const handleStartTimeEdit = (task: Task) => {
+    setEditingTaskId(task.id);
+    setEditingTimeValue(task.time_taken || '');
+  };
+
+  const handleCancelTimeEdit = () => {
+    setEditingTaskId(null);
+    setEditingTimeValue('');
+  };
+
+  const handleSaveTime = async (taskId: string) => {
+    const trimmed = editingTimeValue.trim() || null;
+    setIsSavingTime(true);
+
+    // 1. Cache locally so changes immediately survive reload
+    try {
+      const localTimeMap = JSON.parse(localStorage.getItem('manual_time_taken_overrides') || '{}');
+      if (trimmed) {
+        localTimeMap[taskId] = trimmed;
+      } else {
+        delete localTimeMap[taskId];
+      }
+      localStorage.setItem('manual_time_taken_overrides', JSON.stringify(localTimeMap));
+    } catch (e) {
+      console.warn('Could not write manual time to localStorage:', e);
+    }
+
+    // 2. Optimistically update local state immediately
+    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, time_taken: trimmed } : t));
+
+    // 3. Persist to Supabase tasks table
+    try {
+      const { error } = await supabase
+        .from('tasks')
+        .update({ time_taken: trimmed })
+        .eq('id', taskId);
+
+      if (error) {
+        console.warn('Supabase tasks.time_taken update notice:', error.message);
+        if (error.message?.includes('time_taken') || error.code === '42703') {
+          setTimeToast({
+            message: 'Time Taken saved! Please run sql/add_time_taken_to_tasks.sql in Supabase to sync to database.',
+            type: 'warning'
+          });
+        } else {
+          setTimeToast({
+            message: `Saved locally. Database notice: ${error.message}`,
+            type: 'warning'
+          });
+        }
+      } else {
+        setTimeToast({
+          message: 'Time Taken saved successfully!',
+          type: 'success'
+        });
+      }
+    } catch (err: any) {
+      console.warn('Exception updating time_taken in Supabase:', err);
+      setTimeToast({
+        message: 'Time Taken saved locally for this session.',
+        type: 'warning'
+      });
+    } finally {
+      setIsSavingTime(false);
+      setEditingTaskId(null);
+      setTimeout(() => setTimeToast(null), 4000);
+    }
+  };
 
   // Fetch all necessary data for Bahrain
   const fetchData = useCallback(async () => {
@@ -234,9 +363,22 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
           }
         }
       }
-      setStatusLogCompletedMap(statusMap);
+      // Merge with any manual time taken overrides from localStorage
+      let localTimeMap: Record<string, string> = {};
+      try {
+        localTimeMap = JSON.parse(localStorage.getItem('manual_time_taken_overrides') || '{}');
+      } catch {
+        // ignore
+      }
 
-      setTasks(taskData || []);
+      const tasksWithTime = (taskData || []).map(t => ({
+        ...t,
+        time_taken: (t.time_taken !== undefined && t.time_taken !== null && t.time_taken !== '')
+          ? t.time_taken
+          : (localTimeMap[t.id] || null)
+      }));
+
+      setTasks(tasksWithTime);
       setCompanies(compData || []);
       setPartners(userData || []);
       setTaskTypes(ttData || []);
@@ -690,6 +832,83 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
   const [printStatus, setPrintStatus] = useState<string>('all');
   const [printRecipient, setPrintRecipient] = useState<string>('Finex');
 
+  // Print Columns Selection State (persisted to localStorage)
+  const [selectedPrintColumns, setSelectedPrintColumns] = useState<Record<PrintColumnId, boolean>>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('report_pdf_columns_v1');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          return { ...DEFAULT_PRINT_COLUMNS, ...parsed };
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+    return { ...DEFAULT_PRINT_COLUMNS };
+  });
+
+  const togglePrintColumn = useCallback((columnId: PrintColumnId) => {
+    setSelectedPrintColumns(prev => {
+      const isCurrentlySelected = !!prev[columnId];
+      // Keep at least one column selected
+      const selectedCount = Object.values(prev).filter(Boolean).length;
+      if (isCurrentlySelected && selectedCount <= 1) {
+        return prev;
+      }
+      const next = { ...prev, [columnId]: !isCurrentlySelected };
+      try {
+        localStorage.setItem('report_pdf_columns_v1', JSON.stringify(next));
+      } catch (e) {}
+      return next;
+    });
+  }, []);
+
+  const selectAllPrintColumns = useCallback(() => {
+    const next: Record<PrintColumnId, boolean> = {} as any;
+    AVAILABLE_PRINT_COLUMNS.forEach(col => {
+      next[col.id] = true;
+    });
+    try {
+      localStorage.setItem('report_pdf_columns_v1', JSON.stringify(next));
+    } catch (e) {}
+    setSelectedPrintColumns(next);
+  }, []);
+
+  const resetDefaultPrintColumns = useCallback(() => {
+    const next = { ...DEFAULT_PRINT_COLUMNS };
+    try {
+      localStorage.setItem('report_pdf_columns_v1', JSON.stringify(next));
+    } catch (e) {}
+    setSelectedPrintColumns(next);
+  }, []);
+
+  const activePrintColumnCount = useMemo(() => {
+    return Object.values(selectedPrintColumns).filter(Boolean).length;
+  }, [selectedPrintColumns]);
+
+  // Dynamically calculate column widths so active columns span 100% of the table without gaps
+  const printColumnWidths = useMemo(() => {
+    let totalWeight = 0;
+    AVAILABLE_PRINT_COLUMNS.forEach(col => {
+      if (selectedPrintColumns[col.id]) {
+        totalWeight += col.baseWeight;
+      }
+    });
+
+    const widths: Record<PrintColumnId, string> = {} as any;
+    AVAILABLE_PRINT_COLUMNS.forEach(col => {
+      if (selectedPrintColumns[col.id] && totalWeight > 0) {
+        // Allocate remaining ~97% (reserving ~3% for # index column)
+        const pct = (col.baseWeight / totalWeight) * 97;
+        widths[col.id] = `${pct.toFixed(2)}%`;
+      } else {
+        widths[col.id] = '0%';
+      }
+    });
+    return widths;
+  }, [selectedPrintColumns]);
+
   const openPrintModal = () => {
     setPrintTimeframeMode(timeframeMode);
     setPrintYear(selectedYear);
@@ -889,24 +1108,23 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
     const completionRate = total > 0 ? ((completed / total) * 100).toFixed(1) : '0';
     const pendingRate = total > 0 ? ((pending / total) * 100).toFixed(1) : '0';
 
-    // Calculate Average Time Taken across completed tasks with valid completion timestamps
-    const completedTimes = completedTasks.map(t => {
-      const compDate = getTaskCompletedDate(t);
-      return calculateTimeTaken(t, compDate);
-    }).filter(r => r.rawMs > 0);
+    // Calculate Average Time Taken across tasks with manually entered Time Taken
+    const tasksWithManualTime = printSortedTasks
+      .map(t => ({ task: t, hours: parseManualTimeToHours(t.time_taken) }))
+      .filter((r): r is { task: Task; hours: number } => r.hours !== null && r.hours > 0);
 
     let avgTimeTakenFormatted = '—';
-    if (completedTimes.length > 0) {
-      const avgMs = completedTimes.reduce((acc, cur) => acc + cur.rawMs, 0) / completedTimes.length;
-      const totalHours = Math.floor(avgMs / (1000 * 60 * 60));
-      const days = Math.floor(totalHours / 24);
-      const remainingHours = totalHours % 24;
+    if (tasksWithManualTime.length > 0) {
+      const avgHours = tasksWithManualTime.reduce((acc, cur) => acc + cur.hours, 0) / tasksWithManualTime.length;
+      const days = Math.floor(avgHours / 24);
+      const remainingHours = Math.round(avgHours % 24);
       if (days > 0) {
-        avgTimeTakenFormatted = `${days} day${days === 1 ? '' : 's'}${remainingHours > 0 ? ` ${remainingHours} hour${remainingHours === 1 ? '' : 's'}` : ''}`;
-      } else if (totalHours > 0) {
-        avgTimeTakenFormatted = `${totalHours} hour${totalHours === 1 ? '' : 's'}`;
+        avgTimeTakenFormatted = `${days} day${days === 1 ? '' : 's'}${remainingHours > 0 ? ` ${remainingHours} hr${remainingHours === 1 ? '' : 's'}` : ''}`;
+      } else if (avgHours >= 1) {
+        avgTimeTakenFormatted = `${avgHours % 1 === 0 ? avgHours.toFixed(0) : avgHours.toFixed(1)} hrs`;
       } else {
-        avgTimeTakenFormatted = '< 1 hour';
+        const mins = Math.round(avgHours * 60);
+        avgTimeTakenFormatted = `${mins} min${mins === 1 ? '' : 's'}`;
       }
     }
 
@@ -924,9 +1142,10 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
       completionRate,
       pendingRate,
       avgTimeTakenFormatted,
+      manualTimeCount: tasksWithManualTime.length,
       activePartnersCount: activePartners.size
     };
-  }, [printSortedTasks, getTaskCompletedDate, partnerMap]);
+  }, [printSortedTasks, partnerMap]);
 
   // Date Range Presets
   const applyDatePreset = (preset: 'thisMonth' | 'lastMonth' | 'thisQuarter' | 'last30Days' | 'ytd') => {
@@ -2136,34 +2355,33 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
               </div>
             </div>
           ) : (
-            <div className="table-container" style={{ overflowX: 'auto', borderRadius: '14px', border: '1px solid var(--border)' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'left' }}>
+            <div className="table-container" style={{ width: '100%', overflowX: 'hidden', borderRadius: '14px', border: '1px solid var(--border)', background: 'var(--bg-primary)' }}>
+              <table style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse', fontSize: '12.5px', textAlign: 'left' }}>
                 <thead>
                   <tr style={{ background: 'var(--bg-tertiary)', borderBottom: '1px solid var(--border)' }}>
-                    <th style={{ padding: '12px 14px', fontWeight: 750, color: 'var(--text-secondary)', minWidth: '170px' }}>Company</th>
-                    <th style={{ padding: '12px 14px', fontWeight: 750, color: 'var(--text-secondary)', minWidth: '130px' }}>Task Type</th>
-                    <th style={{ padding: '12px 14px', fontWeight: 750, color: 'var(--text-secondary)', minWidth: '200px' }}>Description</th>
-                    <th style={{ padding: '12px 14px', fontWeight: 750, color: '#8b5cf6', minWidth: '150px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                        <ShieldCheck size={14} />
-                        <span>Auditor (Delegated By)</span>
+                    <th style={{ padding: '10px 12px', fontWeight: 750, color: 'var(--text-secondary)', width: '15%' }}>Company</th>
+                    <th style={{ padding: '10px 10px', fontWeight: 750, color: 'var(--text-secondary)', width: '11%' }}>Task Type</th>
+                    <th style={{ padding: '10px 12px', fontWeight: 750, color: 'var(--text-secondary)', width: '18%' }}>Description</th>
+                    <th style={{ padding: '10px 10px', fontWeight: 750, color: '#8b5cf6', width: '12%' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '5px', overflow: 'hidden' }} title="Auditor (Delegated By)">
+                        <ShieldCheck size={13} style={{ flexShrink: 0 }} />
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Auditor</span>
                       </div>
                     </th>
-                    <th style={{ padding: '12px 14px', fontWeight: 750, color: '#0ea5e9', minWidth: '160px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                        <Users size={14} />
-                        <span>Assigned Partner (Executed By)</span>
+                    <th style={{ padding: '10px 10px', fontWeight: 750, color: '#0ea5e9', width: '13%' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '5px', overflow: 'hidden' }} title="Assigned Partner (Executed By)">
+                        <Users size={13} style={{ flexShrink: 0 }} />
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Assigned Partner</span>
                       </div>
                     </th>
-                    <th style={{ padding: '12px 14px', fontWeight: 750, color: 'var(--text-secondary)', width: '90px' }}>Priority</th>
-                    <th style={{ padding: '12px 14px', fontWeight: 750, color: 'var(--text-secondary)', minWidth: '110px' }}>Due Date</th>
-                    <th style={{ padding: '12px 14px', fontWeight: 750, color: '#059669', minWidth: '140px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                        <Clock size={14} />
-                        <span>Time Taken</span>
+                    <th style={{ padding: '10px 8px', fontWeight: 750, color: 'var(--text-secondary)', width: '9%' }}>Due Date</th>
+                    <th style={{ padding: '10px 10px', fontWeight: 750, color: '#059669', width: '10%' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', overflow: 'hidden' }}>
+                        <Clock size={13} style={{ flexShrink: 0 }} />
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Time Taken</span>
                       </div>
                     </th>
-                    <th style={{ padding: '12px 14px', fontWeight: 750, color: 'var(--text-secondary)', minWidth: '130px' }}>Status</th>
+                    <th style={{ padding: '10px 12px', fontWeight: 750, color: 'var(--text-secondary)', width: '12%', textAlign: 'center' }}>Status</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -2181,9 +2399,7 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
                       .filter(Boolean) as string[];
 
                     const isComp = isTaskCompleted(task.status);
-                    const completedDateStr = getTaskCompletedDate(task);
                     const statusStyle = getStatusBadgeStyle(task.status);
-                    const priorityStyle = getPriorityBadge(task.priority);
 
                     return (
                       <tr
@@ -2197,26 +2413,35 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
                         onMouseLeave={e => { e.currentTarget.style.background = isComp ? 'rgba(16, 185, 129, 0.02)' : 'transparent'; }}
                       >
                         {/* Company */}
-                        <td style={{ padding: '12px 14px', fontWeight: 650, color: 'var(--text-primary)' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
-                            <Building2 size={15} color="var(--text-tertiary)" style={{ flexShrink: 0 }} />
-                            <span>{company?.company_name || 'No Company'}</span>
+                        <td style={{ padding: '10px 12px', fontWeight: 650, color: 'var(--text-primary)', overflow: 'hidden' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+                            <Building2 size={14} color="var(--text-tertiary)" style={{ flexShrink: 0 }} />
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={company?.company_name || 'No Company'}>
+                              {company?.company_name || 'No Company'}
+                            </span>
                           </div>
                         </td>
 
                         {/* Task Type */}
-                        <td style={{ padding: '12px 14px' }}>
+                        <td style={{ padding: '10px 10px', overflow: 'hidden' }}>
                           {ttNames ? (
-                            <span style={{
-                              fontSize: '11.5px',
-                              fontWeight: 600,
-                              padding: '3px 8px',
-                              borderRadius: '6px',
-                              background: 'var(--bg-tertiary)',
-                              border: '1px solid var(--border)',
-                              color: 'var(--text-primary)',
-                              display: 'inline-block'
-                            }}>
+                            <span
+                              title={ttNames}
+                              style={{
+                                fontSize: '11px',
+                                fontWeight: 600,
+                                padding: '2px 7px',
+                                borderRadius: '5px',
+                                background: 'var(--bg-tertiary)',
+                                border: '1px solid var(--border)',
+                                color: 'var(--text-primary)',
+                                display: 'inline-block',
+                                maxWidth: '100%',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap'
+                              }}
+                            >
                               {ttNames}
                             </span>
                           ) : (
@@ -2225,12 +2450,12 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
                         </td>
 
                         {/* Description */}
-                        <td style={{ padding: '12px 14px', maxWidth: '240px' }} title={task.description || undefined}>
+                        <td style={{ padding: '10px 12px', overflow: 'hidden' }} title={task.description || undefined}>
                           <div style={{
                             overflow: 'hidden',
                             textOverflow: 'ellipsis',
                             whiteSpace: 'nowrap',
-                            fontSize: '12.5px',
+                            fontSize: '12px',
                             color: 'var(--text-secondary)'
                           }}>
                             {task.description || <span style={{ color: 'var(--text-tertiary)', fontStyle: 'italic' }}>No notes</span>}
@@ -2238,44 +2463,56 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
                         </td>
 
                         {/* Auditor (Delegated By) */}
-                        <td style={{ padding: '12px 14px' }}>
+                        <td style={{ padding: '10px 10px', overflow: 'hidden' }}>
                           {auditor ? (
-                            <span style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '5px',
-                              fontSize: '12px',
-                              fontWeight: 650,
-                              padding: '3px 8px',
-                              borderRadius: '6px',
-                              background: 'rgba(139, 92, 246, 0.1)',
-                              color: '#7c3aed',
-                              border: '1px solid rgba(139, 92, 246, 0.25)'
-                            }}>
-                              🏛️ {auditor.name}
+                            <span
+                              title={`🏛️ ${auditor.name}`}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                fontSize: '11px',
+                                fontWeight: 650,
+                                padding: '2px 7px',
+                                borderRadius: '5px',
+                                background: 'rgba(139, 92, 246, 0.1)',
+                                color: '#7c3aed',
+                                border: '1px solid rgba(139, 92, 246, 0.25)',
+                                maxWidth: '100%',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap'
+                              }}
+                            >
+                              🏛️ <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{auditor.name}</span>
                             </span>
                           ) : (
-                            <span style={{ fontSize: '11.5px', color: 'var(--text-tertiary)', fontStyle: 'italic' }}>
+                            <span style={{ fontSize: '11px', color: 'var(--text-tertiary)', fontStyle: 'italic' }}>
                               Direct Client
                             </span>
                           )}
                         </td>
 
                         {/* Assigned Partner(s) (Executed By) */}
-                        <td style={{ padding: '12px 14px' }}>
+                        <td style={{ padding: '10px 10px', overflow: 'hidden' }}>
                           {partnerNames.length > 0 ? (
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px', maxHeight: '44px', overflow: 'hidden' }}>
                               {partnerNames.map((name, i) => (
                                 <span
                                   key={i}
+                                  title={name}
                                   style={{
-                                    fontSize: '11.5px',
+                                    fontSize: '11px',
                                     fontWeight: 600,
-                                    padding: '2px 8px',
-                                    borderRadius: '6px',
+                                    padding: '2px 6px',
+                                    borderRadius: '5px',
                                     background: 'rgba(14, 165, 233, 0.1)',
                                     color: '#0284c7',
-                                    border: '1px solid rgba(14, 165, 233, 0.2)'
+                                    border: '1px solid rgba(14, 165, 233, 0.2)',
+                                    maxWidth: '100%',
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                    whiteSpace: 'nowrap'
                                   }}
                                 >
                                   {name}
@@ -2283,92 +2520,219 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
                               ))}
                             </div>
                           ) : (
-                            <span style={{ fontSize: '11.5px', color: 'var(--text-tertiary)', fontStyle: 'italic' }}>
+                            <span style={{ fontSize: '11px', color: 'var(--text-tertiary)', fontStyle: 'italic' }}>
                               Unassigned
                             </span>
                           )}
                         </td>
 
-                        {/* Priority */}
-                        <td style={{ padding: '12px 14px' }}>
-                          <span style={{
-                            fontSize: '11px',
-                            fontWeight: 700,
-                            padding: '2px 7px',
-                            borderRadius: '4px',
-                            background: priorityStyle.bg,
-                            color: priorityStyle.text
-                          }}>
-                            {priorityStyle.label}
-                          </span>
-                        </td>
-
                         {/* Due Date */}
-                        <td style={{ padding: '12px 14px', fontSize: '12.5px', color: 'var(--text-secondary)' }}>
+                        <td style={{ padding: '10px 8px', fontSize: '11.5px', color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                           {task.deadline ? formatDate(task.deadline) : '—'}
                         </td>
 
                         {/* Time Taken */}
-                        <td style={{ padding: '12px 14px' }}>
-                          {(() => {
-                            const timeRes = calculateTimeTaken(task, completedDateStr);
-                            if (isComp) {
-                              return (
-                                <span
-                                  style={{
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: '5px',
-                                    fontSize: '12px',
-                                    fontWeight: 700,
-                                    color: '#059669',
-                                    background: 'rgba(16, 185, 129, 0.08)',
-                                    padding: '3px 9px',
-                                    borderRadius: '6px',
-                                    border: '1px solid rgba(16, 185, 129, 0.22)'
+                        <td style={{ padding: '10px 10px', overflow: 'hidden' }}>
+                          {editingTaskId === task.id ? (
+                            <div
+                              style={{ display: 'flex', flexDirection: 'column', gap: '4px', width: '100%', minWidth: 0 }}
+                              onClick={e => e.stopPropagation()}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '3px', width: '100%' }}>
+                                <input
+                                  type="text"
+                                  value={editingTimeValue}
+                                  onChange={e => setEditingTimeValue(e.target.value)}
+                                  onKeyDown={e => {
+                                    if (e.key === 'Enter') handleSaveTime(task.id);
+                                    if (e.key === 'Escape') handleCancelTimeEdit();
                                   }}
-                                  title={task.created_at && completedDateStr ? `Created: ${formatDateTime(task.created_at)}\nCompleted: ${formatDateTime(completedDateStr)}\nTotal Hours: ${timeRes.totalHours} hrs` : undefined}
+                                  placeholder="e.g. 2 hrs"
+                                  className="input"
+                                  style={{
+                                    height: '28px',
+                                    fontSize: '11px',
+                                    padding: '2px 6px',
+                                    borderRadius: '5px',
+                                    border: '1.5px solid #059669',
+                                    width: '100%',
+                                    minWidth: 0,
+                                    background: 'var(--bg-primary)',
+                                    color: 'var(--text-primary)'
+                                  }}
+                                  autoFocus
+                                  disabled={isSavingTime}
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => handleSaveTime(task.id)}
+                                  disabled={isSavingTime}
+                                  title="Save Time Taken (Enter)"
+                                  style={{
+                                    height: '28px',
+                                    width: '28px',
+                                    borderRadius: '5px',
+                                    border: 'none',
+                                    background: '#059669',
+                                    color: '#ffffff',
+                                    cursor: isSavingTime ? 'not-allowed' : 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    flexShrink: 0
+                                  }}
                                 >
-                                  <Clock size={12} color="#059669" />
-                                  {timeRes.formatted}
-                                </span>
-                              );
-                            }
-                            return (
+                                  {isSavingTime ? <Loader2 size={12} className="animate-spin" /> : <Check size={13} />}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={handleCancelTimeEdit}
+                                  disabled={isSavingTime}
+                                  title="Cancel (Esc)"
+                                  style={{
+                                    height: '28px',
+                                    width: '28px',
+                                    borderRadius: '5px',
+                                    border: '1px solid var(--border)',
+                                    background: 'var(--bg-secondary)',
+                                    color: 'var(--text-secondary)',
+                                    cursor: isSavingTime ? 'not-allowed' : 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    flexShrink: 0
+                                  }}
+                                >
+                                  <X size={13} />
+                                </button>
+                              </div>
+                              {/* Quick suggestion chips */}
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '2px', flexWrap: 'wrap' }}>
+                                {['1h', '2h', '4h', '1d', '2d'].map(preset => (
+                                  <button
+                                    key={preset}
+                                    type="button"
+                                    onClick={() => setEditingTimeValue(preset === '1h' ? '1 hr' : (preset === '2h' ? '2 hrs' : (preset === '4h' ? '4 hrs' : (preset === '1d' ? '1 day' : '2 days'))))}
+                                    style={{
+                                      fontSize: '9.5px',
+                                      padding: '1px 4px',
+                                      borderRadius: '3px',
+                                      background: 'var(--bg-tertiary)',
+                                      border: '1px solid var(--border-light)',
+                                      color: 'var(--text-secondary)',
+                                      cursor: 'pointer',
+                                      lineHeight: 1.2
+                                    }}
+                                  >
+                                    {preset}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          ) : task.time_taken ? (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', maxWidth: '100%', minWidth: 0 }}>
                               <span
+                                onClick={() => handleStartTimeEdit(task)}
                                 style={{
                                   display: 'inline-flex',
                                   alignItems: 'center',
                                   gap: '4px',
-                                  fontSize: '11.5px',
-                                  color: 'var(--text-tertiary)',
-                                  fontStyle: 'italic'
+                                  fontSize: '11px',
+                                  fontWeight: 700,
+                                  color: '#059669',
+                                  background: 'rgba(16, 185, 129, 0.08)',
+                                  padding: '3px 7px',
+                                  borderRadius: '5px',
+                                  border: '1px solid rgba(16, 185, 129, 0.22)',
+                                  cursor: 'pointer',
+                                  maxWidth: 'calc(100% - 24px)',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap'
                                 }}
-                                title={task.created_at ? `Created: ${formatDateTime(task.created_at)}` : undefined}
+                                title={`Click to edit: ${task.time_taken}`}
                               >
-                                <Clock size={11} />
-                                {timeRes.formatted}
+                                <Clock size={11} color="#059669" style={{ flexShrink: 0 }} />
+                                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{task.time_taken}</span>
                               </span>
-                            );
-                          })()}
+                              <button
+                                type="button"
+                                onClick={() => handleStartTimeEdit(task)}
+                                title="Edit Time Taken"
+                                style={{
+                                  background: 'transparent',
+                                  border: 'none',
+                                  cursor: 'pointer',
+                                  padding: '3px',
+                                  borderRadius: '4px',
+                                  color: 'var(--text-tertiary)',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  flexShrink: 0
+                                }}
+                                onMouseEnter={e => { e.currentTarget.style.color = '#059669'; }}
+                                onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-tertiary)'; }}
+                              >
+                                <Edit2 size={12} />
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleStartTimeEdit(task)}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                fontSize: '11px',
+                                fontWeight: 600,
+                                color: 'var(--text-tertiary)',
+                                background: 'transparent',
+                                padding: '3px 7px',
+                                borderRadius: '5px',
+                                border: '1px dashed var(--border)',
+                                cursor: 'pointer',
+                                transition: 'all 0.15s ease',
+                                whiteSpace: 'nowrap'
+                              }}
+                              onMouseEnter={e => {
+                                e.currentTarget.style.color = '#059669';
+                                e.currentTarget.style.borderColor = 'rgba(16, 185, 129, 0.4)';
+                                e.currentTarget.style.background = 'rgba(16, 185, 129, 0.06)';
+                              }}
+                              onMouseLeave={e => {
+                                e.currentTarget.style.color = 'var(--text-tertiary)';
+                                e.currentTarget.style.borderColor = 'var(--border)';
+                                e.currentTarget.style.background = 'transparent';
+                              }}
+                              title="Click to manually enter Time Taken"
+                            >
+                              <Clock size={11} />
+                              <span>+ Add</span>
+                            </button>
+                          )}
                         </td>
 
                         {/* Status */}
-                        <td style={{ padding: '12px 14px' }}>
+                        <td style={{ padding: '10px 12px', textAlign: 'center', overflow: 'hidden' }}>
                           <span style={{
                             display: 'inline-flex',
                             alignItems: 'center',
                             gap: '5px',
-                            fontSize: '11.5px',
+                            fontSize: '11px',
                             fontWeight: 700,
                             padding: '3px 9px',
-                            borderRadius: '12px',
+                            borderRadius: '10px',
                             background: statusStyle.bg,
                             color: statusStyle.text,
-                            border: `1px solid ${statusStyle.border}`
+                            border: `1px solid ${statusStyle.border}`,
+                            whiteSpace: 'nowrap',
+                            maxWidth: '100%',
+                            boxSizing: 'border-box'
                           }}>
-                            <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: statusStyle.dot }} />
-                            {task.status || 'Pending'}
+                            <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: statusStyle.dot, flexShrink: 0 }} />
+                            <span>{task.status || 'Pending'}</span>
                           </span>
                         </td>
                       </tr>
@@ -2689,6 +3053,146 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
 
                 <div style={{ marginLeft: 'auto', fontSize: '12.5px', color: '#059669', fontWeight: 700 }}>
                   ✓ Matching Tasks: {printSortedTasks.length}
+                </div>
+              </div>
+
+              {/* Report Columns Selection Toolbar */}
+              <div style={{
+                background: 'var(--bg-secondary)',
+                padding: '12px 16px',
+                borderRadius: '12px',
+                border: '1px solid var(--border)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '10px'
+              }}>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: '8px'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      fontSize: '12.5px',
+                      fontWeight: 750,
+                      color: 'var(--text-primary)'
+                    }}>
+                      <SlidersHorizontal size={14} color="var(--accent, #2563eb)" />
+                      <span>Report Columns to Include in PDF:</span>
+                    </div>
+                    <span style={{
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      padding: '2px 8px',
+                      borderRadius: '12px',
+                      background: 'rgba(37, 99, 235, 0.1)',
+                      color: 'var(--accent, #2563eb)',
+                      border: '1px solid rgba(37, 99, 235, 0.2)'
+                    }}>
+                      {activePrintColumnCount} of {AVAILABLE_PRINT_COLUMNS.length} fields selected
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <button
+                      type="button"
+                      onClick={selectAllPrintColumns}
+                      className="btn btn-secondary"
+                      style={{
+                        padding: '4px 10px',
+                        fontSize: '11.5px',
+                        fontWeight: 650,
+                        borderRadius: '6px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '5px'
+                      }}
+                      title="Include all available columns in the PDF report"
+                    >
+                      <CheckCheck size={13} />
+                      <span>Select All</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={resetDefaultPrintColumns}
+                      className="btn btn-secondary"
+                      style={{
+                        padding: '4px 10px',
+                        fontSize: '11.5px',
+                        fontWeight: 650,
+                        borderRadius: '6px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '5px'
+                      }}
+                      title="Reset to recommended default columns"
+                    >
+                      <RotateCcw size={13} />
+                      <span>Reset Default</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Column Selection Toggle Chips */}
+                <div style={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  gap: '6px 8px',
+                  alignItems: 'center'
+                }}>
+                  {AVAILABLE_PRINT_COLUMNS.map(col => {
+                    const isSelected = !!selectedPrintColumns[col.id];
+                    return (
+                      <button
+                        key={`print-col-chip-${col.id}`}
+                        type="button"
+                        onClick={() => togglePrintColumn(col.id)}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          padding: '5px 12px',
+                          borderRadius: '20px',
+                          fontSize: '12px',
+                          fontWeight: isSelected ? 650 : 500,
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease',
+                          border: isSelected
+                            ? '1.5px solid var(--accent, #2563eb)'
+                            : '1px solid var(--border)',
+                          background: isSelected
+                            ? 'rgba(37, 99, 235, 0.08)'
+                            : 'var(--bg-primary)',
+                          color: isSelected
+                            ? 'var(--accent, #2563eb)'
+                            : 'var(--text-secondary)',
+                          boxShadow: isSelected ? '0 1px 3px rgba(37, 99, 235, 0.12)' : 'none'
+                        }}
+                        title={isSelected ? `Click to exclude ${col.label} from PDF report` : `Click to include ${col.label} in PDF report`}
+                      >
+                        <span style={{
+                          width: '14px',
+                          height: '14px',
+                          borderRadius: '4px',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          background: isSelected ? 'var(--accent, #2563eb)' : 'transparent',
+                          border: isSelected ? 'none' : '1.5px solid var(--border-hover, #94a3b8)',
+                          color: '#ffffff',
+                          flexShrink: 0
+                        }}>
+                          {isSelected && <Check size={10} strokeWidth={3.5} />}
+                        </span>
+                        <span>{col.label}</span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -3047,7 +3551,7 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
                       padding: '3px 10px',
                       borderRadius: '12px'
                     }}>
-                      Created → Done
+                      {printExecutiveStats.manualTimeCount > 0 ? `${printExecutiveStats.manualTimeCount} Logged` : 'Manual Entries'}
                     </div>
                   </div>
 
@@ -3293,19 +3797,40 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
                     No tasks matched the selected criteria for this report.
                   </div>
                 ) : (
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px', textAlign: 'left' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px', textAlign: 'left', tableLayout: 'fixed' }}>
                     <thead>
                       <tr style={{ background: '#f1f5f9', borderBottom: '1.5px solid #cbd5e1' }}>
-                        <th style={{ padding: '6px 7px', width: '25px' }}>#</th>
-                        <th style={{ padding: '6px 7px', minWidth: '130px' }}>Company Name</th>
-                        <th style={{ padding: '6px 7px', minWidth: '95px' }}>Task Type</th>
-                        <th style={{ padding: '6px 7px', minWidth: '120px' }}>Description</th>
-                        <th style={{ padding: '6px 7px', minWidth: '95px' }}>Auditor (Delegated By)</th>
-                        <th style={{ padding: '6px 7px', minWidth: '95px' }}>Assigned Partner(s)</th>
-                        <th style={{ padding: '6px 7px', width: '60px' }}>Priority</th>
-                        <th style={{ padding: '6px 7px', width: '75px' }}>Due Date</th>
-                        <th style={{ padding: '6px 7px', width: '95px' }}>Time Taken</th>
-                        <th style={{ padding: '6px 7px', width: '80px' }}>Status</th>
+                        <th style={{ padding: '6px 7px', width: '3%' }}>#</th>
+                        {selectedPrintColumns.company && (
+                          <th style={{ padding: '6px 7px', width: printColumnWidths.company }}>Company Name</th>
+                        )}
+                        {selectedPrintColumns.taskType && (
+                          <th style={{ padding: '6px 7px', width: printColumnWidths.taskType }}>Task Type</th>
+                        )}
+                        {selectedPrintColumns.description && (
+                          <th style={{ padding: '6px 7px', width: printColumnWidths.description }}>Description</th>
+                        )}
+                        {selectedPrintColumns.dueDate && (
+                          <th style={{ padding: '6px 7px', width: printColumnWidths.dueDate }}>Due Date</th>
+                        )}
+                        {selectedPrintColumns.auditor && (
+                          <th style={{ padding: '6px 7px', width: printColumnWidths.auditor }}>Auditor (Delegated By)</th>
+                        )}
+                        {selectedPrintColumns.partner && (
+                          <th style={{ padding: '6px 7px', width: printColumnWidths.partner }}>Assigned Partner(s)</th>
+                        )}
+                        {selectedPrintColumns.status && (
+                          <th style={{ padding: '6px 7px', width: printColumnWidths.status, textAlign: 'center' }}>Status</th>
+                        )}
+                        {selectedPrintColumns.timeTaken && (
+                          <th style={{ padding: '6px 7px', width: printColumnWidths.timeTaken }}>Time Taken</th>
+                        )}
+                        {selectedPrintColumns.priority && (
+                          <th style={{ padding: '6px 7px', width: printColumnWidths.priority, textAlign: 'center' }}>Priority</th>
+                        )}
+                        {selectedPrintColumns.createdDate && (
+                          <th style={{ padding: '6px 7px', width: printColumnWidths.createdDate }}>Created Date</th>
+                        )}
                       </tr>
                     </thead>
                     <tbody>
@@ -3317,46 +3842,106 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
                         const pIds = getActivePartnerIds(task);
                         const pNames = pIds.map(id => partnerMap.get(id)?.username).filter(Boolean).join(', ');
                         const isComp = isTaskCompleted(task.status);
-                        const compDate = getTaskCompletedDate(task);
-                        const timeTaken = calculateTimeTaken(task, compDate);
 
                         return (
                           <tr key={task.id} style={{ borderBottom: '1px solid #e2e8f0', background: isComp ? '#f0fdf4' : (idx % 2 === 1 ? '#f8fafc' : '#ffffff') }}>
                             <td style={{ padding: '5px 7px', color: '#64748b' }}>{idx + 1}</td>
-                            <td style={{ padding: '5px 7px', fontWeight: 650 }}>{comp?.company_name || 'No Company'}</td>
-                            <td style={{ padding: '5px 7px' }}>{ttNames || '—'}</td>
-                            <td style={{ padding: '5px 7px', maxWidth: '160px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                              {task.description || '—'}
-                            </td>
-                            <td style={{ padding: '5px 7px' }}>{aud ? aud.name : 'Direct Client'}</td>
-                            <td style={{ padding: '5px 7px' }}>{pNames || 'Unassigned'}</td>
-                            <td style={{ padding: '5px 7px' }}>{task.priority || 'Medium'}</td>
-                            <td style={{ padding: '5px 7px' }}>{task.deadline ? formatDate(task.deadline) : '—'}</td>
-                            <td style={{ padding: '5px 7px', fontSize: '10.5px' }}>
-                              {isComp ? (
-                                <span style={{ fontWeight: 700, color: '#059669' }}>
-                                  {timeTaken.formatted}
+                            
+                            {selectedPrintColumns.company && (
+                              <td style={{ padding: '5px 7px', fontWeight: 650, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {comp?.company_name || 'No Company'}
+                              </td>
+                            )}
+
+                            {selectedPrintColumns.taskType && (
+                              <td style={{ padding: '5px 7px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {ttNames || '—'}
+                              </td>
+                            )}
+
+                            {selectedPrintColumns.description && (
+                              <td style={{ padding: '5px 7px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'normal', wordBreak: 'break-word' }}>
+                                {task.description || '—'}
+                              </td>
+                            )}
+
+                            {selectedPrintColumns.dueDate && (
+                              <td style={{ padding: '5px 7px', whiteSpace: 'nowrap' }}>
+                                {task.deadline ? formatDate(task.deadline) : '—'}
+                              </td>
+                            )}
+
+                            {selectedPrintColumns.auditor && (
+                              <td style={{ padding: '5px 7px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {aud ? aud.name : 'Direct Client'}
+                              </td>
+                            )}
+
+                            {selectedPrintColumns.partner && (
+                              <td style={{ padding: '5px 7px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {pNames || 'Unassigned'}
+                              </td>
+                            )}
+
+                            {selectedPrintColumns.status && (
+                              <td style={{ padding: '5px 7px', textAlign: 'center' }}>
+                                <span style={{
+                                  display: 'inline-block',
+                                  padding: '2px 6px',
+                                  borderRadius: '4px',
+                                  fontSize: '10px',
+                                  fontWeight: 700,
+                                  background: isComp ? '#dcfce7' : '#e0e7ff',
+                                  color: isComp ? '#15803d' : '#3730a3',
+                                  border: `1px solid ${isComp ? '#bbf7d0' : '#c7d2fe'}`,
+                                  whiteSpace: 'nowrap'
+                                }}>
+                                  {task.status || 'Pending'}
                                 </span>
-                              ) : (
-                                <span style={{ color: '#64748b', fontStyle: 'italic' }}>
-                                  {timeTaken.formatted}
-                                </span>
-                              )}
-                            </td>
-                            <td style={{ padding: '5px 7px' }}>
-                              <span style={{
-                                display: 'inline-block',
-                                padding: '2px 5px',
-                                borderRadius: '4px',
-                                fontSize: '10px',
-                                fontWeight: 700,
-                                background: isComp ? '#dcfce7' : '#e0e7ff',
-                                color: isComp ? '#15803d' : '#3730a3',
-                                border: `1px solid ${isComp ? '#bbf7d0' : '#c7d2fe'}`
-                              }}>
-                                {task.status || 'Pending'}
-                              </span>
-                            </td>
+                              </td>
+                            )}
+
+                            {selectedPrintColumns.timeTaken && (
+                              <td style={{ padding: '5px 7px', fontSize: '10.5px', whiteSpace: 'nowrap' }}>
+                                {task.time_taken ? (
+                                  <span style={{ fontWeight: 700, color: '#059669' }}>
+                                    {task.time_taken}
+                                  </span>
+                                ) : (
+                                  <span style={{ color: '#94a3b8' }}>—</span>
+                                )}
+                              </td>
+                            )}
+
+                            {selectedPrintColumns.priority && (
+                              <td style={{ padding: '5px 7px', textAlign: 'center' }}>
+                                {(() => {
+                                  const p = task.priority || 'Medium';
+                                  const badge = getPriorityBadge(p);
+                                  return (
+                                    <span style={{
+                                      display: 'inline-block',
+                                      padding: '2px 6px',
+                                      borderRadius: '4px',
+                                      fontSize: '10px',
+                                      fontWeight: 700,
+                                      background: badge.bg,
+                                      color: badge.text,
+                                      border: `1px solid ${badge.text}33`,
+                                      whiteSpace: 'nowrap'
+                                    }}>
+                                      {p}
+                                    </span>
+                                  );
+                                })()}
+                              </td>
+                            )}
+
+                            {selectedPrintColumns.createdDate && (
+                              <td style={{ padding: '5px 7px', fontSize: '10.5px', color: '#475569', whiteSpace: 'nowrap' }}>
+                                {task.created_at ? formatDate(task.created_at) : '—'}
+                              </td>
+                            )}
                           </tr>
                         );
                       })}
@@ -3528,8 +4113,15 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
           .print-page-2-plus table {
             width: 100% !important;
             border-collapse: collapse !important;
+            table-layout: fixed !important;
             page-break-inside: auto !important;
             margin-bottom: 12px !important;
+          }
+
+          .print-page-2-plus th,
+          .print-page-2-plus td {
+            word-wrap: break-word !important;
+            overflow-wrap: break-word !important;
           }
 
           .print-page-2-plus thead {
@@ -3552,6 +4144,43 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
           }
         }
       `}} />
+
+      {/* ─── Time Taken Feedback Toast ─── */}
+      {timeToast && (
+        <div style={{
+          position: 'fixed',
+          top: '24px',
+          right: '24px',
+          zIndex: 9999,
+          background: timeToast.type === 'error'
+            ? 'linear-gradient(135deg, #7f1d1d, #991b1b)'
+            : (timeToast.type === 'warning' ? 'linear-gradient(135deg, #78350f, #92400e)' : 'linear-gradient(135deg, #0f172a, #1e293b)'),
+          color: '#ffffff',
+          padding: '12px 20px',
+          borderRadius: '14px',
+          boxShadow: '0 10px 30px rgba(0,0,0,0.25), 0 0 0 1px rgba(255,255,255,0.1)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px',
+          fontSize: '13.5px',
+          fontWeight: 600,
+          animation: 'fadeIn 0.2s ease-out',
+        }}>
+          <div style={{
+            width: '24px',
+            height: '24px',
+            borderRadius: '50%',
+            background: timeToast.type === 'error' ? '#ef4444' : (timeToast.type === 'warning' ? '#f59e0b' : '#10b981'),
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0
+          }}>
+            {timeToast.type === 'error' ? <AlertCircle size={14} color="#ffffff" /> : (timeToast.type === 'warning' ? <AlertCircle size={14} color="#ffffff" /> : <Check size={14} color="#ffffff" />)}
+          </div>
+          <span>{timeToast.message}</span>
+        </div>
+      )}
 
     </div>
   );
