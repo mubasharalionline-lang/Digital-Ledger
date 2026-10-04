@@ -1219,6 +1219,7 @@ tr:hover td {
   .print-page-2-plus table {
     width: 100% !important;
     border-collapse: collapse !important;
+    table-layout: fixed !important;
     page-break-inside: auto !important;
     margin-bottom: 12px !important;
   }
@@ -1234,6 +1235,24 @@ tr:hover td {
   .print-page-2-plus tr {
     page-break-inside: avoid !important;
     break-inside: avoid !important;
+  }
+
+  .print-page-2-plus th,
+  .print-page-2-plus td {
+    vertical-align: middle !important;
+    word-break: normal !important;
+    overflow-wrap: break-word !important;
+  }
+
+  .print-page-1 th.col-index,
+  .print-page-1 td.col-index,
+  .print-page-2-plus th.col-index,
+  .print-page-2-plus td.col-index {
+    word-wrap: normal !important;
+    overflow-wrap: normal !important;
+    word-break: keep-all !important;
+    white-space: nowrap !important;
+    text-align: center !important;
   }
 
   .doc-footer {

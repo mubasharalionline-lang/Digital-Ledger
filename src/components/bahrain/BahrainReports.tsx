@@ -129,22 +129,22 @@ export interface PrintColumnDef {
 }
 
 export const AVAILABLE_PRINT_COLUMNS: PrintColumnDef[] = [
-  { id: 'company', label: 'Company Name', headerLabel: 'Company Name', defaultSelected: true, baseWeight: 17, align: 'left' },
-  { id: 'taskType', label: 'Task Type', headerLabel: 'Task Type', defaultSelected: true, baseWeight: 12, align: 'left' },
-  { id: 'description', label: 'Description', headerLabel: 'Description', defaultSelected: true, baseWeight: 20, align: 'left' },
-  { id: 'dueDate', label: 'Due Date', headerLabel: 'Due Date', defaultSelected: true, baseWeight: 9, align: 'left' },
-  { id: 'auditor', label: 'Auditor', headerLabel: 'Auditor (Delegated By)', defaultSelected: true, baseWeight: 13, align: 'left' },
-  { id: 'partner', label: 'Assigned Partner', headerLabel: 'Assigned Partner(s)', defaultSelected: true, baseWeight: 13, align: 'left' },
-  { id: 'status', label: 'Status', headerLabel: 'Status', defaultSelected: true, baseWeight: 10, align: 'center' },
-  { id: 'timeTaken', label: 'Time Taken', headerLabel: 'Time Taken', defaultSelected: true, baseWeight: 9, align: 'left' },
+  { id: 'company', label: 'Company Name', headerLabel: 'Company Name', defaultSelected: true, baseWeight: 20, align: 'left' },
+  { id: 'taskType', label: 'Task Type', headerLabel: 'Task Type', defaultSelected: true, baseWeight: 10, align: 'left' },
+  { id: 'description', label: 'Description', headerLabel: 'Description', defaultSelected: false, baseWeight: 15, align: 'left' },
+  { id: 'dueDate', label: 'Due Date', headerLabel: 'Due Date', defaultSelected: true, baseWeight: 11, align: 'left' },
+  { id: 'auditor', label: 'Auditor', headerLabel: 'Auditor', defaultSelected: true, baseWeight: 10, align: 'left' },
+  { id: 'partner', label: 'Assigned Partner', headerLabel: 'Assigned Partner', defaultSelected: true, baseWeight: 12, align: 'left' },
+  { id: 'status', label: 'Status', headerLabel: 'Status', defaultSelected: true, baseWeight: 13, align: 'center' },
+  { id: 'timeTaken', label: 'Time Taken', headerLabel: 'Time Taken', defaultSelected: true, baseWeight: 9.5, align: 'center' },
   { id: 'priority', label: 'Priority', headerLabel: 'Priority', defaultSelected: false, baseWeight: 8, align: 'center' },
-  { id: 'createdDate', label: 'Created Date', headerLabel: 'Created Date', defaultSelected: false, baseWeight: 9, align: 'left' },
+  { id: 'createdDate', label: 'Created Date', headerLabel: 'Created Date', defaultSelected: false, baseWeight: 10, align: 'left' },
 ];
 
 export const DEFAULT_PRINT_COLUMNS: Record<PrintColumnId, boolean> = {
   company: true,
   taskType: true,
-  description: true,
+  description: false,
   dueDate: true,
   auditor: true,
   partner: true,
@@ -836,7 +836,7 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
   const [selectedPrintColumns, setSelectedPrintColumns] = useState<Record<PrintColumnId, boolean>>(() => {
     if (typeof window !== 'undefined') {
       try {
-        const saved = localStorage.getItem('report_pdf_columns_v1');
+        const saved = localStorage.getItem('report_pdf_columns_v2');
         if (saved) {
           const parsed = JSON.parse(saved);
           return { ...DEFAULT_PRINT_COLUMNS, ...parsed };
@@ -858,7 +858,7 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
       }
       const next = { ...prev, [columnId]: !isCurrentlySelected };
       try {
-        localStorage.setItem('report_pdf_columns_v1', JSON.stringify(next));
+        localStorage.setItem('report_pdf_columns_v2', JSON.stringify(next));
       } catch (e) {}
       return next;
     });
@@ -870,7 +870,7 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
       next[col.id] = true;
     });
     try {
-      localStorage.setItem('report_pdf_columns_v1', JSON.stringify(next));
+      localStorage.setItem('report_pdf_columns_v2', JSON.stringify(next));
     } catch (e) {}
     setSelectedPrintColumns(next);
   }, []);
@@ -878,7 +878,7 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
   const resetDefaultPrintColumns = useCallback(() => {
     const next = { ...DEFAULT_PRINT_COLUMNS };
     try {
-      localStorage.setItem('report_pdf_columns_v1', JSON.stringify(next));
+      localStorage.setItem('report_pdf_columns_v2', JSON.stringify(next));
     } catch (e) {}
     setSelectedPrintColumns(next);
   }, []);
@@ -899,8 +899,8 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
     const widths: Record<PrintColumnId, string> = {} as any;
     AVAILABLE_PRINT_COLUMNS.forEach(col => {
       if (selectedPrintColumns[col.id] && totalWeight > 0) {
-        // Allocate remaining ~97% (reserving ~3% for # index column)
-        const pct = (col.baseWeight / totalWeight) * 97;
+        // Allocate remaining ~95.5% (reserving ~4.5% for # index column)
+        const pct = (col.baseWeight / totalWeight) * 95.5;
         widths[col.id] = `${pct.toFixed(2)}%`;
       } else {
         widths[col.id] = '0%';
@@ -3632,7 +3632,7 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left' }}>
                     <thead>
                       <tr style={{ background: '#f8fafc', borderBottom: '1.5px solid #cbd5e1', color: '#475569', fontSize: '11px' }}>
-                        <th style={{ padding: '8px 12px', width: '32px' }}>#</th>
+                        <th className="col-index" style={{ padding: '8px 6px', width: '40px', minWidth: '40px', textAlign: 'center', whiteSpace: 'nowrap' }} title="Serial Number">#</th>
                         <th style={{ padding: '8px 12px' }}>Task Type</th>
                         <th style={{ padding: '8px 12px', textAlign: 'center', width: '90px' }}>Total Tasks</th>
                         <th style={{ padding: '8px 12px', textAlign: 'center', width: '90px', color: '#16a34a' }}>Completed</th>
@@ -3652,7 +3652,7 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
                           const rate = stat.total > 0 ? (stat.completed / stat.total) * 100 : 0;
                           return (
                             <tr key={stat.id + idx} style={{ borderBottom: '1px solid #e2e8f0', background: idx % 2 === 1 ? '#f8fafc' : '#ffffff' }}>
-                              <td style={{ padding: '8px 12px', color: '#64748b', fontWeight: 600 }}>{idx + 1}</td>
+                              <td className="col-index" style={{ padding: '8px 6px', color: '#64748b', fontWeight: 600, textAlign: 'center', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{idx + 1}</td>
                               <td style={{ padding: '8px 12px', fontWeight: 700, color: '#0f172a' }}>{stat.name}</td>
                               <td style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 800 }}>{stat.total}</td>
                               <td style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 750, color: '#16a34a' }}>{stat.completed}</td>
@@ -3797,156 +3797,183 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
                     No tasks matched the selected criteria for this report.
                   </div>
                 ) : (
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px', textAlign: 'left', tableLayout: 'fixed' }}>
-                    <thead>
-                      <tr style={{ background: '#f1f5f9', borderBottom: '1.5px solid #cbd5e1' }}>
-                        <th style={{ padding: '6px 7px', width: '3%' }}>#</th>
-                        {selectedPrintColumns.company && (
-                          <th style={{ padding: '6px 7px', width: printColumnWidths.company }}>Company Name</th>
-                        )}
-                        {selectedPrintColumns.taskType && (
-                          <th style={{ padding: '6px 7px', width: printColumnWidths.taskType }}>Task Type</th>
-                        )}
-                        {selectedPrintColumns.description && (
-                          <th style={{ padding: '6px 7px', width: printColumnWidths.description }}>Description</th>
-                        )}
-                        {selectedPrintColumns.dueDate && (
-                          <th style={{ padding: '6px 7px', width: printColumnWidths.dueDate }}>Due Date</th>
-                        )}
-                        {selectedPrintColumns.auditor && (
-                          <th style={{ padding: '6px 7px', width: printColumnWidths.auditor }}>Auditor (Delegated By)</th>
-                        )}
-                        {selectedPrintColumns.partner && (
-                          <th style={{ padding: '6px 7px', width: printColumnWidths.partner }}>Assigned Partner(s)</th>
-                        )}
-                        {selectedPrintColumns.status && (
-                          <th style={{ padding: '6px 7px', width: printColumnWidths.status, textAlign: 'center' }}>Status</th>
-                        )}
-                        {selectedPrintColumns.timeTaken && (
-                          <th style={{ padding: '6px 7px', width: printColumnWidths.timeTaken }}>Time Taken</th>
-                        )}
-                        {selectedPrintColumns.priority && (
-                          <th style={{ padding: '6px 7px', width: printColumnWidths.priority, textAlign: 'center' }}>Priority</th>
-                        )}
-                        {selectedPrintColumns.createdDate && (
-                          <th style={{ padding: '6px 7px', width: printColumnWidths.createdDate }}>Created Date</th>
-                        )}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {printSortedTasks.map((task, idx) => {
-                        const comp = companyMap.get(task.company_id);
-                        const ttIds = task.task_type_ids?.length ? task.task_type_ids : (task.task_type_id ? task.task_type_id.split(',').map(s => s.trim()) : []);
-                        const ttNames = ttIds.map(id => taskTypes.find(t => t.id === id)?.name).filter(Boolean).join(', ');
-                        const aud = task.auditor_id ? auditorMap.get(task.auditor_id) : null;
-                        const pIds = getActivePartnerIds(task);
-                        const pNames = pIds.map(id => partnerMap.get(id)?.username).filter(Boolean).join(', ');
-                        const isComp = isTaskCompleted(task.status);
+                  <div style={{ width: '100%', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                    <table style={{ width: '100%', minWidth: '100%', borderCollapse: 'collapse', fontSize: '10.5px', textAlign: 'left', tableLayout: 'fixed' }}>
+                      <thead>
+                        <tr style={{ background: '#f1f5f9', borderBottom: '1.5px solid #cbd5e1', verticalAlign: 'middle' }}>
+                          <th className="col-index" style={{ padding: '6px 3px', width: '4.5%', textAlign: 'center', whiteSpace: 'nowrap', verticalAlign: 'middle' }} title="Serial Number">#</th>
+                          {selectedPrintColumns.company && (
+                            <th style={{ padding: '6px 4px', width: printColumnWidths.company, verticalAlign: 'middle' }}>Company Name</th>
+                          )}
+                          {selectedPrintColumns.taskType && (
+                            <th style={{ padding: '6px 4px', width: printColumnWidths.taskType, whiteSpace: 'nowrap', verticalAlign: 'middle' }}>Task Type</th>
+                          )}
+                          {selectedPrintColumns.description && (
+                            <th style={{ padding: '6px 4px', width: printColumnWidths.description, verticalAlign: 'middle' }}>Description</th>
+                          )}
+                          {selectedPrintColumns.dueDate && (
+                            <th style={{ padding: '6px 4px', width: printColumnWidths.dueDate, whiteSpace: 'nowrap', verticalAlign: 'middle' }}>Due Date</th>
+                          )}
+                          {selectedPrintColumns.auditor && (
+                            <th style={{ padding: '6px 4px', width: printColumnWidths.auditor, whiteSpace: 'nowrap', verticalAlign: 'middle' }} title="Auditor (Delegated By)">Auditor</th>
+                          )}
+                          {selectedPrintColumns.partner && (
+                            <th style={{ padding: '6px 4px', width: printColumnWidths.partner, verticalAlign: 'middle', lineHeight: 1.15 }} title="Assigned Partner(s)">Assigned<br />Partner</th>
+                          )}
+                          {selectedPrintColumns.status && (
+                            <th style={{ padding: '6px 4px', width: printColumnWidths.status, textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', verticalAlign: 'middle' }}>Status</th>
+                          )}
+                          {selectedPrintColumns.timeTaken && (
+                            <th style={{ padding: '4px 2px', width: printColumnWidths.timeTaken, textAlign: 'center', lineHeight: 1.15, verticalAlign: 'middle' }}>Time<br />Taken</th>
+                          )}
+                          {selectedPrintColumns.priority && (
+                            <th style={{ padding: '6px 4px', width: printColumnWidths.priority, textAlign: 'center', whiteSpace: 'nowrap', verticalAlign: 'middle' }}>Priority</th>
+                          )}
+                          {selectedPrintColumns.createdDate && (
+                            <th style={{ padding: '6px 4px', width: printColumnWidths.createdDate, whiteSpace: 'nowrap', verticalAlign: 'middle' }}>Created Date</th>
+                          )}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {printSortedTasks.map((task, idx) => {
+                          const comp = companyMap.get(task.company_id);
+                          const ttIds = task.task_type_ids?.length ? task.task_type_ids : (task.task_type_id ? task.task_type_id.split(',').map(s => s.trim()) : []);
+                          const ttNames = ttIds.map(id => taskTypes.find(t => t.id === id)?.name).filter(Boolean).join(', ');
+                          const aud = task.auditor_id ? auditorMap.get(task.auditor_id) : null;
+                          const pIds = getActivePartnerIds(task);
+                          const pNames = pIds.map(id => partnerMap.get(id)?.username).filter(Boolean).join(', ');
+                          const isComp = isTaskCompleted(task.status);
 
-                        return (
-                          <tr key={task.id} style={{ borderBottom: '1px solid #e2e8f0', background: isComp ? '#f0fdf4' : (idx % 2 === 1 ? '#f8fafc' : '#ffffff') }}>
-                            <td style={{ padding: '5px 7px', color: '#64748b' }}>{idx + 1}</td>
-                            
-                            {selectedPrintColumns.company && (
-                              <td style={{ padding: '5px 7px', fontWeight: 650, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                {comp?.company_name || 'No Company'}
-                              </td>
-                            )}
+                          return (
+                            <tr key={task.id} style={{ borderBottom: '1px solid #e2e8f0', background: isComp ? '#f0fdf4' : (idx % 2 === 1 ? '#f8fafc' : '#ffffff') }}>
+                              <td className="col-index" style={{ padding: '5px 3px', color: '#64748b', textAlign: 'center', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{idx + 1}</td>
+                              
+                              {selectedPrintColumns.company && (
+                                <td style={{ padding: '5px 4px', fontWeight: 650, overflow: 'hidden', textOverflow: 'ellipsis', wordBreak: 'normal', overflowWrap: 'break-word', lineHeight: 1.3 }}>
+                                  {comp?.company_name || 'No Company'}
+                                </td>
+                              )}
 
-                            {selectedPrintColumns.taskType && (
-                              <td style={{ padding: '5px 7px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                {ttNames || '—'}
-                              </td>
-                            )}
+                              {selectedPrintColumns.taskType && (
+                                <td style={{ padding: '5px 4px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={ttNames}>
+                                  {ttNames || '—'}
+                                </td>
+                              )}
 
-                            {selectedPrintColumns.description && (
-                              <td style={{ padding: '5px 7px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'normal', wordBreak: 'break-word' }}>
-                                {task.description || '—'}
-                              </td>
-                            )}
+                              {selectedPrintColumns.description && (
+                                <td style={{ padding: '5px 4px', overflow: 'hidden', textOverflow: 'ellipsis', wordBreak: 'normal', overflowWrap: 'break-word', lineHeight: 1.3 }} title={task.description}>
+                                  {task.description || '—'}
+                                </td>
+                              )}
 
-                            {selectedPrintColumns.dueDate && (
-                              <td style={{ padding: '5px 7px', whiteSpace: 'nowrap' }}>
-                                {task.deadline ? formatDate(task.deadline) : '—'}
-                              </td>
-                            )}
+                              {selectedPrintColumns.dueDate && (
+                                <td style={{ padding: '5px 3px', fontSize: '10px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                  {task.deadline ? formatDate(task.deadline) : '—'}
+                                </td>
+                              )}
 
-                            {selectedPrintColumns.auditor && (
-                              <td style={{ padding: '5px 7px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                {aud ? aud.name : 'Direct Client'}
-                              </td>
-                            )}
+                              {selectedPrintColumns.auditor && (
+                                <td style={{ padding: '5px 3px', fontSize: '10px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={aud ? aud.name : 'Direct Client'}>
+                                  {aud ? aud.name : 'Direct Client'}
+                                </td>
+                              )}
 
-                            {selectedPrintColumns.partner && (
-                              <td style={{ padding: '5px 7px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                {pNames || 'Unassigned'}
-                              </td>
-                            )}
+                              {selectedPrintColumns.partner && (
+                                <td style={{ padding: '5px 4px', overflow: 'hidden', textOverflow: 'ellipsis', wordBreak: 'normal', overflowWrap: 'break-word', lineHeight: 1.3 }} title={pNames}>
+                                  {pNames || 'Unassigned'}
+                                </td>
+                              )}
 
-                            {selectedPrintColumns.status && (
-                              <td style={{ padding: '5px 7px', textAlign: 'center' }}>
-                                <span style={{
-                                  display: 'inline-block',
-                                  padding: '2px 6px',
-                                  borderRadius: '4px',
-                                  fontSize: '10px',
-                                  fontWeight: 700,
-                                  background: isComp ? '#dcfce7' : '#e0e7ff',
-                                  color: isComp ? '#15803d' : '#3730a3',
-                                  border: `1px solid ${isComp ? '#bbf7d0' : '#c7d2fe'}`,
-                                  whiteSpace: 'nowrap'
-                                }}>
-                                  {task.status || 'Pending'}
-                                </span>
-                              </td>
-                            )}
+                              {selectedPrintColumns.status && (
+                                <td style={{ padding: '5px 4px', textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                  {(() => {
+                                    const stStyle = getStatusBadgeStyle(task.status);
+                                    return (
+                                      <span
+                                        title={task.status || 'Pending'}
+                                        style={{
+                                          display: 'inline-block',
+                                          maxWidth: '100%',
+                                          padding: '2px 5px',
+                                          borderRadius: '4px',
+                                          fontSize: '9px',
+                                          fontWeight: 700,
+                                          background: isComp ? '#dcfce7' : stStyle.bg,
+                                          color: isComp ? '#15803d' : stStyle.text,
+                                          border: `1px solid ${isComp ? '#bbf7d0' : stStyle.border}`,
+                                          whiteSpace: 'nowrap',
+                                          overflow: 'hidden',
+                                          textOverflow: 'ellipsis',
+                                          boxSizing: 'border-box',
+                                          verticalAlign: 'middle'
+                                        }}
+                                      >
+                                        {task.status || 'Pending'}
+                                      </span>
+                                    );
+                                  })()}
+                                </td>
+                              )}
 
-                            {selectedPrintColumns.timeTaken && (
-                              <td style={{ padding: '5px 7px', fontSize: '10.5px', whiteSpace: 'nowrap' }}>
-                                {task.time_taken ? (
-                                  <span style={{ fontWeight: 700, color: '#059669' }}>
-                                    {task.time_taken}
-                                  </span>
-                                ) : (
-                                  <span style={{ color: '#94a3b8' }}>—</span>
-                                )}
-                              </td>
-                            )}
-
-                            {selectedPrintColumns.priority && (
-                              <td style={{ padding: '5px 7px', textAlign: 'center' }}>
-                                {(() => {
-                                  const p = task.priority || 'Medium';
-                                  const badge = getPriorityBadge(p);
-                                  return (
-                                    <span style={{
-                                      display: 'inline-block',
-                                      padding: '2px 6px',
-                                      borderRadius: '4px',
-                                      fontSize: '10px',
-                                      fontWeight: 700,
-                                      background: badge.bg,
-                                      color: badge.text,
-                                      border: `1px solid ${badge.text}33`,
-                                      whiteSpace: 'nowrap'
-                                    }}>
-                                      {p}
+                              {selectedPrintColumns.timeTaken && (
+                                <td style={{ padding: '5px 4px', textAlign: 'center', fontSize: '10px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                  {task.time_taken ? (
+                                    <span
+                                      title={task.time_taken}
+                                      style={{
+                                        display: 'inline-block',
+                                        maxWidth: '100%',
+                                        fontWeight: 700,
+                                        color: '#059669',
+                                        overflow: 'hidden',
+                                        textOverflow: 'ellipsis',
+                                        whiteSpace: 'nowrap',
+                                        verticalAlign: 'middle'
+                                      }}
+                                    >
+                                      {task.time_taken}
                                     </span>
-                                  );
-                                })()}
-                              </td>
-                            )}
+                                  ) : (
+                                    <span style={{ color: '#94a3b8' }}>—</span>
+                                  )}
+                                </td>
+                              )}
 
-                            {selectedPrintColumns.createdDate && (
-                              <td style={{ padding: '5px 7px', fontSize: '10.5px', color: '#475569', whiteSpace: 'nowrap' }}>
-                                {task.created_at ? formatDate(task.created_at) : '—'}
-                              </td>
-                            )}
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                              {selectedPrintColumns.priority && (
+                                <td style={{ padding: '5px 4px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                                  {(() => {
+                                    const p = task.priority || 'Medium';
+                                    const badge = getPriorityBadge(p);
+                                    return (
+                                      <span style={{
+                                        display: 'inline-block',
+                                        padding: '2px 5px',
+                                        borderRadius: '4px',
+                                        fontSize: '9.5px',
+                                        fontWeight: 700,
+                                        background: badge.bg,
+                                        color: badge.text,
+                                        border: `1px solid ${badge.text}33`,
+                                        whiteSpace: 'nowrap'
+                                      }}>
+                                        {p}
+                                      </span>
+                                    );
+                                  })()}
+                                </td>
+                              )}
+
+                              {selectedPrintColumns.createdDate && (
+                                <td style={{ padding: '5px 3px', fontSize: '10px', color: '#475569', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                  {task.created_at ? formatDate(task.created_at) : '—'}
+                                </td>
+                              )}
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
                 )}
 
                 {/* Document Footer */}
@@ -4120,8 +4147,20 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
 
           .print-page-2-plus th,
           .print-page-2-plus td {
-            word-wrap: break-word !important;
+            vertical-align: middle !important;
+            word-break: normal !important;
             overflow-wrap: break-word !important;
+          }
+
+          .print-page-1 th.col-index,
+          .print-page-1 td.col-index,
+          .print-page-2-plus th.col-index,
+          .print-page-2-plus td.col-index {
+            word-wrap: normal !important;
+            overflow-wrap: normal !important;
+            word-break: keep-all !important;
+            white-space: nowrap !important;
+            text-align: center !important;
           }
 
           .print-page-2-plus thead {
