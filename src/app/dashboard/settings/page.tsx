@@ -1104,14 +1104,32 @@ export default function SettingsPage() {
                       <CheckCircle2 size={14} color="#7c3aed" /> Full Administrative Controller Access
                     </div>
                   ) : (
-                    <>
-                      <div style={{ fontSize: '12.5px', color: user.permissions?.can_update_status !== false ? 'var(--text-primary)' : 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <Activity size={14} color={user.permissions?.can_update_status !== false ? '#10b981' : '#94a3b8'} /> Task Status Updates ({user.permissions?.can_update_status !== false ? 'Enabled' : 'Disabled'})
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '8px' }}>
+                      <div style={{ fontSize: '12px', color: user.permissions?.can_update_status !== false ? 'var(--text-primary)' : 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <Activity size={13} color={user.permissions?.can_update_status !== false ? '#10b981' : '#94a3b8'} /> Status Updates: {user.permissions?.can_update_status !== false ? 'Enabled' : 'Disabled'}
                       </div>
-                      <div style={{ fontSize: '12.5px', color: user.permissions?.can_view_companies ? 'var(--text-primary)' : 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <Building2 size={14} color={user.permissions?.can_view_companies ? '#3b82f6' : '#94a3b8'} /> Company Directory Access ({user.permissions?.can_view_companies ? 'Enabled' : 'Disabled'})
+                      <div style={{ fontSize: '12px', color: user.permissions?.can_view_companies ? 'var(--text-primary)' : 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <Building2 size={13} color={user.permissions?.can_view_companies ? '#3b82f6' : '#94a3b8'} /> View Companies: {user.permissions?.can_view_companies ? 'Enabled' : 'Disabled'}
                       </div>
-                    </>
+                      <div style={{ fontSize: '12px', color: user.permissions?.can_create_tasks ? 'var(--text-primary)' : 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <CheckCircle2 size={13} color={user.permissions?.can_create_tasks ? '#10b981' : '#94a3b8'} /> Create Tasks: {user.permissions?.can_create_tasks ? 'Enabled' : 'Disabled'}
+                      </div>
+                      <div style={{ fontSize: '12px', color: user.permissions?.can_view_all_tasks ? 'var(--text-primary)' : 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <CheckCircle2 size={13} color={user.permissions?.can_view_all_tasks ? '#6366f1' : '#94a3b8'} /> View All Tasks: {user.permissions?.can_view_all_tasks ? 'Enabled' : 'Disabled'}
+                      </div>
+                      <div style={{ fontSize: '12px', color: user.permissions?.can_view_reports ? 'var(--text-primary)' : 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <CheckCircle2 size={13} color={user.permissions?.can_view_reports ? '#8b5cf6' : '#94a3b8'} /> Reports Access: {user.permissions?.can_view_reports ? 'Enabled' : 'Disabled'}
+                      </div>
+                      <div style={{ fontSize: '12px', color: user.permissions?.can_export_data !== false ? 'var(--text-primary)' : 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <CheckCircle2 size={13} color={user.permissions?.can_export_data !== false ? '#0ea5e9' : '#94a3b8'} /> Export Data: {user.permissions?.can_export_data !== false ? 'Enabled' : 'Disabled'}
+                      </div>
+                      <div style={{ fontSize: '12px', color: user.permissions?.can_manage_daily_tasks ? 'var(--text-primary)' : 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <CheckCircle2 size={13} color={user.permissions?.can_manage_daily_tasks ? '#f59e0b' : '#94a3b8'} /> Daily Tasks: {user.permissions?.can_manage_daily_tasks ? 'Enabled' : 'Disabled'}
+                      </div>
+                      <div style={{ fontSize: '12px', color: user.permissions?.can_edit_companies ? 'var(--text-primary)' : 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <Building2 size={13} color={user.permissions?.can_edit_companies ? '#ec4899' : '#94a3b8'} /> Edit Companies: {user.permissions?.can_edit_companies ? 'Enabled' : 'Disabled'}
+                      </div>
+                    </div>
                   )}
                 </div>
               </div>

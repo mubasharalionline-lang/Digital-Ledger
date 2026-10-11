@@ -53,8 +53,7 @@ export function formatPlDateDisplay(dateStr?: string | null): string {
 }
 
 function isCompleted(s: string) {
-  const sl = s.toLowerCase();
-  return sl.includes('complete') || sl.includes('closed') || sl.includes('filed') || sl.includes('done');
+  return isTaskCompleted(s);
 }
 
 export function filterTasks(tasks: Task[], filter: {
@@ -91,7 +90,16 @@ export function filterTasks(tasks: Task[], filter: {
 
 export async function exportExcel(filteredTasks: Task[], ctx: ExportCtx, label: string) {
   const XLSX = await import('xlsx');
-  const rows = filteredTasks.map(t => resolveTask(t, ctx)).sort((a, b) => a.Company.localeCompare(b.Company));
+  const rows = filteredTasks.map(t => resolveTask(t, ctx)).sort((a, b) => {
+    const aComp = isTaskCompleted(a.Status);
+    const bComp = isTaskCompleted(b.Status);
+    if (aComp && !bComp) return -1;
+    if (!aComp && bComp) return 1;
+    const stA = (a.Status || '').trim().toLowerCase();
+    const stB = (b.Status || '').trim().toLowerCase();
+    if (stA !== stB) return stA.localeCompare(stB);
+    return (a.Company || '').trim().toLowerCase().localeCompare((b.Company || '').trim().toLowerCase());
+  });
   const wb = XLSX.utils.book_new();
   const ws = XLSX.utils.json_to_sheet(rows);
   ws['!cols'] = COL_WIDTHS;
@@ -403,13 +411,7 @@ export interface AuditorSummaryRow {
 export function isTaskCompleted(status?: string | null): boolean {
   if (!status) return false;
   const s = status.toLowerCase().trim();
-  return (
-    s.includes('completed') ||
-    s.includes('complete') ||
-    s.includes('closed') ||
-    s.includes('filed') ||
-    s.includes('done')
-  );
+  return s === 'completed' || s === 'complete';
 }
 
 export function calculateTimeTaken(task: Task, completedDateStr?: string | null): {
@@ -552,22 +554,24 @@ export async function exportComprehensiveReportExcel(
 ) {
   const XLSX = await import('xlsx');
 
-  // Sort tasks: Completed first, then in progress
+  // Sort tasks: Completed first, then alphabetically by Status
   const sortedTasks = [...taskList].sort((a, b) => {
     const aComp = isTaskCompleted(a.status);
     const bComp = isTaskCompleted(b.status);
     if (aComp && !bComp) return -1;
     if (!aComp && bComp) return 1;
-    // If both completed, sort by completed_at descending (or deadline/created_at)
-    if (aComp && bComp) {
-      const aDate = a.completed_at || a.created_at || '';
-      const bDate = b.completed_at || b.created_at || '';
-      return bDate.localeCompare(aDate);
-    }
-    // If both in progress, sort by deadline ascending
-    const aDead = a.deadline || '9999-99-99';
-    const bDead = b.deadline || '9999-99-99';
-    return aDead.localeCompare(bDead);
+
+    // Both completed or both pending: Alphabetical (A-Z) by Status
+    const stA = (a.status || '').trim().toLowerCase();
+    const stB = (b.status || '').trim().toLowerCase();
+    if (stA !== stB) return stA.localeCompare(stB);
+
+    // Tertiary tie-breaker: Alphabetical (A-Z) by Company Name
+    const compA = (ctx.companies.find(c => c.id === a.company_id)?.company_name || a.title || '').trim().toLowerCase();
+    const compB = (ctx.companies.find(c => c.id === b.company_id)?.company_name || b.title || '').trim().toLowerCase();
+    if (compA !== compB) return compA.localeCompare(compB);
+
+    return (a.title || '').localeCompare(b.title || '');
   });
 
   // Sheet 1: Tasks

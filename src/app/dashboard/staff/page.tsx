@@ -33,6 +33,11 @@ import {
   User as UserIcon,
   Clock,
   Filter,
+  BarChart3,
+  FileSpreadsheet,
+  Boxes,
+  History,
+  CalendarCheck2,
 } from 'lucide-react';
 import { InvitePartnerModal, InviteManagementPanel } from '@/components/InvitePartner';
 
@@ -64,6 +69,15 @@ export default function StaffPage() {
   // Permissions state
   const [canUpdateStatus, setCanUpdateStatus] = useState(true);
   const [canViewCompanies, setCanViewCompanies] = useState(false);
+  const [canCreateTasks, setCanCreateTasks] = useState(false);
+  const [canDeleteTasks, setCanDeleteTasks] = useState(false);
+  const [canViewAllTasks, setCanViewAllTasks] = useState(false);
+  const [canViewReports, setCanViewReports] = useState(false);
+  const [canExportData, setCanExportData] = useState(true);
+  const [canManageDailyTasks, setCanManageDailyTasks] = useState(false);
+  const [canEditCompanies, setCanEditCompanies] = useState(false);
+  const [canViewTaskTypes, setCanViewTaskTypes] = useState(false);
+  const [canViewEdits, setCanViewEdits] = useState(false);
   const [auditorAccess, setAuditorAccess] = useState<string[]>([]);
   const [allAuditors, setAllAuditors] = useState<any[]>([]);
   const [showAuditorList, setShowAuditorList] = useState(false);
@@ -124,9 +138,13 @@ export default function StaffPage() {
     const withTasks = users.map(u => ({
       ...u,
       tasks: tasks.filter(t => {
-        const isAssigned = t.assigned_to === u.id || (t.assigned_partners && t.assigned_partners.includes(u.id));
-        const isNotCompleted = !t.status.toLowerCase().includes('completed');
-        return isAssigned && isNotCompleted;
+        const isAssigned =
+          t.assigned_to === u.id ||
+          t.assigned_to === u.username ||
+          (Array.isArray(t.assigned_partners) && (t.assigned_partners.includes(u.id) || (u.username && t.assigned_partners.includes(u.username))));
+        const statusLower = (t.status || '').toLowerCase().trim();
+        const isCompleted = statusLower === 'completed' || statusLower.startsWith('completed') || statusLower === 'done';
+        return isAssigned && !isCompleted;
       }),
     }));
 
@@ -157,6 +175,58 @@ export default function StaffPage() {
     return { total, totalTasks, adminCount, partnerCount };
   }, [staffList]);
 
+  const applyPreset = (preset: 'standard' | 'senior' | 'all' | 'readonly') => {
+    if (preset === 'standard') {
+      setCanUpdateStatus(true);
+      setCanViewCompanies(false);
+      setCanCreateTasks(false);
+      setCanDeleteTasks(false);
+      setCanViewAllTasks(false);
+      setCanViewReports(false);
+      setCanExportData(true);
+      setCanManageDailyTasks(false);
+      setCanEditCompanies(false);
+      setCanViewTaskTypes(false);
+      setCanViewEdits(false);
+    } else if (preset === 'senior') {
+      setCanUpdateStatus(true);
+      setCanViewCompanies(true);
+      setCanCreateTasks(true);
+      setCanDeleteTasks(false);
+      setCanViewAllTasks(true);
+      setCanViewReports(true);
+      setCanExportData(true);
+      setCanManageDailyTasks(true);
+      setCanEditCompanies(true);
+      setCanViewTaskTypes(false);
+      setCanViewEdits(false);
+    } else if (preset === 'all') {
+      setCanUpdateStatus(true);
+      setCanViewCompanies(true);
+      setCanCreateTasks(true);
+      setCanDeleteTasks(true);
+      setCanViewAllTasks(true);
+      setCanViewReports(true);
+      setCanExportData(true);
+      setCanManageDailyTasks(true);
+      setCanEditCompanies(true);
+      setCanViewTaskTypes(true);
+      setCanViewEdits(true);
+    } else if (preset === 'readonly') {
+      setCanUpdateStatus(false);
+      setCanViewCompanies(true);
+      setCanCreateTasks(false);
+      setCanDeleteTasks(false);
+      setCanViewAllTasks(true);
+      setCanViewReports(false);
+      setCanExportData(false);
+      setCanManageDailyTasks(false);
+      setCanEditCompanies(false);
+      setCanViewTaskTypes(false);
+      setCanViewEdits(false);
+    }
+  };
+
   async function saveUser(e: React.FormEvent) {
     e.preventDefault();
     setFormError('');
@@ -167,7 +237,7 @@ export default function StaffPage() {
     let existingQuery = supabase
       .from('users')
       .select('id')
-      .eq('username', formUsername.trim());
+      .ilike('username', formUsername.trim());
 
     if (country) {
       existingQuery = existingQuery.eq('country', country);
@@ -177,7 +247,7 @@ export default function StaffPage() {
       existingQuery = existingQuery.neq('id', editUserId);
     }
 
-    const { data: existing } = await existingQuery.single();
+    const { data: existing } = await existingQuery.maybeSingle();
 
     if (existing) {
       setFormError('Username already exists in this workspace');
@@ -186,16 +256,28 @@ export default function StaffPage() {
     }
 
     const { country: sessionCountry } = getSession();
-    
+    const effectiveCountry = country || sessionCountry || 'Bahrain';
+
+    const permissionsPayload = {
+      can_update_status: canUpdateStatus,
+      can_view_companies: canViewCompanies,
+      can_create_tasks: canCreateTasks,
+      can_delete_tasks: canDeleteTasks,
+      can_view_all_tasks: canViewAllTasks,
+      can_view_reports: canViewReports,
+      can_export_data: canExportData,
+      can_manage_daily_tasks: canManageDailyTasks,
+      can_edit_companies: canEditCompanies,
+      can_view_task_types: canViewTaskTypes,
+      can_view_edits: canViewEdits,
+      auditor_access: auditorAccess,
+    };
+
     if (editUserId) {
       const updates: any = {
         username: formUsername.trim(),
         role: formRole,
-        permissions: {
-          can_update_status: canUpdateStatus,
-          can_view_companies: canViewCompanies,
-          auditor_access: auditorAccess,
-        }
+        permissions: permissionsPayload,
       };
       if (formPassword.trim()) {
         updates.password = formPassword.trim();
@@ -206,17 +288,17 @@ export default function StaffPage() {
         setSaving(false);
         return;
       }
+      if (editUserId === user?.id) {
+        const updatedSelf = { ...user, username: formUsername.trim(), role: formRole, permissions: permissionsPayload };
+        setUser(updatedSelf);
+      }
     } else {
       const { error } = await supabase.from('users').insert({
         username: formUsername.trim(),
         password: formPassword.trim(),
         role: formRole,
-        country: sessionCountry || country || null,
-        permissions: {
-          can_update_status: canUpdateStatus,
-          can_view_companies: canViewCompanies,
-          auditor_access: auditorAccess,
-        }
+        country: effectiveCountry,
+        permissions: permissionsPayload,
       });
       if (error) {
         setFormError(error.message || 'Error creating user');
@@ -243,8 +325,7 @@ export default function StaffPage() {
     setFormUsername('');
     setFormPassword('');
     setFormRole('Accountant');
-    setCanUpdateStatus(true);
-    setCanViewCompanies(false);
+    applyPreset('standard');
     setAuditorAccess([]);
     setShowAuditorList(false);
     setAuditorSearch('');
@@ -259,6 +340,15 @@ export default function StaffPage() {
     setFormRole(member.role);
     setCanUpdateStatus(member.permissions?.can_update_status ?? true);
     setCanViewCompanies(member.permissions?.can_view_companies ?? false);
+    setCanCreateTasks(member.permissions?.can_create_tasks ?? false);
+    setCanDeleteTasks(member.permissions?.can_delete_tasks ?? false);
+    setCanViewAllTasks(member.permissions?.can_view_all_tasks ?? false);
+    setCanViewReports(member.permissions?.can_view_reports ?? false);
+    setCanExportData(member.permissions?.can_export_data ?? true);
+    setCanManageDailyTasks(member.permissions?.can_manage_daily_tasks ?? false);
+    setCanEditCompanies(member.permissions?.can_edit_companies ?? false);
+    setCanViewTaskTypes(member.permissions?.can_view_task_types ?? false);
+    setCanViewEdits(member.permissions?.can_view_edits ?? false);
     setAuditorAccess(member.permissions?.auditor_access || []);
     setShowAuditorList((member.permissions?.auditor_access || []).length > 0);
     setAuditorSearch('');
@@ -279,6 +369,7 @@ export default function StaffPage() {
       .eq('used_by', userId);
 
     await supabase.from('task_messages').delete().eq('sender_id', userId);
+    await supabase.from('tasks').update({ assigned_to: null }).eq('assigned_to', userId);
 
     const { error: delError } = await supabase.from('users').delete().eq('id', userId);
     
@@ -323,6 +414,91 @@ export default function StaffPage() {
       border: '1px solid #bfdbfe',
       icon: <UserCheck size={12} color="#2563eb" />
     };
+  };
+
+  const renderPermissionChips = (member: User, maxVisible = 3) => {
+    if (member.role?.toLowerCase() === 'admin') {
+      return (
+        <span style={{ fontSize: '11px', color: '#7c3aed', fontWeight: 650, background: '#f5f3ff', padding: '2px 8px', borderRadius: '5px', border: '1px solid #ddd6fe', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+          <Shield size={11} color="#7c3aed" /> Full Admin Access
+        </span>
+      );
+    }
+
+    const perms = member.permissions || {};
+    const items: { label: string; icon: any; color: string; bg: string; border: string; desc: string }[] = [];
+
+    if (perms.can_update_status !== false) {
+      items.push({ label: 'Status Updates', icon: <Activity size={10} />, color: '#059669', bg: '#ecfdf5', border: '#a7f3d0', desc: 'Can update task status' });
+    }
+    if (perms.can_view_companies) {
+      items.push({ label: 'Companies', icon: <Building2 size={10} />, color: '#2563eb', bg: '#eff6ff', border: '#bfdbfe', desc: 'Can view companies directory' });
+    }
+    if (perms.can_create_tasks) {
+      items.push({ label: 'Create Tasks', icon: <Plus size={10} />, color: '#16a34a', bg: '#f0fdf4', border: '#bbf7d0', desc: 'Can create new tasks' });
+    }
+    if (perms.can_delete_tasks) {
+      items.push({ label: 'Delete Tasks', icon: <Trash2 size={10} />, color: '#dc2626', bg: '#fef2f2', border: '#fecaca', desc: 'Can delete tasks' });
+    }
+    if (perms.can_view_all_tasks) {
+      items.push({ label: 'All Tasks', icon: <LayoutGrid size={10} />, color: '#4f46e5', bg: '#eef2ff', border: '#c7d2fe', desc: 'Can view all tasks in workspace' });
+    }
+    if (perms.can_view_reports) {
+      items.push({ label: 'Reports', icon: <BarChart3 size={10} />, color: '#7c3aed', bg: '#f5f3ff', border: '#ddd6fe', desc: 'Can access reports' });
+    }
+    if (perms.can_export_data !== false) {
+      items.push({ label: 'Export', icon: <FileSpreadsheet size={10} />, color: '#0284c7', bg: '#f0f9ff', border: '#bae6fd', desc: 'Can export Excel spreadsheets' });
+    }
+    if (perms.can_manage_daily_tasks) {
+      items.push({ label: 'Daily Tasks', icon: <CalendarCheck2 size={10} />, color: '#d97706', bg: '#fffbeb', border: '#fde68a', desc: 'Can manage daily checklist' });
+    }
+    if (perms.can_edit_companies) {
+      items.push({ label: 'Edit Co.', icon: <Building2 size={10} />, color: '#db2777', bg: '#fdf2f8', border: '#fbcfe8', desc: 'Can add & edit company data' });
+    }
+    if (perms.can_view_task_types) {
+      items.push({ label: 'Task Types', icon: <Boxes size={10} />, color: '#475569', bg: '#f8fafc', border: '#cbd5e1', desc: 'Can view task types' });
+    }
+    if (perms.can_view_edits) {
+      items.push({ label: 'Audit Edits', icon: <History size={10} />, color: '#64748b', bg: '#f8fafc', border: '#cbd5e1', desc: 'Can view edit change logs' });
+    }
+
+    if (items.length === 0) {
+      return <span style={{ fontSize: '11px', color: '#94a3b8' }}>Restricted</span>;
+    }
+
+    const visible = maxVisible ? items.slice(0, maxVisible) : items;
+    const hiddenCount = maxVisible ? Math.max(0, items.length - maxVisible) : 0;
+
+    return (
+      <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', alignItems: 'center' }}>
+        {visible.map((it, idx) => (
+          <span
+            key={idx}
+            title={it.desc}
+            style={{
+              fontSize: '10.5px', fontWeight: 650, color: it.color,
+              background: it.bg, border: `1px solid ${it.border}`,
+              padding: '2px 6px', borderRadius: '5px',
+              display: 'inline-flex', alignItems: 'center', gap: '3px'
+            }}
+          >
+            {it.icon} {it.label}
+          </span>
+        ))}
+        {hiddenCount > 0 && (
+          <span
+            title={items.slice(maxVisible).map(i => i.label).join(', ')}
+            style={{
+              fontSize: '10px', fontWeight: 700, color: '#475569',
+              background: '#f1f5f9', border: '1px solid #cbd5e1',
+              padding: '2px 5px', borderRadius: '5px', cursor: 'help'
+            }}
+          >
+            +{hiddenCount} more
+          </span>
+        )}
+      </div>
+    );
   };
 
   return (
@@ -881,43 +1057,7 @@ export default function StaffPage() {
 
                           {/* Column 3: Permissions Chips */}
                           <td style={{ padding: '14px 16px' }}>
-                            <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-                              {member.role?.toLowerCase() === 'admin' ? (
-                                <span style={{ fontSize: '11px', color: '#7c3aed', fontWeight: 600, background: '#f5f3ff', padding: '2px 7px', borderRadius: '5px', border: '1px solid #ddd6fe' }}>
-                                  Full Permissions
-                                </span>
-                              ) : (
-                                <>
-                                  <span
-                                    title={member.permissions?.can_update_status ? "Can update task status: Enabled" : "Can update task status: Disabled"}
-                                    style={{
-                                      fontSize: '10.5px', fontWeight: 600,
-                                      color: member.permissions?.can_update_status !== false ? '#059669' : '#94a3b8',
-                                      background: member.permissions?.can_update_status !== false ? '#ecfdf5' : '#f8fafc',
-                                      padding: '2px 6px', borderRadius: '5px',
-                                      border: member.permissions?.can_update_status !== false ? '1px solid #a7f3d0' : '1px solid #e2e8f0',
-                                      display: 'inline-flex', alignItems: 'center', gap: '3px'
-                                    }}
-                                  >
-                                    <Activity size={10} /> Status Update
-                                  </span>
-
-                                  <span
-                                    title={member.permissions?.can_view_companies ? "Can view assigned companies: Enabled" : "Can view assigned companies: Disabled"}
-                                    style={{
-                                      fontSize: '10.5px', fontWeight: 600,
-                                      color: member.permissions?.can_view_companies ? '#2563eb' : '#94a3b8',
-                                      background: member.permissions?.can_view_companies ? '#eff6ff' : '#f8fafc',
-                                      padding: '2px 6px', borderRadius: '5px',
-                                      border: member.permissions?.can_view_companies ? '1px solid #bfdbfe' : '1px solid #e2e8f0',
-                                      display: 'inline-flex', alignItems: 'center', gap: '3px'
-                                    }}
-                                  >
-                                    <Building2 size={10} /> Companies
-                                  </span>
-                                </>
-                              )}
-                            </div>
+                            {renderPermissionChips(member, 3)}
                           </td>
 
                           {/* Column 4: Auditor Access */}
@@ -1149,36 +1289,7 @@ export default function StaffPage() {
                         <div style={{ fontSize: '10.5px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '6px' }}>
                           Permissions
                         </div>
-                        <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-                          {member.role?.toLowerCase() === 'admin' ? (
-                            <span style={{ fontSize: '11px', color: '#7c3aed', fontWeight: 600, background: '#f5f3ff', padding: '2px 7px', borderRadius: '5px', border: '1px solid #ddd6fe' }}>
-                              Full Admin Access
-                            </span>
-                          ) : (
-                            <>
-                              <span style={{
-                                fontSize: '10.5px', fontWeight: 600,
-                                color: member.permissions?.can_update_status !== false ? '#059669' : '#94a3b8',
-                                background: member.permissions?.can_update_status !== false ? '#ecfdf5' : '#f8fafc',
-                                padding: '2px 6px', borderRadius: '5px',
-                                border: member.permissions?.can_update_status !== false ? '1px solid #a7f3d0' : '1px solid #e2e8f0',
-                                display: 'inline-flex', alignItems: 'center', gap: '3px'
-                              }}>
-                                <Activity size={10} /> Status Update
-                              </span>
-                              <span style={{
-                                fontSize: '10.5px', fontWeight: 600,
-                                color: member.permissions?.can_view_companies ? '#2563eb' : '#94a3b8',
-                                background: member.permissions?.can_view_companies ? '#eff6ff' : '#f8fafc',
-                                padding: '2px 6px', borderRadius: '5px',
-                                border: member.permissions?.can_view_companies ? '1px solid #bfdbfe' : '1px solid #e2e8f0',
-                                display: 'inline-flex', alignItems: 'center', gap: '3px'
-                              }}>
-                                <Building2 size={10} /> Companies
-                              </span>
-                            </>
-                          )}
-                        </div>
+                        {renderPermissionChips(member, 4)}
                       </div>
 
                       {/* Auditor Access Info */}
@@ -1378,20 +1489,24 @@ export default function StaffPage() {
           <div style={{
             background: '#ffffff',
             borderRadius: '20px',
-            maxWidth: '520px',
+            maxWidth: '560px',
             width: '100%',
+            maxHeight: '90vh',
+            display: 'flex',
+            flexDirection: 'column',
             boxShadow: '0 25px 60px rgba(0,0,0,0.18)',
             border: '1px solid #e2e8f0',
             overflow: 'hidden'
           }} onClick={e => e.stopPropagation()}>
             {/* Modal Header */}
             <div style={{
-              padding: '20px 24px',
+              padding: '18px 24px',
               borderBottom: '1px solid #f1f5f9',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
-              background: 'linear-gradient(135deg, #eff6ff 0%, #f8fafc 100%)'
+              background: 'linear-gradient(135deg, #eff6ff 0%, #f8fafc 100%)',
+              flexShrink: 0
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <div style={{ width: '38px', height: '38px', borderRadius: '10px', background: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
@@ -1415,7 +1530,7 @@ export default function StaffPage() {
             </div>
 
             {/* Modal Form */}
-            <form onSubmit={saveUser} style={{ padding: '24px' }}>
+            <form onSubmit={saveUser} style={{ padding: '22px 24px', overflowY: 'auto' }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '12px', fontWeight: 650, color: '#475569', marginBottom: '5px' }}>
@@ -1482,52 +1597,164 @@ export default function StaffPage() {
                 border: '1px solid #e2e8f0',
                 marginBottom: '18px'
               }}>
-                <div style={{ fontSize: '12px', fontWeight: 700, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '10px' }}>
-                  Access Permissions
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
+                  <div style={{ fontSize: '12px', fontWeight: 700, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    Access Permissions
+                  </div>
+                  {/* Quick Presets */}
+                  <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                    <span style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 600 }}>Presets:</span>
+                    <button
+                      type="button"
+                      onClick={() => applyPreset('standard')}
+                      style={{ fontSize: '11px', padding: '2px 7px', borderRadius: '5px', border: '1px solid #cbd5e1', background: '#fff', color: '#334155', cursor: 'pointer', fontWeight: 600 }}
+                    >
+                      Standard
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => applyPreset('senior')}
+                      style={{ fontSize: '11px', padding: '2px 7px', borderRadius: '5px', border: '1px solid #bfdbfe', background: '#eff6ff', color: '#1d4ed8', cursor: 'pointer', fontWeight: 600 }}
+                    >
+                      Senior
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => applyPreset('all')}
+                      style={{ fontSize: '11px', padding: '2px 7px', borderRadius: '5px', border: '1px solid #bbf7d0', background: '#f0fdf4', color: '#15803d', cursor: 'pointer', fontWeight: 600 }}
+                    >
+                      All
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => applyPreset('readonly')}
+                      style={{ fontSize: '11px', padding: '2px 7px', borderRadius: '5px', border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', cursor: 'pointer', fontWeight: 600 }}
+                    >
+                      Read-only
+                    </button>
+                  </div>
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {/* Permission 1: Status Update */}
-                  <label style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    padding: '8px 12px', background: '#ffffff', borderRadius: '8px',
-                    border: '1px solid #e2e8f0', cursor: 'pointer'
-                  }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <Activity size={14} color="#059669" />
-                      <div>
-                        <div style={{ fontSize: '12.5px', fontWeight: 600, color: '#0f172a' }}>Update Task Status</div>
-                        <div style={{ fontSize: '11px', color: '#64748b' }}>Allow updating task status directly from the board</div>
-                      </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', maxHeight: '280px', overflowY: 'auto', paddingRight: '4px' }}>
+                  {/* Category 1: Tasks & Workflows */}
+                  <div>
+                    <div style={{ fontSize: '10.5px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <Activity size={12} color="#059669" /> Tasks & Workflows
                     </div>
-                    <input
-                      type="checkbox"
-                      checked={canUpdateStatus}
-                      onChange={e => setCanUpdateStatus(e.target.checked)}
-                      style={{ width: '16px', height: '16px', cursor: 'pointer' }}
-                    />
-                  </label>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', background: '#ffffff', borderRadius: '8px', border: '1px solid #e2e8f0', cursor: 'pointer' }}>
+                        <div>
+                          <div style={{ fontSize: '12px', fontWeight: 600, color: '#0f172a' }}>Update Task Status</div>
+                          <div style={{ fontSize: '10.5px', color: '#64748b' }}>Change status on task boards and task cards</div>
+                        </div>
+                        <input type="checkbox" checked={canUpdateStatus} onChange={e => setCanUpdateStatus(e.target.checked)} style={{ width: '15px', height: '15px', cursor: 'pointer' }} />
+                      </label>
 
-                  {/* Permission 2: View Companies */}
-                  <label style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    padding: '8px 12px', background: '#ffffff', borderRadius: '8px',
-                    border: '1px solid #e2e8f0', cursor: 'pointer'
-                  }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <Building2 size={14} color="#2563eb" />
-                      <div>
-                        <div style={{ fontSize: '12.5px', fontWeight: 600, color: '#0f172a' }}>View Assigned Companies</div>
-                        <div style={{ fontSize: '11px', color: '#64748b' }}>Access company profile pages for assigned tasks</div>
-                      </div>
+                      <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', background: '#ffffff', borderRadius: '8px', border: '1px solid #e2e8f0', cursor: 'pointer' }}>
+                        <div>
+                          <div style={{ fontSize: '12px', fontWeight: 600, color: '#0f172a' }}>Create New Tasks</div>
+                          <div style={{ fontSize: '10.5px', color: '#64748b' }}>Add and schedule new company tasks</div>
+                        </div>
+                        <input type="checkbox" checked={canCreateTasks} onChange={e => setCanCreateTasks(e.target.checked)} style={{ width: '15px', height: '15px', cursor: 'pointer' }} />
+                      </label>
+
+                      <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', background: '#ffffff', borderRadius: '8px', border: '1px solid #e2e8f0', cursor: 'pointer' }}>
+                        <div>
+                          <div style={{ fontSize: '12px', fontWeight: 600, color: '#0f172a' }}>Delete Tasks</div>
+                          <div style={{ fontSize: '10.5px', color: '#64748b' }}>Remove tasks from the workspace</div>
+                        </div>
+                        <input type="checkbox" checked={canDeleteTasks} onChange={e => setCanDeleteTasks(e.target.checked)} style={{ width: '15px', height: '15px', cursor: 'pointer' }} />
+                      </label>
+
+                      <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', background: '#ffffff', borderRadius: '8px', border: '1px solid #e2e8f0', cursor: 'pointer' }}>
+                        <div>
+                          <div style={{ fontSize: '12px', fontWeight: 600, color: '#0f172a' }}>View All Workspace Tasks</div>
+                          <div style={{ fontSize: '10.5px', color: '#64748b' }}>See all company tasks, not only assigned ones</div>
+                        </div>
+                        <input type="checkbox" checked={canViewAllTasks} onChange={e => setCanViewAllTasks(e.target.checked)} style={{ width: '15px', height: '15px', cursor: 'pointer' }} />
+                      </label>
+
+                      <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', background: '#ffffff', borderRadius: '8px', border: '1px solid #e2e8f0', cursor: 'pointer' }}>
+                        <div>
+                          <div style={{ fontSize: '12px', fontWeight: 600, color: '#0f172a' }}>Manage Daily Tasks</div>
+                          <div style={{ fontSize: '10.5px', color: '#64748b' }}>Create, edit, and assign daily checklist items</div>
+                        </div>
+                        <input type="checkbox" checked={canManageDailyTasks} onChange={e => setCanManageDailyTasks(e.target.checked)} style={{ width: '15px', height: '15px', cursor: 'pointer' }} />
+                      </label>
                     </div>
-                    <input
-                      type="checkbox"
-                      checked={canViewCompanies}
-                      onChange={e => setCanViewCompanies(e.target.checked)}
-                      style={{ width: '16px', height: '16px', cursor: 'pointer' }}
-                    />
-                  </label>
+                  </div>
+
+                  {/* Category 2: Companies & Clients */}
+                  <div>
+                    <div style={{ fontSize: '10.5px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <Building2 size={12} color="#2563eb" /> Companies & Clients
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', background: '#ffffff', borderRadius: '8px', border: '1px solid #e2e8f0', cursor: 'pointer' }}>
+                        <div>
+                          <div style={{ fontSize: '12px', fontWeight: 600, color: '#0f172a' }}>View Company Directory</div>
+                          <div style={{ fontSize: '10.5px', color: '#64748b' }}>Access companies list and profile details</div>
+                        </div>
+                        <input type="checkbox" checked={canViewCompanies} onChange={e => setCanViewCompanies(e.target.checked)} style={{ width: '15px', height: '15px', cursor: 'pointer' }} />
+                      </label>
+
+                      <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', background: '#ffffff', borderRadius: '8px', border: '1px solid #e2e8f0', cursor: 'pointer' }}>
+                        <div>
+                          <div style={{ fontSize: '12px', fontWeight: 600, color: '#0f172a' }}>Create & Edit Companies</div>
+                          <div style={{ fontSize: '10.5px', color: '#64748b' }}>Add new companies and modify company records</div>
+                        </div>
+                        <input type="checkbox" checked={canEditCompanies} onChange={e => setCanEditCompanies(e.target.checked)} style={{ width: '15px', height: '15px', cursor: 'pointer' }} />
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Category 3: Reports & Data */}
+                  <div>
+                    <div style={{ fontSize: '10.5px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <BarChart3 size={12} color="#7c3aed" /> Reports & Data Exports
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', background: '#ffffff', borderRadius: '8px', border: '1px solid #e2e8f0', cursor: 'pointer' }}>
+                        <div>
+                          <div style={{ fontSize: '12px', fontWeight: 600, color: '#0f172a' }}>View Reports Dashboard</div>
+                          <div style={{ fontSize: '10.5px', color: '#64748b' }}>Access operational reports and summaries</div>
+                        </div>
+                        <input type="checkbox" checked={canViewReports} onChange={e => setCanViewReports(e.target.checked)} style={{ width: '15px', height: '15px', cursor: 'pointer' }} />
+                      </label>
+
+                      <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', background: '#ffffff', borderRadius: '8px', border: '1px solid #e2e8f0', cursor: 'pointer' }}>
+                        <div>
+                          <div style={{ fontSize: '12px', fontWeight: 600, color: '#0f172a' }}>Export Excel Spreadsheets</div>
+                          <div style={{ fontSize: '10.5px', color: '#64748b' }}>Download reports and tasks into .xlsx files</div>
+                        </div>
+                        <input type="checkbox" checked={canExportData} onChange={e => setCanExportData(e.target.checked)} style={{ width: '15px', height: '15px', cursor: 'pointer' }} />
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Category 4: System & History */}
+                  <div>
+                    <div style={{ fontSize: '10.5px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <Boxes size={12} color="#475569" /> System Workflows & History
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', background: '#ffffff', borderRadius: '8px', border: '1px solid #e2e8f0', cursor: 'pointer' }}>
+                        <div>
+                          <div style={{ fontSize: '12px', fontWeight: 600, color: '#0f172a' }}>View Task Types</div>
+                          <div style={{ fontSize: '10.5px', color: '#64748b' }}>Browse category workflows and statuses</div>
+                        </div>
+                        <input type="checkbox" checked={canViewTaskTypes} onChange={e => setCanViewTaskTypes(e.target.checked)} style={{ width: '15px', height: '15px', cursor: 'pointer' }} />
+                      </label>
+
+                      <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', background: '#ffffff', borderRadius: '8px', border: '1px solid #e2e8f0', cursor: 'pointer' }}>
+                        <div>
+                          <div style={{ fontSize: '12px', fontWeight: 600, color: '#0f172a' }}>View Edit Audit History</div>
+                          <div style={{ fontSize: '10.5px', color: '#64748b' }}>Inspect operational audit trail and change logs</div>
+                        </div>
+                        <input type="checkbox" checked={canViewEdits} onChange={e => setCanViewEdits(e.target.checked)} style={{ width: '15px', height: '15px', cursor: 'pointer' }} />
+                      </label>
+                    </div>
+                  </div>
                 </div>
 
                 {/* Auditor Access Collapsible Selector */}

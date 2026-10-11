@@ -3,30 +3,23 @@
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { getSession, isAdmin, getDataCountry } from '@/lib/auth';
-import NewZealandReports from '@/components/nz/NewZealandReports';
 import BahrainReports from '@/components/bahrain/BahrainReports';
 import { Loader2 } from 'lucide-react';
 
 export default function ReportsPage() {
   const router = useRouter();
   const [authorized, setAuthorized] = useState<boolean | null>(null);
-  const [isNzCountry, setIsNzCountry] = useState<boolean>(false);
+  const [activeCountry, setActiveCountry] = useState<string>('Bahrain');
 
   useEffect(() => {
     const { user, country: sessionCountry } = getSession();
-    if (!user || !isAdmin(user)) {
+    if (!user || (!isAdmin(user) && !user.permissions?.can_view_reports)) {
       router.replace('/dashboard');
       return;
     }
     
-    const activeCountry = getDataCountry() || sessionCountry || '';
-    const isNz =
-      activeCountry === 'New Zealand' ||
-      activeCountry === 'NZ' ||
-      activeCountry.toLowerCase() === 'new zealand' ||
-      activeCountry.toLowerCase() === 'nz';
-
-    setIsNzCountry(isNz);
+    const country = sessionCountry || getDataCountry() || user.country || 'Bahrain';
+    setActiveCountry(country);
     setAuthorized(true);
   }, [router]);
 
@@ -41,5 +34,5 @@ export default function ReportsPage() {
     );
   }
 
-  return isNzCountry ? <NewZealandReports /> : <BahrainReports />;
+  return <BahrainReports countryOverride={activeCountry} />;
 }

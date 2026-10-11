@@ -28,6 +28,15 @@ export function InvitePartnerModal({
   const [role, setRole] = useState(roles[0] || 'Accountant');
   const [canUpdateStatus, setCanUpdateStatus] = useState(true);
   const [canViewCompanies, setCanViewCompanies] = useState(false);
+  const [canCreateTasks, setCanCreateTasks] = useState(false);
+  const [canDeleteTasks, setCanDeleteTasks] = useState(false);
+  const [canViewAllTasks, setCanViewAllTasks] = useState(false);
+  const [canViewReports, setCanViewReports] = useState(false);
+  const [canExportData, setCanExportData] = useState(true);
+  const [canManageDailyTasks, setCanManageDailyTasks] = useState(false);
+  const [canEditCompanies, setCanEditCompanies] = useState(false);
+  const [canViewTaskTypes, setCanViewTaskTypes] = useState(false);
+  const [canViewEdits, setCanViewEdits] = useState(false);
   const [auditorAccess, setAuditorAccess] = useState<string[]>([]);
   const [showAuditors, setShowAuditors] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -40,6 +49,15 @@ export function InvitePartnerModal({
       setRole(roles[0] || 'Accountant');
       setCanUpdateStatus(true);
       setCanViewCompanies(false);
+      setCanCreateTasks(false);
+      setCanDeleteTasks(false);
+      setCanViewAllTasks(false);
+      setCanViewReports(false);
+      setCanExportData(true);
+      setCanManageDailyTasks(false);
+      setCanEditCompanies(false);
+      setCanViewTaskTypes(false);
+      setCanViewEdits(false);
       setAuditorAccess([]);
       setShowAuditors(false);
       setGeneratedLink('');
@@ -60,6 +78,15 @@ export function InvitePartnerModal({
       permissions: {
         can_update_status: canUpdateStatus,
         can_view_companies: canViewCompanies,
+        can_create_tasks: canCreateTasks,
+        can_delete_tasks: canDeleteTasks,
+        can_view_all_tasks: canViewAllTasks,
+        can_view_reports: canViewReports,
+        can_export_data: canExportData,
+        can_manage_daily_tasks: canManageDailyTasks,
+        can_edit_companies: canEditCompanies,
+        can_view_task_types: canViewTaskTypes,
+        can_view_edits: canViewEdits,
         auditor_access: auditorAccess,
       },
       status: 'pending',
@@ -207,6 +234,15 @@ export function InvitePartnerModal({
                   <span style={tagBadge}><Globe size={11} /> {getDataCountry() || 'Bahrain'}</span>
                   {canUpdateStatus && <span style={greenBadge}>Status Updates</span>}
                   {canViewCompanies && <span style={greenBadge}>View Companies</span>}
+                  {canCreateTasks && <span style={greenBadge}>Create Tasks</span>}
+                  {canDeleteTasks && <span style={greenBadge}>Delete Tasks</span>}
+                  {canViewAllTasks && <span style={greenBadge}>All Tasks</span>}
+                  {canViewReports && <span style={greenBadge}>Reports</span>}
+                  {canExportData && <span style={greenBadge}>Export Excel</span>}
+                  {canManageDailyTasks && <span style={greenBadge}>Daily Tasks</span>}
+                  {canEditCompanies && <span style={greenBadge}>Edit Companies</span>}
+                  {canViewTaskTypes && <span style={greenBadge}>Task Types</span>}
+                  {canViewEdits && <span style={greenBadge}>Audit Edits</span>}
                   {auditorAccess.length > 0 && (
                     <span style={greenBadge}>{auditorAccess.length} Auditor(s)</span>
                   )}
@@ -240,29 +276,96 @@ export function InvitePartnerModal({
               {/* Permissions */}
               <div style={{
                 background: '#f8fafc', padding: '16px',
-                borderRadius: '12px', marginBottom: '18px', border: '1px solid #e2e8f0'
+                borderRadius: '12px', marginBottom: '18px', border: '1px solid #e2e8f0',
+                maxHeight: '260px', overflowY: 'auto'
               }}>
-                <div style={{ fontSize: '12px', fontWeight: 700, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '10px' }}>
-                  Permissions & Capabilities
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                  <span style={{ fontSize: '12px', fontWeight: 700, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    Permissions & Capabilities
+                  </span>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCanUpdateStatus(true); setCanViewCompanies(true); setCanCreateTasks(true);
+                        setCanDeleteTasks(true); setCanViewAllTasks(true); setCanViewReports(true);
+                        setCanExportData(true); setCanManageDailyTasks(true); setCanEditCompanies(true);
+                        setCanViewTaskTypes(true); setCanViewEdits(true);
+                      }}
+                      style={{ fontSize: '11px', color: '#2563eb', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600, padding: 0 }}
+                    >
+                      Select All
+                    </button>
+                    <span style={{ color: '#cbd5e1' }}>|</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCanUpdateStatus(true); setCanViewCompanies(false); setCanCreateTasks(false);
+                        setCanDeleteTasks(false); setCanViewAllTasks(false); setCanViewReports(false);
+                        setCanExportData(true); setCanManageDailyTasks(false); setCanEditCompanies(false);
+                        setCanViewTaskTypes(false); setCanViewEdits(false);
+                      }}
+                      style={{ fontSize: '11px', color: '#64748b', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600, padding: 0 }}
+                    >
+                      Reset Default
+                    </button>
+                  </div>
                 </div>
                 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <label style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    padding: '8px 12px', background: '#ffffff', borderRadius: '8px',
-                    border: '1px solid #e2e8f0', cursor: 'pointer'
-                  }}>
-                    <span style={{ fontSize: '12.5px', fontWeight: 600, color: '#0f172a' }}>Can update task status</span>
-                    <input type="checkbox" checked={canUpdateStatus} onChange={e => setCanUpdateStatus(e.target.checked)} style={{ width: '16px', height: '16px', cursor: 'pointer' }} />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', background: '#ffffff', borderRadius: '6px', border: '1px solid #e2e8f0', cursor: 'pointer' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 550, color: '#0f172a' }}>Update task status</span>
+                    <input type="checkbox" checked={canUpdateStatus} onChange={e => setCanUpdateStatus(e.target.checked)} style={{ width: '15px', height: '15px', cursor: 'pointer' }} />
                   </label>
 
-                  <label style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    padding: '8px 12px', background: '#ffffff', borderRadius: '8px',
-                    border: '1px solid #e2e8f0', cursor: 'pointer'
-                  }}>
-                    <span style={{ fontSize: '12.5px', fontWeight: 600, color: '#0f172a' }}>Can view assigned companies</span>
-                    <input type="checkbox" checked={canViewCompanies} onChange={e => setCanViewCompanies(e.target.checked)} style={{ width: '16px', height: '16px', cursor: 'pointer' }} />
+                  <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', background: '#ffffff', borderRadius: '6px', border: '1px solid #e2e8f0', cursor: 'pointer' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 550, color: '#0f172a' }}>View assigned companies</span>
+                    <input type="checkbox" checked={canViewCompanies} onChange={e => setCanViewCompanies(e.target.checked)} style={{ width: '15px', height: '15px', cursor: 'pointer' }} />
+                  </label>
+
+                  <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', background: '#ffffff', borderRadius: '6px', border: '1px solid #e2e8f0', cursor: 'pointer' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 550, color: '#0f172a' }}>Create new tasks</span>
+                    <input type="checkbox" checked={canCreateTasks} onChange={e => setCanCreateTasks(e.target.checked)} style={{ width: '15px', height: '15px', cursor: 'pointer' }} />
+                  </label>
+
+                  <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', background: '#ffffff', borderRadius: '6px', border: '1px solid #e2e8f0', cursor: 'pointer' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 550, color: '#0f172a' }}>Delete tasks</span>
+                    <input type="checkbox" checked={canDeleteTasks} onChange={e => setCanDeleteTasks(e.target.checked)} style={{ width: '15px', height: '15px', cursor: 'pointer' }} />
+                  </label>
+
+                  <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', background: '#ffffff', borderRadius: '6px', border: '1px solid #e2e8f0', cursor: 'pointer' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 550, color: '#0f172a' }}>View all workspace tasks</span>
+                    <input type="checkbox" checked={canViewAllTasks} onChange={e => setCanViewAllTasks(e.target.checked)} style={{ width: '15px', height: '15px', cursor: 'pointer' }} />
+                  </label>
+
+                  <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', background: '#ffffff', borderRadius: '6px', border: '1px solid #e2e8f0', cursor: 'pointer' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 550, color: '#0f172a' }}>View reports dashboard</span>
+                    <input type="checkbox" checked={canViewReports} onChange={e => setCanViewReports(e.target.checked)} style={{ width: '15px', height: '15px', cursor: 'pointer' }} />
+                  </label>
+
+                  <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', background: '#ffffff', borderRadius: '6px', border: '1px solid #e2e8f0', cursor: 'pointer' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 550, color: '#0f172a' }}>Export Excel reports</span>
+                    <input type="checkbox" checked={canExportData} onChange={e => setCanExportData(e.target.checked)} style={{ width: '15px', height: '15px', cursor: 'pointer' }} />
+                  </label>
+
+                  <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', background: '#ffffff', borderRadius: '6px', border: '1px solid #e2e8f0', cursor: 'pointer' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 550, color: '#0f172a' }}>Manage daily tasks</span>
+                    <input type="checkbox" checked={canManageDailyTasks} onChange={e => setCanManageDailyTasks(e.target.checked)} style={{ width: '15px', height: '15px', cursor: 'pointer' }} />
+                  </label>
+
+                  <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', background: '#ffffff', borderRadius: '6px', border: '1px solid #e2e8f0', cursor: 'pointer' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 550, color: '#0f172a' }}>Create & edit companies</span>
+                    <input type="checkbox" checked={canEditCompanies} onChange={e => setCanEditCompanies(e.target.checked)} style={{ width: '15px', height: '15px', cursor: 'pointer' }} />
+                  </label>
+
+                  <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', background: '#ffffff', borderRadius: '6px', border: '1px solid #e2e8f0', cursor: 'pointer' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 550, color: '#0f172a' }}>View task types</span>
+                    <input type="checkbox" checked={canViewTaskTypes} onChange={e => setCanViewTaskTypes(e.target.checked)} style={{ width: '15px', height: '15px', cursor: 'pointer' }} />
+                  </label>
+
+                  <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', background: '#ffffff', borderRadius: '6px', border: '1px solid #e2e8f0', cursor: 'pointer' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 550, color: '#0f172a' }}>View edit history</span>
+                    <input type="checkbox" checked={canViewEdits} onChange={e => setCanViewEdits(e.target.checked)} style={{ width: '15px', height: '15px', cursor: 'pointer' }} />
                   </label>
                 </div>
 

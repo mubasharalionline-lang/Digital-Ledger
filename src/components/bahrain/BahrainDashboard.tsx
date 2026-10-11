@@ -189,9 +189,19 @@ export default function BahrainDashboard() {
       const newTaskTypeStats = Array.from(ttMap.values()).sort((a, b) => b.count - a.count);
       setTaskTypeStats(newTaskTypeStats);
 
-      // Status counts
+      // Status counts (Group case-insensitively so casing variations seamlessly merge)
       const newStatusCounts: Record<string, number> = {};
-      taskList.forEach(t => { newStatusCounts[t.status] = (newStatusCounts[t.status] || 0) + 1; });
+      const canonicalKeyMap = new Map<string, string>();
+      taskList.forEach(t => {
+        if (!t.status) return;
+        const trimmed = t.status.trim();
+        const lower = trimmed.toLowerCase();
+        if (!canonicalKeyMap.has(lower)) {
+          canonicalKeyMap.set(lower, trimmed);
+        }
+        const canonicalKey = canonicalKeyMap.get(lower)!;
+        newStatusCounts[canonicalKey] = (newStatusCounts[canonicalKey] || 0) + 1;
+      });
       setStatusCounts(newStatusCounts);
 
       // ── Process Recently Modified Description Updates ──

@@ -66,7 +66,7 @@ export default function BahrainTasks() {
   };
 
   const isTaskAllowed = (t: Task) => {
-    if (isAdminUser) return true;
+    if (isAdminUser || currentUser?.permissions?.can_view_all_tasks) return true;
     const activePartnerIds = getActivePartnerIds(t);
     const isAssigned = activePartnerIds.includes(currentUser?.id || '') || (currentUser?.username ? activePartnerIds.includes(currentUser.username) : false);
     const hasAuditorAccess = t.auditor_id ? userAuditorAccess.includes(t.auditor_id) : false;
@@ -446,9 +446,18 @@ export default function BahrainTasks() {
       const activeStatuses = statusRes.data?.filter(s => s.active !== false) || [];
       const dbStatuses = activeStatuses.map(s => s.name);
 
-      const resolvedStatuses = dbStatuses.length > 0
-        ? [...new Set(dbStatuses)].sort((a, b) => a.localeCompare(b)) as string[]
-        : (!dataCountry || dataCountry === 'Bahrain' ? [...BAHRAIN_STATUSES].sort((a, b) => a.localeCompare(b)) : []);
+      const dedupeMap = new Map<string, string>();
+      const rawList = dbStatuses.length > 0
+        ? dbStatuses
+        : (!dataCountry || dataCountry === 'Bahrain' ? BAHRAIN_STATUSES : []);
+      rawList.forEach(name => {
+        if (!name) return;
+        const lower = name.toLowerCase().trim();
+        if (!dedupeMap.has(lower)) {
+          dedupeMap.set(lower, name.trim());
+        }
+      });
+      const resolvedStatuses = Array.from(dedupeMap.values()).sort((a, b) => a.localeCompare(b));
       setDynamicStatuses(resolvedStatuses);
 
       // Store full status objects for task-type filtering
@@ -1844,26 +1853,28 @@ export default function BahrainTasks() {
           </button>
 
           {/* Export to Excel Button */}
-          <button
-            onClick={() => handleExportExcel(selectedTaskIds.length > 0 ? 'selected' : 'filtered')}
-            style={{
-              display: 'flex', alignItems: 'center', gap: '8px',
-              padding: '10px 16px',
-              background: 'rgba(255,255,255,0.12)', color: '#ffffff',
-              border: '1px solid rgba(255,255,255,0.18)',
-              borderRadius: '12px', cursor: 'pointer', fontWeight: 600, fontSize: '13px',
-              backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
-              transition: 'all 0.2s ease',
-            }}
-            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.2)'; }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.12)'; }}
-            title={selectedTaskIds.length > 0 ? `Export ${selectedTaskIds.length} Selected Tasks to Excel` : `Export ${filtered.length} Tasks to Excel`}
-          >
-            <FileSpreadsheet size={15} />
-            Export Excel
-          </button>
+          {(isAdminUser || currentUser?.permissions?.can_export_data !== false) && (
+            <button
+              onClick={() => handleExportExcel(selectedTaskIds.length > 0 ? 'selected' : 'filtered')}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '8px',
+                padding: '10px 16px',
+                background: 'rgba(255,255,255,0.12)', color: '#ffffff',
+                border: '1px solid rgba(255,255,255,0.18)',
+                borderRadius: '12px', cursor: 'pointer', fontWeight: 600, fontSize: '13px',
+                backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
+                transition: 'all 0.2s ease',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.2)'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.12)'; }}
+              title={selectedTaskIds.length > 0 ? `Export ${selectedTaskIds.length} Selected Tasks to Excel` : `Export ${filtered.length} Tasks to Excel`}
+            >
+              <FileSpreadsheet size={15} />
+              Export Excel
+            </button>
+          )}
 
-          {(isAdminUser || userAuditorAccess.length > 0) && (
+          {(isAdminUser || userAuditorAccess.length > 0 || currentUser?.permissions?.can_create_tasks) && (
             <button
               onClick={() => { setEditingTaskId(null); setNewTask({ company_id: '', task_type_id: '', task_type_ids: [], priority: 'Medium', status: '', auditor_id: '', deadline: '', pl_date: '', description: '', assigned_to: '', assigned_partners: [] }); setShowTaskModal(true); }}
               style={{
@@ -4828,7 +4839,7 @@ export default function BahrainTasks() {
                         >
                           <Share2 size={14} color="#25D366" /> Share via WhatsApp
                         </button>
-                        {isAdminUser && (
+                        {(isAdminUser || currentUser?.permissions?.can_delete_tasks) && (
                           <>
                             <div style={{ height: '1px', background: 'var(--border)', margin: '2px 0' }} />
                             <button onClick={() => { deleteTask(task.id); setOpenMenuId(null); }} style={{ ...menuItemStyle, color: '#ef4444' }}>

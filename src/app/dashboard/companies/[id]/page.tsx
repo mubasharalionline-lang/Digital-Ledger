@@ -35,8 +35,8 @@ export default function CompanyDetailPage() {
   const { id } = useParams();
   const router = useRouter();
   const terms = getTerminology();
-  // Partners with can_view_companies get edit access to company details
-  const canEditCompany = (u: User | null) => isAdmin(u) || u?.permissions?.can_view_companies === true;
+  // Partners with can_edit_companies or can_view_companies get edit access to company details
+  const canEditCompany = (u: User | null) => isAdmin(u) || u?.permissions?.can_edit_companies === true || u?.permissions?.can_view_companies === true;
   const [user, setUser] = useState<User | null>(null);
   const [company, setCompany] = useState<Company | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);

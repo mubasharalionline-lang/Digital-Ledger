@@ -135,7 +135,7 @@ export const AVAILABLE_PRINT_COLUMNS: PrintColumnDef[] = [
   { id: 'dueDate', label: 'Due Date', headerLabel: 'Due Date', defaultSelected: true, baseWeight: 11, align: 'left' },
   { id: 'auditor', label: 'Auditor', headerLabel: 'Auditor', defaultSelected: true, baseWeight: 10, align: 'left' },
   { id: 'partner', label: 'Assigned Partner', headerLabel: 'Assigned Partner', defaultSelected: true, baseWeight: 12, align: 'left' },
-  { id: 'status', label: 'Status', headerLabel: 'Status', defaultSelected: true, baseWeight: 13, align: 'center' },
+  { id: 'status', label: 'Status', headerLabel: 'Status', defaultSelected: true, baseWeight: 14.5, align: 'center' },
   { id: 'timeTaken', label: 'Time Taken', headerLabel: 'Time Taken', defaultSelected: true, baseWeight: 9.5, align: 'center' },
   { id: 'priority', label: 'Priority', headerLabel: 'Priority', defaultSelected: false, baseWeight: 8, align: 'center' },
   { id: 'createdDate', label: 'Created Date', headerLabel: 'Created Date', defaultSelected: false, baseWeight: 10, align: 'left' },
@@ -284,14 +284,15 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
     try {
       setRefreshing(true);
 
-      // 1. Fetch Tasks (including completed_at)
+      // 1. Fetch Tasks (including completed_at) - Exclude internal daily checklist tasks so company reports are accurate
       const { data: taskData, error: taskErr } = await supabase
         .from('tasks')
         .select('*')
         .eq('country', activeCountry)
+        .neq('is_daily', true)
         .order('created_at', { ascending: false });
 
-      if (taskErr) console.error('Error fetching Bahrain tasks:', taskErr);
+      if (taskErr) console.error(`Error fetching ${activeCountry} tasks:`, taskErr);
 
       // 2. Fetch Companies
       const { data: compData, error: compErr } = await supabase
@@ -299,16 +300,16 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
         .select('*')
         .eq('country', activeCountry);
 
-      if (compErr) console.error('Error fetching Bahrain companies:', compErr);
+      if (compErr) console.error(`Error fetching ${activeCountry} companies:`, compErr);
 
-      // 3. Fetch Partners & Users for Bahrain
+      // 3. Fetch Partners & Users for Country
       const { data: userData, error: userErr } = await supabase
         .from('users')
         .select('*')
         .eq('country', activeCountry)
         .order('username', { ascending: true });
 
-      if (userErr) console.error('Error fetching Bahrain users:', userErr);
+      if (userErr) console.error(`Error fetching ${activeCountry} users:`, userErr);
 
       // 4. Fetch Task Types
       const { data: ttData, error: ttErr } = await supabase
@@ -327,16 +328,24 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
 
       if (audErr) console.error('Error fetching auditors:', audErr);
 
-      // 6. Fetch Status definitions (deduplicated)
+      // 6. Fetch Status definitions (deduplicated across DB and active tasks for this country)
       const { data: stData } = await supabase
         .from('statuses')
         .select('name')
         .or(`country.eq.${activeCountry},country.is.null`);
 
-      const statusNames = Array.from(new Set(
-        (stData || []).map(s => (s.name || '').trim()).filter(Boolean)
-      )).sort();
-      setAvailableStatuses(statusNames);
+      const dbStatusNames = (stData || []).map(s => (s.name || '').trim()).filter(Boolean);
+      const taskStatusNames = (taskData || []).map(t => (t.status || '').trim()).filter(Boolean);
+      
+      const dedupeMap = new Map<string, string>();
+      [...dbStatusNames, ...taskStatusNames].forEach(name => {
+        const lower = name.toLowerCase().trim();
+        if (!dedupeMap.has(lower)) {
+          dedupeMap.set(lower, name.trim());
+        }
+      });
+      const allStatusNames = Array.from(dedupeMap.values()).sort((a, b) => a.localeCompare(b));
+      setAvailableStatuses(allStatusNames);
 
       // 7. Fetch Status Log to backfill completion timestamps if completed_at is null or identical to created_at
       const completedTaskIds = (taskData || [])
@@ -363,6 +372,7 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
           }
         }
       }
+      setStatusLogCompletedMap(statusMap);
       // Merge with any manual time taken overrides from localStorage
       let localTimeMap: Record<string, string> = {};
       try {
@@ -755,31 +765,30 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
   }, [timeframeTasks, filterAuditor, filterPartner, filterTaskType, filterStatus, filterPriority, searchQuery, companyMap, auditorMap, partnerMap]);
 
   // STRICT SORTING RULE:
-  // "The report shall be sorted like first only completed then in progress"
+  // 1. Completed tasks appear first
+  // 2. Then sorted alphabetically (A-Z) by Status
   const sortedTasks = useMemo(() => {
     return [...filteredTasks].sort((a, b) => {
       const aComp = isTaskCompleted(a.status);
       const bComp = isTaskCompleted(b.status);
 
-      // Primary: Completed first!
+      // Primary: Completed tasks appear first!
       if (aComp && !bComp) return -1;
       if (!aComp && bComp) return 1;
 
-      // Secondary for Completed: Most recently completed first
-      if (aComp && bComp) {
-        const aDate = getTaskCompletedDate(a) || a.created_at || '';
-        const bDate = getTaskCompletedDate(b) || b.created_at || '';
-        return bDate.localeCompare(aDate);
-      }
+      // Secondary: Alphabetical (A-Z) by Status
+      const stA = (a.status || '').trim().toLowerCase();
+      const stB = (b.status || '').trim().toLowerCase();
+      if (stA !== stB) return stA.localeCompare(stB);
 
-      // Secondary for In Progress: Closest deadline first (or created_at descending)
-      const aDead = a.deadline || '9999-99-99';
-      const bDead = b.deadline || '9999-99-99';
-      if (aDead !== bDead) return aDead.localeCompare(bDead);
+      // Tertiary tie-breaker: Alphabetical (A-Z) by Company Name
+      const compA = (companyMap.get(a.company_id)?.company_name || a.title || '').trim().toLowerCase();
+      const compB = (companyMap.get(b.company_id)?.company_name || b.title || '').trim().toLowerCase();
+      if (compA !== compB) return compA.localeCompare(compB);
 
-      return (b.created_at || '').localeCompare(a.created_at || '');
+      return (a.title || '').localeCompare(b.title || '');
     });
-  }, [filteredTasks, getTaskCompletedDate]);
+  }, [filteredTasks, companyMap]);
 
   // Export to Excel handler
   const handleExportExcel = async () => {
@@ -945,6 +954,8 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
         const dMonthCreated = dCreated?.slice(0, 7);
         const dMonthCompleted = dCompleted?.slice(0, 7);
 
+        if (dateBasis === 'deadline') return dMonthDeadline === targetMonth;
+        if (dateBasis === 'created_at') return dMonthCreated === targetMonth;
         return (
           dMonthDeadline === targetMonth ||
           dMonthCompleted === targetMonth ||
@@ -954,10 +965,16 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
 
       if (printTimeframeMode === 'yearly') {
         const yStr = String(printYear);
+        const yDeadline = dDeadline?.slice(0, 4);
+        const yCreated = dCreated?.slice(0, 4);
+        const yCompleted = dCompleted?.slice(0, 4);
+
+        if (dateBasis === 'deadline') return yDeadline === yStr;
+        if (dateBasis === 'created_at') return yCreated === yStr;
         return (
-          dDeadline?.slice(0, 4) === yStr ||
-          dCompleted?.slice(0, 4) === yStr ||
-          dCreated?.slice(0, 4) === yStr
+          yDeadline === yStr ||
+          yCompleted === yStr ||
+          yCreated === yStr
         );
       }
 
@@ -965,12 +982,15 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
         const start = printRangeStart || '0000-00-00';
         const end = printRangeEnd || '9999-99-99';
         const inRange = (d?: string) => d && d >= start && d <= end;
+
+        if (dateBasis === 'deadline') return inRange(dDeadline);
+        if (dateBasis === 'created_at') return inRange(dCreated);
         return inRange(dDeadline) || inRange(dCompleted) || inRange(dCreated);
       }
 
       return true;
     });
-  }, [tasks, printTimeframeMode, printYear, printMonth, printRangeStart, printRangeEnd, getTaskCompletedDate]);
+  }, [tasks, printTimeframeMode, printYear, printMonth, printRangeStart, printRangeEnd, dateBasis, getTaskCompletedDate]);
 
   const printFilteredTasks = useMemo(() => {
     return printTimeframeTasks.filter(task => {
@@ -1020,8 +1040,8 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
   }, [printTimeframeTasks, printAuditor, printPartner, printTaskType, printStatus, partnerMap]);
 
   // STRICT PRINT SORTING RULE AS REQUESTED:
-  // 1. Completed tasks should appear first
-  // 2. Then the remaining tasks should be sorted alphabetically (A-Z) by Company Name
+  // 1. Completed tasks appear first
+  // 2. Then sorted alphabetically (A-Z) by Status
   const printSortedTasks = useMemo(() => {
     return [...printFilteredTasks].sort((a, b) => {
       const aComp = isTaskCompleted(a.status);
@@ -1031,22 +1051,19 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
       if (aComp && !bComp) return -1;
       if (!aComp && bComp) return 1;
 
-      // If both completed: sort by completed date descending, then company name
-      if (aComp && bComp) {
-        const aDate = getTaskCompletedDate(a) || a.created_at || '';
-        const bDate = getTaskCompletedDate(b) || b.created_at || '';
-        if (bDate !== aDate) return bDate.localeCompare(aDate);
-        const compA = (companyMap.get(a.company_id)?.company_name || a.title || '').trim().toLowerCase();
-        const compB = (companyMap.get(b.company_id)?.company_name || b.title || '').trim().toLowerCase();
-        return compA.localeCompare(compB);
-      }
+      // 2. Alphabetical (A-Z) by Status
+      const stA = (a.status || '').trim().toLowerCase();
+      const stB = (b.status || '').trim().toLowerCase();
+      if (stA !== stB) return stA.localeCompare(stB);
 
-      // 2. Remaining tasks sorted alphabetically (A-Z) by Company Name
+      // Tertiary tie-breaker: Alphabetical (A-Z) by Company Name
       const compA = (companyMap.get(a.company_id)?.company_name || a.title || '').trim().toLowerCase();
       const compB = (companyMap.get(b.company_id)?.company_name || b.title || '').trim().toLowerCase();
-      return compA.localeCompare(compB);
+      if (compA !== compB) return compA.localeCompare(compB);
+
+      return (a.title || '').localeCompare(b.title || '');
     });
-  }, [printFilteredTasks, companyMap, getTaskCompletedDate]);
+  }, [printFilteredTasks, companyMap]);
 
   const printPeriodLabel = useMemo(() => {
     if (printTimeframeMode === 'monthly') {
@@ -1246,20 +1263,16 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
             width: '52px',
             height: '52px',
             borderRadius: '14px',
-            background: isNz
-              ? 'linear-gradient(135deg, rgba(37, 99, 235, 0.15) 0%, rgba(30, 64, 175, 0.05) 100%)'
-              : 'linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, rgba(220, 38, 38, 0.05) 100%)',
-            border: isNz ? '1px solid rgba(37, 99, 235, 0.25)' : '1px solid rgba(239, 68, 68, 0.25)',
+            background: 'linear-gradient(135deg, rgba(37, 99, 235, 0.12) 0%, rgba(30, 64, 175, 0.04) 100%)',
+            border: '1px solid rgba(37, 99, 235, 0.2)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             fontSize: '28px',
-            boxShadow: isNz ? '0 2px 8px rgba(37, 99, 235, 0.12)' : '0 2px 8px rgba(239, 68, 68, 0.12)'
+            boxShadow: '0 2px 8px rgba(37, 99, 235, 0.08)'
           }}>
             <CountryFlag
-              code={isNz ? "NZ" : "BH"}
               name={activeCountry}
-              flagEmoji={isNz ? "🇳🇿" : "🇧🇭"}
               size={32}
             />
           </div>
@@ -1275,9 +1288,9 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
                 letterSpacing: '0.06em',
                 padding: '3px 8px',
                 borderRadius: '6px',
-                background: isNz ? 'rgba(37, 99, 235, 0.12)' : 'rgba(239, 68, 68, 0.12)',
-                color: isNz ? '#2563eb' : '#dc2626',
-                border: isNz ? '1px solid rgba(37, 99, 235, 0.2)' : '1px solid rgba(239, 68, 68, 0.2)'
+                background: 'rgba(37, 99, 235, 0.1)',
+                color: 'var(--accent, #2563eb)',
+                border: '1px solid rgba(37, 99, 235, 0.2)'
               }}>
                 {activeCountry}
               </span>
@@ -2337,7 +2350,7 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <ArrowUpDown size={14} color="var(--accent, #2563eb)" />
               <span>
-                Sorted by: <strong style={{ color: '#059669' }}>Completed Tasks First</strong> (most recently completed), then <strong style={{ color: '#d97706' }}>In Progress</strong>.
+                Sorted by: <strong style={{ color: '#059669' }}>Completed Tasks First</strong>, then <strong style={{ color: '#2563eb' }}>Alphabetical (A-Z) by Status</strong>.
               </span>
             </div>
             <div>
@@ -2355,33 +2368,33 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
               </div>
             </div>
           ) : (
-            <div className="table-container" style={{ width: '100%', overflowX: 'hidden', borderRadius: '14px', border: '1px solid var(--border)', background: 'var(--bg-primary)' }}>
-              <table style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse', fontSize: '12.5px', textAlign: 'left' }}>
+            <div className="table-container" style={{ width: '100%', overflowX: 'auto', WebkitOverflowScrolling: 'touch', borderRadius: '14px', border: '1px solid var(--border)', background: 'var(--bg-primary)' }}>
+              <table style={{ width: '100%', minWidth: '1060px', tableLayout: 'fixed', borderCollapse: 'collapse', fontSize: '12.5px', textAlign: 'left' }}>
                 <thead>
                   <tr style={{ background: 'var(--bg-tertiary)', borderBottom: '1px solid var(--border)' }}>
-                    <th style={{ padding: '10px 12px', fontWeight: 750, color: 'var(--text-secondary)', width: '15%' }}>Company</th>
+                    <th style={{ padding: '10px 12px', fontWeight: 750, color: 'var(--text-secondary)', width: '14%' }}>Company</th>
                     <th style={{ padding: '10px 10px', fontWeight: 750, color: 'var(--text-secondary)', width: '11%' }}>Task Type</th>
-                    <th style={{ padding: '10px 12px', fontWeight: 750, color: 'var(--text-secondary)', width: '18%' }}>Description</th>
-                    <th style={{ padding: '10px 10px', fontWeight: 750, color: '#8b5cf6', width: '12%' }}>
+                    <th style={{ padding: '10px 12px', fontWeight: 750, color: 'var(--text-secondary)', width: '16%' }}>Description</th>
+                    <th style={{ padding: '10px 10px', fontWeight: 750, color: '#8b5cf6', width: '11%' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '5px', overflow: 'hidden' }} title="Auditor (Delegated By)">
                         <ShieldCheck size={13} style={{ flexShrink: 0 }} />
                         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Auditor</span>
                       </div>
                     </th>
-                    <th style={{ padding: '10px 10px', fontWeight: 750, color: '#0ea5e9', width: '13%' }}>
+                    <th style={{ padding: '10px 10px', fontWeight: 750, color: '#0ea5e9', width: '12%' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '5px', overflow: 'hidden' }} title="Assigned Partner (Executed By)">
                         <Users size={13} style={{ flexShrink: 0 }} />
                         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Assigned Partner</span>
                       </div>
                     </th>
-                    <th style={{ padding: '10px 8px', fontWeight: 750, color: 'var(--text-secondary)', width: '9%' }}>Due Date</th>
-                    <th style={{ padding: '10px 10px', fontWeight: 750, color: '#059669', width: '10%' }}>
+                    <th style={{ padding: '10px 8px', fontWeight: 750, color: 'var(--text-secondary)', width: '8%' }}>Due Date</th>
+                    <th style={{ padding: '10px 10px', fontWeight: 750, color: '#059669', width: '11%' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '4px', overflow: 'hidden' }}>
                         <Clock size={13} style={{ flexShrink: 0 }} />
                         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Time Taken</span>
                       </div>
                     </th>
-                    <th style={{ padding: '10px 12px', fontWeight: 750, color: 'var(--text-secondary)', width: '12%', textAlign: 'center' }}>Status</th>
+                    <th style={{ padding: '10px 10px', fontWeight: 750, color: 'var(--text-secondary)', width: '17%', textAlign: 'center' }}>Status</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -2715,25 +2728,47 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
                         </td>
 
                         {/* Status */}
-                        <td style={{ padding: '10px 12px', textAlign: 'center', overflow: 'hidden' }}>
-                          <span style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '5px',
-                            fontSize: '11px',
-                            fontWeight: 700,
-                            padding: '3px 9px',
-                            borderRadius: '10px',
-                            background: statusStyle.bg,
-                            color: statusStyle.text,
-                            border: `1px solid ${statusStyle.border}`,
-                            whiteSpace: 'nowrap',
-                            maxWidth: '100%',
-                            boxSizing: 'border-box'
-                          }}>
-                            <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: statusStyle.dot, flexShrink: 0 }} />
-                            <span>{task.status || 'Pending'}</span>
-                          </span>
+                        <td
+                          style={{
+                            padding: '8px 10px',
+                            textAlign: 'center',
+                            verticalAlign: 'middle',
+                            overflow: 'hidden'
+                          }}
+                          title={task.status || 'Pending'}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'center', width: '100%', minWidth: 0 }}>
+                            <span
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '5px',
+                                fontSize: '11px',
+                                fontWeight: 700,
+                                padding: '3px 8px',
+                                borderRadius: '8px',
+                                background: statusStyle.bg,
+                                color: statusStyle.text,
+                                border: `1px solid ${statusStyle.border}`,
+                                maxWidth: '100%',
+                                minWidth: 0,
+                                boxSizing: 'border-box'
+                              }}
+                            >
+                              <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: statusStyle.dot, flexShrink: 0 }} />
+                              <span
+                                style={{
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap',
+                                  minWidth: 0,
+                                  display: 'inline-block'
+                                }}
+                              >
+                                {task.status || 'Pending'}
+                              </span>
+                            </span>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -2804,7 +2839,7 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
                   </span>
                 </div>
                 <p style={{ margin: '3px 0 0', fontSize: '12.5px', color: 'var(--text-secondary)' }}>
-                  Configure your filters below. Completed tasks appear first, remaining tasks sorted alphabetically (A-Z).
+                  Configure your filters below. Completed tasks appear first, remaining tasks sorted alphabetically (A-Z) by Status.
                 </p>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -3208,7 +3243,7 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
               }}>
                 <ArrowUpDown size={13} color="var(--accent)" />
                 <span>
-                  <strong>Print Sorting Rule Applied:</strong> 1. Completed tasks appear first &bull; 2. Remaining tasks sorted alphabetically (A-Z) by Company Name.
+                  <strong>Print Sorting Rule Applied:</strong> 1. Completed tasks appear first &bull; 2. Remaining tasks sorted alphabetically (A-Z) by Status.
                 </span>
               </div>
             </div>
@@ -3782,7 +3817,7 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
                       Task Details & Timelines &bull; {printRecipient || 'Finex'}
                     </h2>
                     <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
-                      Reporting Period: {printPeriodLabel} &bull; Scope: {printSortedTasks.length} Tasks &bull; Completed Tasks First, then Alphabetical (A-Z)
+                      Reporting Period: {printPeriodLabel} &bull; Scope: {printSortedTasks.length} Tasks &bull; Completed Tasks First, then Alphabetical (A-Z) by Status
                     </div>
                   </div>
                   <div style={{ textAlign: 'right', fontSize: '10.5px', color: '#64748b' }}>

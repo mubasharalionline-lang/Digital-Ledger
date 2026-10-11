@@ -207,7 +207,7 @@ export default function BahrainCompanies() {
               style={{ padding: '10px 14px 10px 36px', border: '1.5px solid #e2e8f0', borderRadius: '12px', fontSize: '13px', background: '#ffffff', color: '#334155', outline: 'none', transition: 'all 0.2s', width: '220px', fontWeight: 500 }}
             />
           </div>
-          {isAdmin(getSession().user) && (
+          {(isAdmin(getSession().user) || getSession().user?.permissions?.can_edit_companies) && (
             <button onClick={() => setShowModal(true)} style={{
               display: 'flex', alignItems: 'center', gap: '8px',
               padding: '10px 22px', background: 'linear-gradient(135deg, #3b82f6, #2563eb)', color: '#fff',

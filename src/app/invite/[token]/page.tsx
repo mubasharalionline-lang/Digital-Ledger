@@ -382,16 +382,23 @@ export default function InviteSignupPage({ params }: { params: Promise<{ token: 
                 Pre-configured Access
               </div>
               <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                {invite.permissions?.can_update_status && (
-                  <span style={permBadge}>✓ Update Status</span>
-                )}
-                {invite.permissions?.can_view_companies && (
-                  <span style={permBadge}>✓ View Companies</span>
-                )}
+                {invite.permissions?.can_update_status && <span style={permBadge}>✓ Update Status</span>}
+                {invite.permissions?.can_view_companies && <span style={permBadge}>✓ View Companies</span>}
+                {invite.permissions?.can_create_tasks && <span style={permBadge}>✓ Create Tasks</span>}
+                {invite.permissions?.can_delete_tasks && <span style={permBadge}>✓ Delete Tasks</span>}
+                {invite.permissions?.can_view_all_tasks && <span style={permBadge}>✓ All Tasks</span>}
+                {invite.permissions?.can_view_reports && <span style={permBadge}>✓ Reports</span>}
+                {invite.permissions?.can_export_data && <span style={permBadge}>✓ Export Excel</span>}
+                {invite.permissions?.can_manage_daily_tasks && <span style={permBadge}>✓ Daily Tasks</span>}
+                {invite.permissions?.can_edit_companies && <span style={permBadge}>✓ Edit Companies</span>}
+                {invite.permissions?.can_view_task_types && <span style={permBadge}>✓ Task Types</span>}
+                {invite.permissions?.can_view_edits && <span style={permBadge}>✓ Audit Edits</span>}
                 {invite.permissions?.auditor_access?.length > 0 && (
                   <span style={permBadge}>✓ {invite.permissions.auditor_access.length} Auditor(s)</span>
                 )}
                 {!invite.permissions?.can_update_status && !invite.permissions?.can_view_companies &&
+                 !invite.permissions?.can_create_tasks && !invite.permissions?.can_view_all_tasks &&
+                 !invite.permissions?.can_view_reports &&
                  (!invite.permissions?.auditor_access || invite.permissions.auditor_access.length === 0) && (
                   <span style={{ ...permBadge, background: '#fef3c7', color: '#92400e' }}>Default Access</span>
                 )}

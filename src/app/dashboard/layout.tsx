@@ -10,7 +10,7 @@ import {
   LayoutGrid, Landmark, CheckCircle2, CalendarCheck2, Boxes,
   Contact2, History, SlidersHorizontal, LogOut,
   ChevronLeft, ChevronRight, Menu, ChevronDown,
-  Plus, X, Loader2, Globe, Activity, BarChart3
+  Plus, X, Loader2, Globe, BarChart3
 } from 'lucide-react';
 import CountryFlag from '@/components/CountryFlag';
 import { initTheme } from '@/lib/theme';
@@ -65,6 +65,20 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     setUser(u);
     setCountry(c || (u ? u.country : null) || null);
     loadCountries();
+
+    // Silently refresh permissions from database to reflect any admin edits immediately
+    supabase
+      .from('users')
+      .select('id, username, role, country, permissions')
+      .eq('id', u.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data && data.permissions) {
+          const updatedUser: User = { ...u, permissions: data.permissions, role: data.role || u.role };
+          setUser(updatedUser);
+          setSession(updatedUser, c || updatedUser.country || 'Bahrain');
+        }
+      });
 
     // Listen for cross-tab session changes
     const handleStorageChange = (e: StorageEvent) => {
@@ -162,31 +176,26 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const currentCountryData = countries.find(c => c.name === country || c.code === country);
   const terms = useMemo(() => getTerminology(country), [country]);
 
-  // Unified nav — Reports is only visible for New Zealand
+  // Granular navigation permissions
   const navItems: NavItem[] = useMemo(() => {
-    const canViewCompanies = user?.permissions?.can_view_companies === true;
-    const activeCountry = country || getDataCountry() || user?.country || '';
-    const isNz =
-      activeCountry === 'New Zealand' ||
-      activeCountry === 'NZ' ||
-      activeCountry.toLowerCase() === 'new zealand' ||
-      activeCountry.toLowerCase() === 'nz' ||
-      currentCountryData?.code?.toUpperCase() === 'NZ' ||
-      currentCountryData?.name?.toLowerCase() === 'new zealand';
+    const isAdminUser = isAdmin(user);
+    const canViewCompanies = isAdminUser || user?.permissions?.can_view_companies === true;
+    const canViewReports = isAdminUser || user?.permissions?.can_view_reports === true;
+    const canViewTaskTypes = isAdminUser || user?.permissions?.can_view_task_types === true;
+    const canViewEdits = isAdminUser || user?.permissions?.can_view_edits === true;
 
     const items: NavItem[] = [
       { label: 'Dashboard', href: '/dashboard', icon: <LayoutGrid size={20} /> },
-      { label: 'Partner Workload', href: '/dashboard/partner-workload', icon: <Activity size={20} />, adminOnly: true },
       { label: 'Companies', href: '/dashboard/companies', icon: <Landmark size={20} />, adminOnly: !canViewCompanies },
       { label: 'Tasks', href: '/dashboard/tasks', icon: <CheckCircle2 size={20} /> },
-      { label: 'Task Types', href: '/dashboard/task-types', icon: <Boxes size={20} />, adminOnly: true, isSectionHeader: true },
+      { label: 'Task Types', href: '/dashboard/task-types', icon: <Boxes size={20} />, adminOnly: !canViewTaskTypes, isSectionHeader: true },
       { label: 'Daily Tasks', href: '/dashboard/daily-tasks', icon: <CalendarCheck2 size={20} /> },
-      { label: 'Reports', href: '/dashboard/reports', icon: <BarChart3 size={20} />, adminOnly: true },
+      { label: 'Reports', href: '/dashboard/reports', icon: <BarChart3 size={20} />, adminOnly: !canViewReports },
     ];
 
     items.push(
       { label: terms.staffSingular + 's', href: '/dashboard/staff', icon: <Contact2 size={20} />, adminOnly: true },
-      { label: 'Edits', href: '/dashboard/edits', icon: <History size={20} />, adminOnly: true },
+      { label: 'Edits', href: '/dashboard/edits', icon: <History size={20} />, adminOnly: !canViewEdits },
       { label: 'Settings', href: '/dashboard/settings', icon: <SlidersHorizontal size={20} />, adminOnly: true },
     );
 

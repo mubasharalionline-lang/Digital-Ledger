@@ -9,6 +9,22 @@ export type UserRole = string;
 export type TaskStatus = string;
 export type TaskPriority = string;
 
+export interface UserPermissions {
+  can_update_status?: boolean;
+  can_view_companies?: boolean;
+  can_create_tasks?: boolean;
+  can_delete_tasks?: boolean;
+  can_view_all_tasks?: boolean;
+  can_view_reports?: boolean;
+  can_export_data?: boolean;
+  can_manage_daily_tasks?: boolean;
+  can_edit_companies?: boolean;
+  can_view_task_types?: boolean;
+  can_view_edits?: boolean;
+  can_message?: boolean;
+  auditor_access?: string[];
+}
+
 export interface User {
   id: string;
   username: string;
@@ -18,12 +34,7 @@ export interface User {
   email?: string;
   jurisdiction?: string;
   access_level?: string;
-  permissions?: {
-    can_update_status: boolean;
-    can_view_companies: boolean;
-    can_message?: boolean;
-    auditor_access?: string[];
-  };
+  permissions?: UserPermissions;
   created_at: string;
 }
 

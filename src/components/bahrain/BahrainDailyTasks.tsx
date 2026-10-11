@@ -296,7 +296,7 @@ export default function BahrainDailyTasks() {
   }
 
   async function handleAssign(taskId: string, assignValue: string) {
-    if (!isAdminUser) return;
+    if (!isAdminUser && !currentUser?.permissions?.can_manage_daily_tasks) return;
     try {
       const oldTask = tasks.find(t => t.id === taskId);
       const oldAssignee = oldTask?.assigned_to || '';
@@ -663,7 +663,7 @@ export default function BahrainDailyTasks() {
           <h2 style={{ color: '#ffffff', fontSize: '24px', fontWeight: 700, margin: 0, letterSpacing: '-0.5px' }}>Daily Tasks</h2>
           <p style={{ color: '#c4b5fd', fontSize: '14px', margin: '6px 0 0 0' }}>General day-to-day work tasks — not linked to any company</p>
         </div>
-        {isAdminUser && (
+        {(isAdminUser || currentUser?.permissions?.can_manage_daily_tasks) && (
           <button onClick={() => { setEditingTaskId(null); setNewTask({ title: '', priority: 'Medium', deadline: '', description: '', assigned_to: '', assigned_partners: [], repeat_daily: false, repeat_monthly: false, status: '' }); setShowTaskModal(true); }}
             style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 24px', background: '#ffffff', color: '#4c1d95', border: 'none', borderRadius: '12px', cursor: 'pointer', fontWeight: 600, fontSize: '14px', boxShadow: '0 4px 14px rgba(0,0,0,0.15)', transition: 'all 0.2s ease', whiteSpace: 'nowrap' }}
             onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 6px 20px rgba(0,0,0,0.2)'; }}
@@ -1049,7 +1049,7 @@ export default function BahrainDailyTasks() {
                         <Eye size={14} color="#3b82f6" /> View Details
                       </button>
 
-                      {isAdminUser && (<>
+                      {(isAdminUser || currentUser?.permissions?.can_manage_daily_tasks) && (<>
                         <button onClick={() => { 
                           setEditingTaskId(task.id); 
                           setNewTask({ title: task.title, priority: task.priority, deadline: task.deadline || '', description: task.description || '', assigned_to: task.assigned_to || '', assigned_partners: task.assigned_partners || [], repeat_daily: task.repeat_daily || false, repeat_monthly: task.repeat_monthly || false, status: task.status || '' }); 

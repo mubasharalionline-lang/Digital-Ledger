@@ -61,7 +61,7 @@ export default function EditsPage() {
 
   useEffect(() => {
     const { user } = getSession();
-    if (!user || !isAdmin(user)) {
+    if (!user || (!isAdmin(user) && !user.permissions?.can_view_edits)) {
       router.push('/dashboard');
       return;
     }
@@ -100,12 +100,35 @@ export default function EditsPage() {
 
   async function handleAdd() {
     if (!newName.trim()) return;
+    const cleanName = newName.trim();
+    
+    // Prevent duplicate entries case-insensitively
+    if (activeTab === 'statuses') {
+      const exists = statuses.some(s => s.name.trim().toLowerCase() === cleanName.toLowerCase());
+      if (exists) {
+        alert(`Status "${cleanName}" already exists!`);
+        return;
+      }
+    } else if (activeTab === 'roles') {
+      const exists = roles.some(r => r.name.trim().toLowerCase() === cleanName.toLowerCase());
+      if (exists) {
+        alert(`Role "${cleanName}" already exists!`);
+        return;
+      }
+    } else if (activeTab === 'auditors') {
+      const exists = auditors.some(a => a.name.trim().toLowerCase() === cleanName.toLowerCase());
+      if (exists) {
+        alert(`Auditor "${cleanName}" already exists!`);
+        return;
+      }
+    }
+
     setSavingAction(true);
     const country = getDataCountry();
     const table = activeTab === 'statuses' ? 'statuses' : activeTab === 'roles' ? 'roles' : 'auditors';
     
     const insertData: any = {
-      name: newName.trim(),
+      name: cleanName,
       country: country || null
     };
     
