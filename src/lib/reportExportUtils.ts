@@ -35,7 +35,7 @@ function resolveTask(task: Task, ctx: ExportCtx) {
     'Task ID': task.id.slice(0, 8), 'Company': company?.company_name || 'Unknown',
     'Task Type': ttNames || '—', 'Description': task.description || '',
     'Priority': task.priority, 'Status': task.status, 'Due Date': task.deadline ? formatDate(task.deadline) : '',
-    'Time Taken': task.time_taken || '—',
+    'Time Taken': task.time_taken ? formatTimeToHours(task.time_taken) : '—',
     'Assigned To': assigned, 'Auditor': auditor,
     'Created': task.created_at ? formatDate(task.created_at) : '',
     'Daily': task.is_daily ? 'Yes' : 'No',
@@ -541,6 +541,19 @@ export function parseManualTimeToHours(timeStr?: string | null): number | null {
   return matched ? totalHours : null;
 }
 
+export function formatHoursDuration(hours: number): string {
+  if (isNaN(hours) || hours < 0) return '—';
+  const num = Number(hours.toFixed(2));
+  return `${num} ${num === 1 ? 'Hour' : 'Hours'}`;
+}
+
+export function formatTimeToHours(timeStr?: string | null): string {
+  if (!timeStr || !timeStr.trim() || timeStr.trim() === '—' || timeStr.trim() === '-') return '—';
+  const hours = parseManualTimeToHours(timeStr);
+  if (hours === null || isNaN(hours)) return timeStr.trim();
+  return formatHoursDuration(hours);
+}
+
 export async function exportComprehensiveReportExcel(
   taskList: Task[],
   ctx: ExportCtx,
@@ -593,7 +606,7 @@ export async function exportComprehensiveReportExcel(
       'Assigned Partner(s)': assigned,
       'Priority': task.priority || 'Medium',
       'Due Date': task.deadline ? formatDate(task.deadline) : '—',
-      'Time Taken': task.time_taken || '—',
+      'Time Taken': task.time_taken ? formatTimeToHours(task.time_taken) : '—',
       'Status': task.status || 'Pending',
       'Created Date': task.created_at ? formatDate(task.created_at) : '',
     };

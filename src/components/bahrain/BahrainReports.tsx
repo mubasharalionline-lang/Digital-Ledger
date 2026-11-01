@@ -11,6 +11,8 @@ import {
   isTaskCompleted,
   getActivePartnerIds,
   parseManualTimeToHours,
+  formatHoursDuration,
+  formatTimeToHours,
   AuditorSummaryRow,
   NzPartnerSummaryRow
 } from '@/lib/reportExportUtils';
@@ -1151,20 +1153,7 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
     let totalHoursRaw = 0;
     if (tasksWithManualTime.length > 0) {
       totalHoursRaw = tasksWithManualTime.reduce((acc, cur) => acc + cur.hours, 0);
-      const days = Math.floor(totalHoursRaw / 24);
-      const remainingHours = Number((totalHoursRaw % 24).toFixed(1));
-
-      if (days > 0) {
-        const remainingHoursStr = remainingHours > 0
-          ? ` ${remainingHours % 1 === 0 ? remainingHours.toFixed(0) : remainingHours.toFixed(1)} ${remainingHours === 1 ? 'Hour' : 'Hours'}`
-          : '';
-        totalTimeTakenFormatted = `${days} ${days === 1 ? 'Day' : 'Days'}${remainingHoursStr}`;
-      } else if (totalHoursRaw >= 1) {
-        totalTimeTakenFormatted = `${totalHoursRaw % 1 === 0 ? totalHoursRaw.toFixed(0) : totalHoursRaw.toFixed(1)} ${totalHoursRaw === 1 ? 'Hour' : 'Hours'}`;
-      } else {
-        const mins = Math.round(totalHoursRaw * 60);
-        totalTimeTakenFormatted = `${mins} ${mins === 1 ? 'Min' : 'Mins'}`;
-      }
+      totalTimeTakenFormatted = formatHoursDuration(totalHoursRaw);
     }
 
     const activePartners = new Set<string>();
@@ -2689,7 +2678,7 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
                                 title={`Click to edit: ${task.time_taken}`}
                               >
                                 <Clock size={11} color="#059669" style={{ flexShrink: 0 }} />
-                                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{task.time_taken}</span>
+                                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{formatTimeToHours(task.time_taken)}</span>
                               </span>
                               <button
                                 type="button"
@@ -3418,7 +3407,7 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
                             </span>
                             {task.time_taken && (
                               <span style={{ fontSize: '10.5px', fontWeight: 650, color: '#059669', background: '#dcfce7', padding: '1px 6px', borderRadius: '4px', whiteSpace: 'nowrap' }}>
-                                {task.time_taken}
+                                {formatTimeToHours(task.time_taken)}
                               </span>
                             )}
                             <span style={{ fontSize: '10.5px', color: '#64748b', whiteSpace: 'nowrap' }}>({task.status || 'Pending'})</span>
@@ -3755,7 +3744,7 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
                   {/* Total Time Taken Card (replaces Avg Time Taken) */}
                   <div
                     title={printExecutiveStats.manualTimeCount > 0
-                      ? `Total Time Taken: ${printExecutiveStats.totalHoursRaw % 1 === 0 ? printExecutiveStats.totalHoursRaw.toFixed(0) : printExecutiveStats.totalHoursRaw.toFixed(1)} Hours across ${printExecutiveStats.manualTimeCount} task${printExecutiveStats.manualTimeCount === 1 ? '' : 's'}`
+                      ? `Total Time Taken: ${printExecutiveStats.totalTimeTakenFormatted} across ${printExecutiveStats.manualTimeCount} task${printExecutiveStats.manualTimeCount === 1 ? '' : 's'}`
                       : 'No manual time taken entries logged'}
                     style={{
                       background: 'linear-gradient(180deg, #ffffff 0%, #eff6ff 100%)',
@@ -3813,7 +3802,7 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
                       textOverflow: 'ellipsis'
                     }}>
                       {printExecutiveStats.manualTimeCount > 0
-                        ? `${printExecutiveStats.totalHoursRaw % 1 === 0 ? printExecutiveStats.totalHoursRaw.toFixed(0) : printExecutiveStats.totalHoursRaw.toFixed(1)} Hours (${printExecutiveStats.manualTimeCount} Logged)`
+                        ? `${printExecutiveStats.totalTimeTakenFormatted} (${printExecutiveStats.manualTimeCount} Logged)`
                         : 'Manual Entries'}
                     </div>
                   </div>
@@ -4223,7 +4212,7 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
                                 <td style={{ padding: '5px 4px', textAlign: 'center', fontSize: '10px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                   {task.time_taken ? (
                                     <span
-                                      title={task.time_taken}
+                                      title={formatTimeToHours(task.time_taken)}
                                       style={{
                                         display: 'inline-block',
                                         maxWidth: '100%',
@@ -4235,7 +4224,7 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
                                         verticalAlign: 'middle'
                                       }}
                                     >
-                                      {task.time_taken}
+                                      {formatTimeToHours(task.time_taken)}
                                     </span>
                                   ) : (
                                     <span style={{ color: '#94a3b8' }}>—</span>
