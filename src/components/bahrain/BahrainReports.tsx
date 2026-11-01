@@ -35,6 +35,7 @@ import {
   FileText,
   Download,
   Eye,
+  EyeOff,
   ShieldCheck,
   Clock,
   ArrowUpDown,
@@ -207,7 +208,7 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [editingTimeValue, setEditingTimeValue] = useState<string>('');
   const [isSavingTime, setIsSavingTime] = useState<boolean>(false);
-  const [timeToast, setTimeToast] = useState<{ message: string; type: 'success' | 'warning' | 'error' } | null>(null);
+  const [timeToast, setTimeToast] = useState<{ message: string; type: 'success' | 'warning' | 'error' | 'info' } | null>(null);
 
   // Manual Time Taken handlers
   const handleStartTimeEdit = (task: Task) => {
@@ -841,6 +842,10 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
   const [printStatus, setPrintStatus] = useState<string>('all');
   const [printRecipient, setPrintRecipient] = useState<string>('Finex');
 
+  // Hidden Tasks in Report Print/PDF (temporary in-memory exclusion for current print session)
+  const [hiddenTaskIds, setHiddenTaskIds] = useState<Set<string>>(new Set());
+  const [showHiddenList, setShowHiddenList] = useState<boolean>(false);
+
   // Print Columns Selection State (persisted to localStorage)
   const [selectedPrintColumns, setSelectedPrintColumns] = useState<Record<PrintColumnId, boolean>>(() => {
     if (typeof window !== 'undefined') {
@@ -919,6 +924,8 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
   }, [selectedPrintColumns]);
 
   const openPrintModal = () => {
+    setHiddenTaskIds(new Set());
+    setShowHiddenList(false);
     setPrintTimeframeMode(timeframeMode);
     setPrintYear(selectedYear);
     setPrintMonth(selectedMonth);
@@ -1065,6 +1072,16 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
     });
   }, [printFilteredTasks, companyMap]);
 
+  // Filter out any tasks the user chose to hide from the current printed/PDF report
+  const printIncludedTasks = useMemo(() => {
+    if (hiddenTaskIds.size === 0) return printSortedTasks;
+    return printSortedTasks.filter(t => !hiddenTaskIds.has(t.id));
+  }, [printSortedTasks, hiddenTaskIds]);
+
+  const hiddenInCurrentFilterCount = useMemo(() => {
+    return printSortedTasks.filter(t => hiddenTaskIds.has(t.id)).length;
+  }, [printSortedTasks, hiddenTaskIds]);
+
   const printPeriodLabel = useMemo(() => {
     if (printTimeframeMode === 'monthly') {
       return `${MONTH_NAMES[printMonth]} ${printYear}`;
@@ -1075,7 +1092,7 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
     return `${formatDate(printRangeStart)} – ${formatDate(printRangeEnd)}`;
   }, [printTimeframeMode, printMonth, printYear, printRangeStart, printRangeEnd]);
 
-  // Task Types Breakdown & Counts for Page 1 of the Printed/PDF Report
+  // Task Types Breakdown & Counts for Page 1 of the Printed/PDF Report (only included tasks)
   const printTaskTypeStats = useMemo(() => {
     const map: Record<string, {
       id: string;
@@ -1085,7 +1102,7 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
       pending: number;
     }> = {};
 
-    printSortedTasks.forEach(task => {
+    printIncludedTasks.forEach(task => {
       const isComp = isTaskCompleted(task.status);
       const ttIds = task.task_type_ids?.length
         ? task.task_type_ids
@@ -1114,39 +1131,44 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
     });
 
     return Object.values(map).sort((a, b) => b.total - a.total || b.completed - a.completed);
-  }, [printSortedTasks, taskTypes]);
+  }, [printIncludedTasks, taskTypes]);
 
   // Executive Overview Summary for Page 1 of the Printed/PDF Report
   const printExecutiveStats = useMemo(() => {
-    const total = printSortedTasks.length;
-    const completedTasks = printSortedTasks.filter(t => isTaskCompleted(t.status));
+    const total = printIncludedTasks.length;
+    const completedTasks = printIncludedTasks.filter(t => isTaskCompleted(t.status));
     const completed = completedTasks.length;
     const pending = total - completed;
     const completionRate = total > 0 ? ((completed / total) * 100).toFixed(1) : '0';
     const pendingRate = total > 0 ? ((pending / total) * 100).toFixed(1) : '0';
 
-    // Calculate Average Time Taken across tasks with manually entered Time Taken
-    const tasksWithManualTime = printSortedTasks
+    // Calculate Total Time Taken across tasks included in report with manually entered Time Taken
+    const tasksWithManualTime = printIncludedTasks
       .map(t => ({ task: t, hours: parseManualTimeToHours(t.time_taken) }))
       .filter((r): r is { task: Task; hours: number } => r.hours !== null && r.hours > 0);
 
-    let avgTimeTakenFormatted = '—';
+    let totalTimeTakenFormatted = '—';
+    let totalHoursRaw = 0;
     if (tasksWithManualTime.length > 0) {
-      const avgHours = tasksWithManualTime.reduce((acc, cur) => acc + cur.hours, 0) / tasksWithManualTime.length;
-      const days = Math.floor(avgHours / 24);
-      const remainingHours = Math.round(avgHours % 24);
+      totalHoursRaw = tasksWithManualTime.reduce((acc, cur) => acc + cur.hours, 0);
+      const days = Math.floor(totalHoursRaw / 24);
+      const remainingHours = Number((totalHoursRaw % 24).toFixed(1));
+
       if (days > 0) {
-        avgTimeTakenFormatted = `${days} day${days === 1 ? '' : 's'}${remainingHours > 0 ? ` ${remainingHours} hr${remainingHours === 1 ? '' : 's'}` : ''}`;
-      } else if (avgHours >= 1) {
-        avgTimeTakenFormatted = `${avgHours % 1 === 0 ? avgHours.toFixed(0) : avgHours.toFixed(1)} hrs`;
+        const remainingHoursStr = remainingHours > 0
+          ? ` ${remainingHours % 1 === 0 ? remainingHours.toFixed(0) : remainingHours.toFixed(1)} ${remainingHours === 1 ? 'Hour' : 'Hours'}`
+          : '';
+        totalTimeTakenFormatted = `${days} ${days === 1 ? 'Day' : 'Days'}${remainingHoursStr}`;
+      } else if (totalHoursRaw >= 1) {
+        totalTimeTakenFormatted = `${totalHoursRaw % 1 === 0 ? totalHoursRaw.toFixed(0) : totalHoursRaw.toFixed(1)} ${totalHoursRaw === 1 ? 'Hour' : 'Hours'}`;
       } else {
-        const mins = Math.round(avgHours * 60);
-        avgTimeTakenFormatted = `${mins} min${mins === 1 ? '' : 's'}`;
+        const mins = Math.round(totalHoursRaw * 60);
+        totalTimeTakenFormatted = `${mins} ${mins === 1 ? 'Min' : 'Mins'}`;
       }
     }
 
     const activePartners = new Set<string>();
-    printSortedTasks.forEach(t => {
+    printIncludedTasks.forEach(t => {
       getActivePartnerIds(t).forEach(id => {
         if (partnerMap.has(id)) activePartners.add(id);
       });
@@ -1158,11 +1180,12 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
       pending,
       completionRate,
       pendingRate,
-      avgTimeTakenFormatted,
+      totalTimeTakenFormatted,
+      totalHoursRaw,
       manualTimeCount: tasksWithManualTime.length,
       activePartnersCount: activePartners.size
     };
-  }, [printSortedTasks, partnerMap]);
+  }, [printIncludedTasks, partnerMap]);
 
   // Date Range Presets
   const applyDatePreset = (preset: 'thisMonth' | 'lastMonth' | 'thisQuarter' | 'last30Days' | 'ytd') => {
@@ -3086,8 +3109,23 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
                   </select>
                 </div>
 
-                <div style={{ marginLeft: 'auto', fontSize: '12.5px', color: '#059669', fontWeight: 700 }}>
-                  ✓ Matching Tasks: {printSortedTasks.length}
+                <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12.5px' }}>
+                  <span style={{ color: '#059669', fontWeight: 750 }}>
+                    ✓ Included in Report: {printIncludedTasks.length}
+                  </span>
+                  {hiddenInCurrentFilterCount > 0 && (
+                    <span style={{
+                      color: '#d97706',
+                      fontWeight: 750,
+                      fontSize: '11px',
+                      background: '#fef3c7',
+                      border: '1px solid #fde68a',
+                      padding: '2px 8px',
+                      borderRadius: '10px'
+                    }}>
+                      {hiddenInCurrentFilterCount} hidden
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -3247,6 +3285,180 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
                 </span>
               </div>
             </div>
+
+            {/* Hidden Tasks Alert & Management Banner (print-hide) */}
+            {hiddenInCurrentFilterCount > 0 && (
+              <div className="print-hide" style={{
+                background: 'linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%)',
+                border: '1.5px solid #fde68a',
+                borderRadius: '12px',
+                padding: '12px 16px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '10px',
+                boxShadow: '0 2px 6px rgba(217, 119, 6, 0.08)'
+              }}>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '12px',
+                  flexWrap: 'wrap'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div style={{
+                      width: '30px',
+                      height: '30px',
+                      borderRadius: '8px',
+                      background: '#fef3c7',
+                      border: '1px solid #fde68a',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#b45309'
+                    }}>
+                      <EyeOff size={16} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '13px', fontWeight: 750, color: '#92400e' }}>
+                        {hiddenInCurrentFilterCount} {hiddenInCurrentFilterCount === 1 ? 'task is' : 'tasks are'} currently hidden from this report
+                      </div>
+                      <div style={{ fontSize: '11.5px', color: '#b45309', marginTop: '1px' }}>
+                        Hidden tasks are excluded from all totals, metrics, and the printed/PDF ledger. Database records remain untouched.
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <button
+                      type="button"
+                      onClick={() => setShowHiddenList(prev => !prev)}
+                      className="btn btn-secondary"
+                      style={{
+                        padding: '5px 12px',
+                        fontSize: '12px',
+                        fontWeight: 650,
+                        background: '#ffffff',
+                        border: '1px solid #cbd5e1',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '5px'
+                      }}
+                    >
+                      <Eye size={13} color="#2563eb" />
+                      <span>{showHiddenList ? 'Hide List' : `View / Unhide Tasks (${hiddenInCurrentFilterCount})`}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setHiddenTaskIds(new Set());
+                        setShowHiddenList(false);
+                        setTimeToast({ message: 'All hidden tasks restored to the report.', type: 'info' });
+                        setTimeout(() => setTimeToast(null), 3500);
+                      }}
+                      className="btn btn-secondary"
+                      style={{
+                        padding: '5px 12px',
+                        fontSize: '12px',
+                        fontWeight: 650,
+                        color: '#15803d',
+                        borderColor: '#86efac',
+                        background: '#f0fdf4',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '5px'
+                      }}
+                      title="Restore all hidden tasks to the report"
+                    >
+                      <RotateCcw size={13} />
+                      <span>Unhide All</span>
+                    </button>
+                  </div>
+                </div>
+
+                {showHiddenList && (
+                  <div style={{
+                    background: '#ffffff',
+                    border: '1px solid #fde68a',
+                    borderRadius: '10px',
+                    padding: '10px 12px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '6px',
+                    maxHeight: '220px',
+                    overflowY: 'auto'
+                  }}>
+                    <div style={{ fontSize: '11px', fontWeight: 700, color: '#92400e', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '2px' }}>
+                      Hidden Tasks ({hiddenInCurrentFilterCount}) — click Unhide to restore to report:
+                    </div>
+                    {printSortedTasks.filter(t => hiddenTaskIds.has(t.id)).map(task => {
+                      const comp = companyMap.get(task.company_id);
+                      return (
+                        <div
+                          key={`hidden-row-${task.id}`}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            gap: '10px',
+                            padding: '7px 10px',
+                            borderRadius: '6px',
+                            background: '#f8fafc',
+                            border: '1px solid #e2e8f0',
+                            fontSize: '11.5px'
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden' }}>
+                            <span style={{ fontWeight: 700, color: '#0f172a', whiteSpace: 'nowrap' }}>
+                              {comp?.company_name || 'No Company'}
+                            </span>
+                            <span style={{ color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {task.description || task.title || '—'}
+                            </span>
+                            {task.time_taken && (
+                              <span style={{ fontSize: '10.5px', fontWeight: 650, color: '#059669', background: '#dcfce7', padding: '1px 6px', borderRadius: '4px', whiteSpace: 'nowrap' }}>
+                                {task.time_taken}
+                              </span>
+                            )}
+                            <span style={{ fontSize: '10.5px', color: '#64748b', whiteSpace: 'nowrap' }}>({task.status || 'Pending'})</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setHiddenTaskIds(prev => {
+                                const next = new Set(prev);
+                                next.delete(task.id);
+                                return next;
+                              });
+                              setTimeToast({ message: `Restored "${comp?.company_name || 'Task'}" to report.`, type: 'info' });
+                              setTimeout(() => setTimeToast(null), 3500);
+                            }}
+                            className="btn btn-secondary"
+                            style={{
+                              padding: '3px 8px',
+                              fontSize: '11px',
+                              fontWeight: 650,
+                              color: '#2563eb',
+                              borderColor: '#bfdbfe',
+                              background: '#eff6ff',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              whiteSpace: 'nowrap',
+                              flexShrink: 0
+                            }}
+                          >
+                            <Eye size={12} />
+                            <span>Unhide</span>
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Live Generated Report Document (This content is printed) */}
             <div id="printable-report-content" style={{
@@ -3540,20 +3752,25 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
                     </div>
                   </div>
 
-                  {/* Avg Time Taken Card */}
-                  <div style={{
-                    background: 'linear-gradient(180deg, #ffffff 0%, #eff6ff 100%)',
-                    border: '2px solid #bfdbfe',
-                    borderRadius: '12px',
-                    padding: '20px 10px 18px',
-                    textAlign: 'center',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    minHeight: '140px',
-                    boxShadow: '0 2px 5px rgba(37,99,235,0.06)'
-                  }}>
+                  {/* Total Time Taken Card (replaces Avg Time Taken) */}
+                  <div
+                    title={printExecutiveStats.manualTimeCount > 0
+                      ? `Total Time Taken: ${printExecutiveStats.totalHoursRaw % 1 === 0 ? printExecutiveStats.totalHoursRaw.toFixed(0) : printExecutiveStats.totalHoursRaw.toFixed(1)} Hours across ${printExecutiveStats.manualTimeCount} task${printExecutiveStats.manualTimeCount === 1 ? '' : 's'}`
+                      : 'No manual time taken entries logged'}
+                    style={{
+                      background: 'linear-gradient(180deg, #ffffff 0%, #eff6ff 100%)',
+                      border: '2px solid #bfdbfe',
+                      borderRadius: '12px',
+                      padding: '20px 10px 18px',
+                      textAlign: 'center',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      minHeight: '140px',
+                      boxShadow: '0 2px 5px rgba(37,99,235,0.06)'
+                    }}
+                  >
                     <div style={{
                       display: 'inline-flex',
                       alignItems: 'center',
@@ -3564,29 +3781,40 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
                       textTransform: 'uppercase',
                       letterSpacing: '0.06em'
                     }}>
-                      <TrendingUp size={14} color="#2563eb" />
-                      <span>Avg Time Taken</span>
+                      <Clock size={14} color="#2563eb" />
+                      <span>Total Time Taken</span>
                     </div>
                     <div style={{
-                      fontSize: printExecutiveStats.avgTimeTakenFormatted.length > 15 ? '22px' : (printExecutiveStats.avgTimeTakenFormatted.length > 10 ? '28px' : '36px'),
+                      fontSize: printExecutiveStats.totalTimeTakenFormatted.length > 16
+                        ? '18px'
+                        : (printExecutiveStats.totalTimeTakenFormatted.length > 11 ? '22px' : '28px'),
                       fontWeight: 900,
                       color: '#2563eb',
                       lineHeight: 1.15,
                       letterSpacing: '-0.02em',
-                      margin: '6px 0 6px 0'
+                      margin: '6px 0 6px 0',
+                      wordBreak: 'normal',
+                      overflowWrap: 'break-word',
+                      maxWidth: '100%'
                     }}>
-                      {printExecutiveStats.avgTimeTakenFormatted}
+                      {printExecutiveStats.totalTimeTakenFormatted}
                     </div>
                     <div style={{
-                      fontSize: '11px',
+                      fontSize: '10.5px',
                       fontWeight: 750,
                       color: '#1d4ed8',
                       background: '#dbeafe',
                       border: '1px solid #bfdbfe',
-                      padding: '3px 10px',
-                      borderRadius: '12px'
+                      padding: '3px 8px',
+                      borderRadius: '12px',
+                      whiteSpace: 'nowrap',
+                      maxWidth: '100%',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis'
                     }}>
-                      {printExecutiveStats.manualTimeCount > 0 ? `${printExecutiveStats.manualTimeCount} Logged` : 'Manual Entries'}
+                      {printExecutiveStats.manualTimeCount > 0
+                        ? `${printExecutiveStats.totalHoursRaw % 1 === 0 ? printExecutiveStats.totalHoursRaw.toFixed(0) : printExecutiveStats.totalHoursRaw.toFixed(1)} Hours (${printExecutiveStats.manualTimeCount} Logged)`
+                        : 'Manual Entries'}
                     </div>
                   </div>
 
@@ -3739,7 +3967,7 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
                     </div>
                     <div style={{ display: 'flex', gap: '8px' }}>
                       {['Urgent', 'High', 'Medium', 'Low'].map(p => {
-                        const count = printSortedTasks.filter(t => (t.priority || 'Medium').toLowerCase() === p.toLowerCase()).length;
+                        const count = printIncludedTasks.filter(t => (t.priority || 'Medium').toLowerCase() === p.toLowerCase()).length;
                         const badge = getPriorityBadge(p);
                         return (
                           <div key={p} style={{
@@ -3817,7 +4045,7 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
                       Task Details & Timelines &bull; {printRecipient || 'Finex'}
                     </h2>
                     <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
-                      Reporting Period: {printPeriodLabel} &bull; Scope: {printSortedTasks.length} Tasks &bull; Completed Tasks First, then Alphabetical (A-Z) by Status
+                      Reporting Period: {printPeriodLabel} &bull; Scope: {printIncludedTasks.length} Tasks &bull; Completed Tasks First, then Alphabetical (A-Z) by Status
                     </div>
                   </div>
                   <div style={{ textAlign: 'right', fontSize: '10.5px', color: '#64748b' }}>
@@ -3827,9 +4055,11 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
                 </div>
 
                 {/* Printable Tasks Table with Time Taken Column */}
-                {printSortedTasks.length === 0 ? (
+                {printIncludedTasks.length === 0 ? (
                   <div style={{ textAlign: 'center', padding: '30px', color: '#64748b', fontSize: '13px' }}>
-                    No tasks matched the selected criteria for this report.
+                    {printSortedTasks.length > 0 && hiddenTaskIds.size > 0
+                      ? 'All matching tasks have been hidden from this report.'
+                      : 'No tasks matched the selected criteria for this report.'}
                   </div>
                 ) : (
                   <div style={{ width: '100%', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
@@ -3837,6 +4067,7 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
                       <thead>
                         <tr style={{ background: '#f1f5f9', borderBottom: '1.5px solid #cbd5e1', verticalAlign: 'middle' }}>
                           <th className="col-index" style={{ padding: '6px 3px', width: '4.5%', textAlign: 'center', whiteSpace: 'nowrap', verticalAlign: 'middle' }} title="Serial Number">#</th>
+                          <th className="print-hide" style={{ padding: '6px 4px', width: '56px', textAlign: 'center', whiteSpace: 'nowrap', verticalAlign: 'middle', fontSize: '10px', color: '#64748b' }} title="Hide task from this printed report">Hide</th>
                           {selectedPrintColumns.company && (
                             <th style={{ padding: '6px 4px', width: printColumnWidths.company, verticalAlign: 'middle' }}>Company Name</th>
                           )}
@@ -3870,7 +4101,7 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
                         </tr>
                       </thead>
                       <tbody>
-                        {printSortedTasks.map((task, idx) => {
+                        {printIncludedTasks.map((task, idx) => {
                           const comp = companyMap.get(task.company_id);
                           const ttIds = task.task_type_ids?.length ? task.task_type_ids : (task.task_type_id ? task.task_type_id.split(',').map(s => s.trim()) : []);
                           const ttNames = ttIds.map(id => taskTypes.find(t => t.id === id)?.name).filter(Boolean).join(', ');
@@ -3882,6 +4113,44 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
                           return (
                             <tr key={task.id} style={{ borderBottom: '1px solid #e2e8f0', background: isComp ? '#f0fdf4' : (idx % 2 === 1 ? '#f8fafc' : '#ffffff') }}>
                               <td className="col-index" style={{ padding: '5px 3px', color: '#64748b', textAlign: 'center', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{idx + 1}</td>
+                              <td className="print-hide" style={{ padding: '4px 3px', textAlign: 'center', whiteSpace: 'nowrap', verticalAlign: 'middle' }}>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setHiddenTaskIds(prev => new Set([...Array.from(prev), task.id]));
+                                    setTimeToast({ message: `Task "${comp?.company_name || 'Task'}" hidden from current report.`, type: 'info' });
+                                    setTimeout(() => setTimeToast(null), 3500);
+                                  }}
+                                  title={`Hide "${comp?.company_name || 'task'}" from this printed report`}
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: '3px',
+                                    padding: '3px 7px',
+                                    borderRadius: '5px',
+                                    border: '1px solid #fca5a5',
+                                    background: '#fff1f2',
+                                    color: '#e11d48',
+                                    fontSize: '9.5px',
+                                    fontWeight: 700,
+                                    cursor: 'pointer',
+                                    transition: 'all 0.15s ease',
+                                    boxShadow: '0 1px 2px rgba(225, 29, 72, 0.06)'
+                                  }}
+                                  onMouseEnter={e => {
+                                    e.currentTarget.style.background = '#ffe4e6';
+                                    e.currentTarget.style.borderColor = '#f87171';
+                                  }}
+                                  onMouseLeave={e => {
+                                    e.currentTarget.style.background = '#fff1f2';
+                                    e.currentTarget.style.borderColor = '#fca5a5';
+                                  }}
+                                >
+                                  <EyeOff size={11} />
+                                  <span>Hide</span>
+                                </button>
+                              </td>
                               
                               {selectedPrintColumns.company && (
                                 <td style={{ padding: '5px 4px', fontWeight: 650, overflow: 'hidden', textOverflow: 'ellipsis', wordBreak: 'normal', overflowWrap: 'break-word', lineHeight: 1.3 }}>
@@ -4228,7 +4497,9 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
           zIndex: 9999,
           background: timeToast.type === 'error'
             ? 'linear-gradient(135deg, #7f1d1d, #991b1b)'
-            : (timeToast.type === 'warning' ? 'linear-gradient(135deg, #78350f, #92400e)' : 'linear-gradient(135deg, #0f172a, #1e293b)'),
+            : (timeToast.type === 'warning'
+              ? 'linear-gradient(135deg, #78350f, #92400e)'
+              : (timeToast.type === 'info' ? 'linear-gradient(135deg, #1e3a8a, #1e40af)' : 'linear-gradient(135deg, #0f172a, #1e293b)')),
           color: '#ffffff',
           padding: '12px 20px',
           borderRadius: '14px',
@@ -4244,13 +4515,13 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
             width: '24px',
             height: '24px',
             borderRadius: '50%',
-            background: timeToast.type === 'error' ? '#ef4444' : (timeToast.type === 'warning' ? '#f59e0b' : '#10b981'),
+            background: timeToast.type === 'error' ? '#ef4444' : (timeToast.type === 'warning' ? '#f59e0b' : (timeToast.type === 'info' ? '#3b82f6' : '#10b981')),
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             flexShrink: 0
           }}>
-            {timeToast.type === 'error' ? <AlertCircle size={14} color="#ffffff" /> : (timeToast.type === 'warning' ? <AlertCircle size={14} color="#ffffff" /> : <Check size={14} color="#ffffff" />)}
+            {timeToast.type === 'error' ? <AlertCircle size={14} color="#ffffff" /> : (timeToast.type === 'warning' ? <AlertCircle size={14} color="#ffffff" /> : (timeToast.type === 'info' ? <EyeOff size={13} color="#ffffff" /> : <Check size={14} color="#ffffff" />))}
           </div>
           <span>{timeToast.message}</span>
         </div>
