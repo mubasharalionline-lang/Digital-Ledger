@@ -473,7 +473,9 @@ export default function BahrainTasks() {
         filteredCompanyList = companyList.filter(c => 
           filteredTaskList.some(t => t.company_id === c.id)
         );
-        filteredAuditorList = audList;
+        filteredAuditorList = userAuditorAccess.length > 0 && !currentUser?.permissions?.can_view_all_tasks
+          ? audList.filter(a => userAuditorAccess.includes(a.id))
+          : audList;
       }
 
       setCompanies(filteredCompanyList);

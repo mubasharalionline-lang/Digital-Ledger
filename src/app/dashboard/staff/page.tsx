@@ -38,6 +38,8 @@ import {
   Boxes,
   History,
   CalendarCheck2,
+  ShieldCheck,
+  Eye,
 } from 'lucide-react';
 import { InvitePartnerModal, InviteManagementPanel } from '@/components/InvitePartner';
 
@@ -80,8 +82,18 @@ export default function StaffPage() {
   const [canViewEdits, setCanViewEdits] = useState(false);
   const [auditorAccess, setAuditorAccess] = useState<string[]>([]);
   const [allAuditors, setAllAuditors] = useState<any[]>([]);
-  const [showAuditorList, setShowAuditorList] = useState(false);
+  const [showAuditorList, setShowAuditorList] = useState(true);
   const [auditorSearch, setAuditorSearch] = useState('');
+  const [auditorCountryFilter, setAuditorCountryFilter] = useState<string>('all');
+  const [formMemberCountry, setFormMemberCountry] = useState<string | null>(null);
+
+  const modalAuditors = useMemo(() => {
+    return allAuditors.filter(a => {
+      const matchesCountry = auditorCountryFilter === 'all' || !a.country || a.country.toLowerCase() === auditorCountryFilter.toLowerCase();
+      const matchesSearch = !auditorSearch.trim() || a.name?.toLowerCase().includes(auditorSearch.toLowerCase().trim());
+      return matchesCountry && matchesSearch;
+    });
+  }, [allAuditors, auditorCountryFilter, auditorSearch]);
   
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
@@ -115,9 +127,7 @@ export default function StaffPage() {
       country 
         ? supabase.from('roles').select('name').eq('country', country) 
         : supabase.from('roles').select('name'),
-      country
-        ? supabase.from('auditors').select('id, name, country').eq('country', country).order('name')
-        : supabase.from('auditors').select('id, name, country').order('name')
+      supabase.from('auditors').select('id, name, country').order('name')
     ]);
 
     const users = usersRes.data || [];
@@ -325,9 +335,12 @@ export default function StaffPage() {
     setFormUsername('');
     setFormPassword('');
     setFormRole('Accountant');
+    const curCountry = getDataCountry() || null;
+    setFormMemberCountry(curCountry);
+    setAuditorCountryFilter(curCountry || 'all');
     applyPreset('standard');
     setAuditorAccess([]);
-    setShowAuditorList(false);
+    setShowAuditorList(true);
     setAuditorSearch('');
     setFormError('');
     setShowModal(true);
@@ -338,6 +351,8 @@ export default function StaffPage() {
     setFormUsername(member.username);
     setFormPassword('');
     setFormRole(member.role);
+    setFormMemberCountry(member.country || null);
+    setAuditorCountryFilter(member.country || 'all');
     setCanUpdateStatus(member.permissions?.can_update_status ?? true);
     setCanViewCompanies(member.permissions?.can_view_companies ?? false);
     setCanCreateTasks(member.permissions?.can_create_tasks ?? false);
@@ -350,7 +365,7 @@ export default function StaffPage() {
     setCanViewTaskTypes(member.permissions?.can_view_task_types ?? false);
     setCanViewEdits(member.permissions?.can_view_edits ?? false);
     setAuditorAccess(member.permissions?.auditor_access || []);
-    setShowAuditorList((member.permissions?.auditor_access || []).length > 0);
+    setShowAuditorList(true);
     setAuditorSearch('');
     setFormError('');
     setShowModal(true);
@@ -1757,51 +1772,219 @@ export default function StaffPage() {
                   </div>
                 </div>
 
-                {/* Auditor Access Collapsible Selector */}
-                <div style={{ marginTop: '12px', paddingTop: '10px', borderTop: '1px solid #e2e8f0' }}>
-                  <div
-                    onClick={() => setShowAuditorList(!showAuditorList)}
-                    style={{
-                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                      cursor: 'pointer', padding: '4px 0'
-                    }}
-                  >
-                    <span style={{ fontSize: '12.5px', fontWeight: 650, color: '#334155', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      🛡️ Auditor Access ({auditorAccess.length} selected)
-                    </span>
-                    <span style={{ fontSize: '13px', fontWeight: 700, color: '#2563eb' }}>
-                      {showAuditorList ? 'Hide' : 'Configure'}
-                    </span>
+                {/* Category 5: Auditor View Access (Kon kon se auditor view hone chahiye) */}
+                <div style={{
+                  marginTop: '16px',
+                  paddingTop: '16px',
+                  borderTop: '1.5px solid #e2e8f0'
+                }}>
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: '10px',
+                    marginBottom: '10px'
+                  }}>
+                    <div>
+                      <div style={{
+                        fontSize: '11.5px',
+                        fontWeight: 750,
+                        color: '#1e293b',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.04em',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px'
+                      }}>
+                        <Eye size={13} color="#2563eb" />
+                        <span>Auditor View Access (Kon se Auditor View Hone Chahiye)</span>
+                      </div>
+                      <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px', lineHeight: 1.4 }}>
+                        Select which auditors this partner is allowed to view. The partner will only see tasks and companies associated with the checked auditors.
+                      </div>
+                    </div>
+
+                    {/* Quick Selection Buttons */}
+                    <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const idsToAdd = (modalAuditors.length > 0 ? modalAuditors : allAuditors).map(a => a.id);
+                          setAuditorAccess(prev => Array.from(new Set([...prev, ...idsToAdd])));
+                        }}
+                        style={{
+                          fontSize: '11px',
+                          padding: '3px 9px',
+                          borderRadius: '6px',
+                          border: '1px solid #bfdbfe',
+                          background: '#eff6ff',
+                          color: '#1d4ed8',
+                          cursor: 'pointer',
+                          fontWeight: 650
+                        }}
+                        title="Select all auditors currently shown"
+                      >
+                        Select All
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (auditorCountryFilter === 'all' && !auditorSearch.trim()) {
+                            setAuditorAccess([]);
+                          } else {
+                            const idsToRemove = new Set(modalAuditors.map(a => a.id));
+                            setAuditorAccess(prev => prev.filter(id => !idsToRemove.has(id)));
+                          }
+                        }}
+                        style={{
+                          fontSize: '11px',
+                          padding: '3px 9px',
+                          borderRadius: '6px',
+                          border: '1px solid #e2e8f0',
+                          background: '#ffffff',
+                          color: '#64748b',
+                          cursor: 'pointer',
+                          fontWeight: 600
+                        }}
+                        title="Clear selections"
+                      >
+                        Clear
+                      </button>
+                    </div>
                   </div>
 
-                  {showAuditorList && (
-                    <div style={{
-                      marginTop: '8px',
-                      background: '#ffffff',
-                      borderRadius: '8px',
-                      border: '1px solid #cbd5e1',
-                      padding: '8px',
-                      maxHeight: '150px',
-                      overflowY: 'auto'
+                  {/* Status Banner */}
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '6px 10px',
+                    borderRadius: '8px',
+                    background: auditorAccess.length > 0 ? '#f0fdf4' : '#f8fafc',
+                    border: auditorAccess.length > 0 ? '1px solid #bbf7d0' : '1px solid #e2e8f0',
+                    marginBottom: '10px'
+                  }}>
+                    <span style={{
+                      fontSize: '11.5px',
+                      fontWeight: 650,
+                      color: auditorAccess.length > 0 ? '#15803d' : '#64748b',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '5px'
                     }}>
-                      {allAuditors.length === 0 ? (
-                        <div style={{ padding: '8px', fontSize: '12px', color: '#94a3b8', textAlign: 'center' }}>
-                          No auditors registered in workspace
-                        </div>
-                      ) : (
-                        allAuditors.map(auditor => {
-                          const isSelected = auditorAccess.includes(auditor.id);
+                      <ShieldCheck size={13} color={auditorAccess.length > 0 ? '#16a34a' : '#94a3b8'} />
+                      {auditorAccess.length === 0
+                        ? 'No auditors selected (Partner only sees directly assigned tasks)'
+                        : `${auditorAccess.length} Auditor${auditorAccess.length === 1 ? '' : 's'} Selected for View Access`}
+                    </span>
+                    {auditorAccess.length > 0 && (
+                      <span style={{ fontSize: '10.5px', color: '#16a34a', fontWeight: 700 }}>
+                        ✓ Active
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Country Filter Pills & Search */}
+                  {allAuditors.length > 0 && (
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: '8px',
+                      marginBottom: '8px',
+                      flexWrap: 'wrap'
+                    }}>
+                      {/* Country Filter Pills */}
+                      <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                        {['all', ...Array.from(new Set(allAuditors.map(a => a.country).filter(Boolean)))].map(c => {
+                          const isSelected = auditorCountryFilter === c;
+                          const count = c === 'all'
+                            ? allAuditors.length
+                            : allAuditors.filter(a => a.country === c).length;
                           return (
-                            <label
-                              key={auditor.id}
+                            <button
+                              key={c}
+                              type="button"
+                              onClick={() => setAuditorCountryFilter(c)}
                               style={{
-                                display: 'flex', alignItems: 'center', gap: '8px',
-                                padding: '6px 8px', borderRadius: '6px',
-                                background: isSelected ? '#eff6ff' : 'transparent',
-                                cursor: 'pointer', fontSize: '12.5px',
-                                marginBottom: '2px'
+                                fontSize: '10.5px',
+                                padding: '2px 8px',
+                                borderRadius: '12px',
+                                border: isSelected ? '1px solid #2563eb' : '1px solid #cbd5e1',
+                                background: isSelected ? '#2563eb' : '#ffffff',
+                                color: isSelected ? '#ffffff' : '#475569',
+                                cursor: 'pointer',
+                                fontWeight: isSelected ? 700 : 550,
+                                transition: 'all 0.15s ease'
                               }}
                             >
+                              {c === 'all' ? 'All' : c} ({count})
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {/* Search box if there are multiple auditors */}
+                      {allAuditors.length > 3 && (
+                        <div style={{ position: 'relative', width: '150px' }}>
+                          <Search size={11} color="#94a3b8" style={{ position: 'absolute', left: '7px', top: '50%', transform: 'translateY(-50%)' }} />
+                          <input
+                            type="text"
+                            placeholder="Search..."
+                            value={auditorSearch}
+                            onChange={e => setAuditorSearch(e.target.value)}
+                            style={{
+                              width: '100%',
+                              padding: '3px 6px 3px 22px',
+                              borderRadius: '6px',
+                              border: '1px solid #cbd5e1',
+                              fontSize: '11px',
+                              outline: 'none',
+                              color: '#0f172a',
+                              boxSizing: 'border-box'
+                            }}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Auditor Checkbox List */}
+                  <div style={{
+                    background: '#ffffff',
+                    borderRadius: '10px',
+                    border: '1.5px solid #cbd5e1',
+                    padding: '6px',
+                    maxHeight: '180px',
+                    overflowY: 'auto',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '4px'
+                  }}>
+                    {modalAuditors.length === 0 ? (
+                      <div style={{ padding: '14px', fontSize: '12px', color: '#94a3b8', textAlign: 'center' }}>
+                        No auditors match your filter
+                      </div>
+                    ) : (
+                      modalAuditors.map(auditor => {
+                        const isSelected = auditorAccess.includes(auditor.id);
+                        return (
+                          <label
+                            key={auditor.id}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              padding: '7px 10px',
+                              borderRadius: '7px',
+                              border: isSelected ? '1px solid #93c5fd' : '1px solid #e2e8f0',
+                              background: isSelected ? '#eff6ff' : '#ffffff',
+                              cursor: 'pointer',
+                              transition: 'all 0.12s ease'
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                               <input
                                 type="checkbox"
                                 checked={isSelected}
@@ -1809,14 +1992,53 @@ export default function StaffPage() {
                                   if (e.target.checked) setAuditorAccess(prev => [...prev, auditor.id]);
                                   else setAuditorAccess(prev => prev.filter(id => id !== auditor.id));
                                 }}
+                                style={{ width: '15px', height: '15px', cursor: 'pointer', accentColor: '#2563eb' }}
                               />
-                              <span style={{ fontWeight: isSelected ? 650 : 500, color: isSelected ? '#1d4ed8' : '#334155' }}>
+                              <span style={{
+                                fontSize: '12.5px',
+                                fontWeight: isSelected ? 700 : 550,
+                                color: isSelected ? '#1d4ed8' : '#0f172a'
+                              }}>
                                 {auditor.name}
                               </span>
-                            </label>
-                          );
-                        })
-                      )}
+                            </div>
+
+                            {auditor.country && (
+                              <span style={{
+                                fontSize: '10px',
+                                fontWeight: 650,
+                                color: isSelected ? '#1d4ed8' : '#64748b',
+                                background: isSelected ? '#dbeafe' : '#f1f5f9',
+                                border: isSelected ? '1px solid #bfdbfe' : '1px solid #e2e8f0',
+                                padding: '1px 6px',
+                                borderRadius: '4px'
+                              }}>
+                                {auditor.country}
+                              </span>
+                            )}
+                          </label>
+                        );
+                      })
+                    )}
+                  </div>
+
+                  {canViewAllTasks && (
+                    <div style={{
+                      marginTop: '8px',
+                      padding: '6px 10px',
+                      borderRadius: '6px',
+                      background: '#fffbeb',
+                      border: '1px solid #fef3c7',
+                      fontSize: '11px',
+                      color: '#92400e',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}>
+                      <span>⚠️</span>
+                      <span>
+                        <strong>View All Workspace Tasks</strong> is currently checked above. If you want this partner to strictly view tasks of these selected auditors only, make sure to uncheck "View All Workspace Tasks".
+                      </span>
                     </div>
                   )}
                 </div>

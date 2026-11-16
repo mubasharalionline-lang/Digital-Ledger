@@ -128,6 +128,7 @@ export default function BahrainDashboard() {
       const userAuditorAccess: string[] = u?.permissions?.auditor_access || [];
       if (!isAdminUser && u) {
         const isTaskAllowed = (t: Task) => {
+          if (u.permissions?.can_view_all_tasks) return true;
           const activePartnerIds: string[] = [];
           if (Array.isArray(t.assigned_partners)) {
             t.assigned_partners.forEach(id => {
