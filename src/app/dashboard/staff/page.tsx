@@ -84,16 +84,18 @@ export default function StaffPage() {
   const [allAuditors, setAllAuditors] = useState<any[]>([]);
   const [showAuditorList, setShowAuditorList] = useState(true);
   const [auditorSearch, setAuditorSearch] = useState('');
-  const [auditorCountryFilter, setAuditorCountryFilter] = useState<string>('all');
-  const [formMemberCountry, setFormMemberCountry] = useState<string | null>(null);
+  const [formMemberCountry, setFormMemberCountry] = useState<string>('Bahrain');
 
-  const modalAuditors = useMemo(() => {
+  // Automatically filter auditors strictly based on the partner's country
+  const partnerAuditors = useMemo(() => {
+    const partnerCountry = (formMemberCountry || getDataCountry() || 'Bahrain').trim().toLowerCase();
     return allAuditors.filter(a => {
-      const matchesCountry = auditorCountryFilter === 'all' || !a.country || a.country.toLowerCase() === auditorCountryFilter.toLowerCase();
+      const audCountry = (a.country || '').trim().toLowerCase();
+      const matchesCountry = audCountry === partnerCountry;
       const matchesSearch = !auditorSearch.trim() || a.name?.toLowerCase().includes(auditorSearch.toLowerCase().trim());
       return matchesCountry && matchesSearch;
     });
-  }, [allAuditors, auditorCountryFilter, auditorSearch]);
+  }, [allAuditors, formMemberCountry, auditorSearch]);
   
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
@@ -287,6 +289,7 @@ export default function StaffPage() {
       const updates: any = {
         username: formUsername.trim(),
         role: formRole,
+        country: formMemberCountry || effectiveCountry,
         permissions: permissionsPayload,
       };
       if (formPassword.trim()) {
@@ -307,7 +310,7 @@ export default function StaffPage() {
         username: formUsername.trim(),
         password: formPassword.trim(),
         role: formRole,
-        country: effectiveCountry,
+        country: formMemberCountry || effectiveCountry,
         permissions: permissionsPayload,
       });
       if (error) {
@@ -335,9 +338,8 @@ export default function StaffPage() {
     setFormUsername('');
     setFormPassword('');
     setFormRole('Accountant');
-    const curCountry = getDataCountry() || null;
+    const curCountry = getDataCountry() || 'Bahrain';
     setFormMemberCountry(curCountry);
-    setAuditorCountryFilter(curCountry || 'all');
     applyPreset('standard');
     setAuditorAccess([]);
     setShowAuditorList(true);
@@ -351,8 +353,7 @@ export default function StaffPage() {
     setFormUsername(member.username);
     setFormPassword('');
     setFormRole(member.role);
-    setFormMemberCountry(member.country || null);
-    setAuditorCountryFilter(member.country || 'all');
+    setFormMemberCountry(member.country || getDataCountry() || 'Bahrain');
     setCanUpdateStatus(member.permissions?.can_update_status ?? true);
     setCanViewCompanies(member.permissions?.can_view_companies ?? false);
     setCanCreateTasks(member.permissions?.can_create_tasks ?? false);
@@ -1490,7 +1491,10 @@ export default function StaffPage() {
         open={showInviteModal}
         onClose={() => setShowInviteModal(false)}
         roles={dynamicRoles}
-        auditors={allAuditors}
+        auditors={allAuditors.filter(a => {
+          const curCountry = (getDataCountry() || 'Bahrain').trim().toLowerCase();
+          return (a.country || '').trim().toLowerCase() === curCountry;
+        })}
         onCreated={() => setInviteKey(k => k + 1)}
       />
 
@@ -1584,23 +1588,57 @@ export default function StaffPage() {
                 </div>
               </div>
 
-              <div style={{ marginBottom: '18px' }}>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 650, color: '#475569', marginBottom: '5px' }}>
-                  Password {editUserId ? '(Leave blank to keep unchanged)' : '*'}
-                </label>
-                <div style={{ position: 'relative' }}>
-                  <Lock size={14} color="#94a3b8" style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
-                  <input
-                    type="password"
-                    placeholder={editUserId ? "Enter new password if changing" : "Create password"}
-                    value={formPassword}
-                    onChange={e => setFormPassword(e.target.value)}
-                    required={!editUserId}
-                    style={{
-                      width: '100%', padding: '8px 12px 8px 32px', borderRadius: '8px',
-                      border: '1.5px solid #cbd5e1', fontSize: '13px', outline: 'none', color: '#0f172a'
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '18px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 650, color: '#475569', marginBottom: '5px' }}>
+                    Password {editUserId ? '(Leave blank to keep unchanged)' : '*'}
+                  </label>
+                  <div style={{ position: 'relative' }}>
+                    <Lock size={14} color="#94a3b8" style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
+                    <input
+                      type="password"
+                      placeholder={editUserId ? "Keep unchanged" : "Create password"}
+                      value={formPassword}
+                      onChange={e => setFormPassword(e.target.value)}
+                      required={!editUserId}
+                      style={{
+                        width: '100%', padding: '8px 12px 8px 32px', borderRadius: '8px',
+                        border: '1.5px solid #cbd5e1', fontSize: '13px', outline: 'none', color: '#0f172a'
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 650, color: '#475569', marginBottom: '5px' }}>
+                    Partner Country *
+                  </label>
+                  <select
+                    value={formMemberCountry || 'Bahrain'}
+                    onChange={e => {
+                      const nextCountry = e.target.value;
+                      setFormMemberCountry(nextCountry);
+                      // Clear auditor access when country changes so only matching auditors are kept
+                      const nextCountryAuditorIds = new Set(
+                        allAuditors
+                          .filter(a => (a.country || '').trim().toLowerCase() === nextCountry.trim().toLowerCase())
+                          .map(a => a.id)
+                      );
+                      setAuditorAccess(prev => prev.filter(id => nextCountryAuditorIds.has(id)));
                     }}
-                  />
+                    style={{
+                      width: '100%', padding: '8px 12px', borderRadius: '8px',
+                      border: '1.5px solid #cbd5e1', fontSize: '13px', outline: 'none', color: '#0f172a', background: '#fff', cursor: 'pointer'
+                    }}
+                  >
+                    <option value="New Zealand">New Zealand</option>
+                    <option value="Bahrain">Bahrain</option>
+                    <option value="UAE">UAE</option>
+                    <option value="Saudi Arabia">Saudi Arabia</option>
+                    <option value="Oman">Oman</option>
+                    <option value="Kuwait">Kuwait</option>
+                    <option value="Qatar">Qatar</option>
+                  </select>
                 </div>
               </div>
 
@@ -1772,7 +1810,7 @@ export default function StaffPage() {
                   </div>
                 </div>
 
-                {/* Category 5: Auditor View Access (Kon kon se auditor view hone chahiye) */}
+                {/* Category 5: Auditor View Access (Filtered by Partner Country) */}
                 <div style={{
                   marginTop: '16px',
                   paddingTop: '16px',
@@ -1798,10 +1836,10 @@ export default function StaffPage() {
                         gap: '6px'
                       }}>
                         <Eye size={13} color="#2563eb" />
-                        <span>Auditor View Access (Kon se Auditor View Hone Chahiye)</span>
+                        <span>Auditor View Access ({formMemberCountry} Auditors Only)</span>
                       </div>
                       <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px', lineHeight: 1.4 }}>
-                        Select which auditors this partner is allowed to view. The partner will only see tasks and companies associated with the checked auditors.
+                        Select which auditors this partner can view. Only auditors belonging to {formMemberCountry} are displayed.
                       </div>
                     </div>
 
@@ -1810,7 +1848,7 @@ export default function StaffPage() {
                       <button
                         type="button"
                         onClick={() => {
-                          const idsToAdd = (modalAuditors.length > 0 ? modalAuditors : allAuditors).map(a => a.id);
+                          const idsToAdd = partnerAuditors.map(a => a.id);
                           setAuditorAccess(prev => Array.from(new Set([...prev, ...idsToAdd])));
                         }}
                         style={{
@@ -1823,19 +1861,15 @@ export default function StaffPage() {
                           cursor: 'pointer',
                           fontWeight: 650
                         }}
-                        title="Select all auditors currently shown"
+                        title={`Select all ${formMemberCountry} auditors`}
                       >
-                        Select All
+                        Select All ({partnerAuditors.length})
                       </button>
                       <button
                         type="button"
                         onClick={() => {
-                          if (auditorCountryFilter === 'all' && !auditorSearch.trim()) {
-                            setAuditorAccess([]);
-                          } else {
-                            const idsToRemove = new Set(modalAuditors.map(a => a.id));
-                            setAuditorAccess(prev => prev.filter(id => !idsToRemove.has(id)));
-                          }
+                          const idsToRemove = new Set(partnerAuditors.map(a => a.id));
+                          setAuditorAccess(prev => prev.filter(id => !idsToRemove.has(id)));
                         }}
                         style={{
                           fontSize: '11px',
@@ -1855,98 +1889,61 @@ export default function StaffPage() {
                   </div>
 
                   {/* Status Banner */}
-                  <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    padding: '6px 10px',
-                    borderRadius: '8px',
-                    background: auditorAccess.length > 0 ? '#f0fdf4' : '#f8fafc',
-                    border: auditorAccess.length > 0 ? '1px solid #bbf7d0' : '1px solid #e2e8f0',
-                    marginBottom: '10px'
-                  }}>
-                    <span style={{
-                      fontSize: '11.5px',
-                      fontWeight: 650,
-                      color: auditorAccess.length > 0 ? '#15803d' : '#64748b',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '5px'
-                    }}>
-                      <ShieldCheck size={13} color={auditorAccess.length > 0 ? '#16a34a' : '#94a3b8'} />
-                      {auditorAccess.length === 0
-                        ? 'No auditors selected (Partner only sees directly assigned tasks)'
-                        : `${auditorAccess.length} Auditor${auditorAccess.length === 1 ? '' : 's'} Selected for View Access`}
-                    </span>
-                    {auditorAccess.length > 0 && (
-                      <span style={{ fontSize: '10.5px', color: '#16a34a', fontWeight: 700 }}>
-                        ✓ Active
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Country Filter Pills & Search */}
-                  {allAuditors.length > 0 && (
-                    <div style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      gap: '8px',
-                      marginBottom: '8px',
-                      flexWrap: 'wrap'
-                    }}>
-                      {/* Country Filter Pills */}
-                      <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-                        {['all', ...Array.from(new Set(allAuditors.map(a => a.country).filter(Boolean)))].map(c => {
-                          const isSelected = auditorCountryFilter === c;
-                          const count = c === 'all'
-                            ? allAuditors.length
-                            : allAuditors.filter(a => a.country === c).length;
-                          return (
-                            <button
-                              key={c}
-                              type="button"
-                              onClick={() => setAuditorCountryFilter(c)}
-                              style={{
-                                fontSize: '10.5px',
-                                padding: '2px 8px',
-                                borderRadius: '12px',
-                                border: isSelected ? '1px solid #2563eb' : '1px solid #cbd5e1',
-                                background: isSelected ? '#2563eb' : '#ffffff',
-                                color: isSelected ? '#ffffff' : '#475569',
-                                cursor: 'pointer',
-                                fontWeight: isSelected ? 700 : 550,
-                                transition: 'all 0.15s ease'
-                              }}
-                            >
-                              {c === 'all' ? 'All' : c} ({count})
-                            </button>
-                          );
-                        })}
+                  {(() => {
+                    const selectedCountInCountry = partnerAuditors.filter(a => auditorAccess.includes(a.id)).length;
+                    return (
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '6px 10px',
+                        borderRadius: '8px',
+                        background: selectedCountInCountry > 0 ? '#f0fdf4' : '#f8fafc',
+                        border: selectedCountInCountry > 0 ? '1px solid #bbf7d0' : '1px solid #e2e8f0',
+                        marginBottom: '10px'
+                      }}>
+                        <span style={{
+                          fontSize: '11.5px',
+                          fontWeight: 650,
+                          color: selectedCountInCountry > 0 ? '#15803d' : '#64748b',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '5px'
+                        }}>
+                          <ShieldCheck size={13} color={selectedCountInCountry > 0 ? '#16a34a' : '#94a3b8'} />
+                          {selectedCountInCountry === 0
+                            ? `No ${formMemberCountry} auditors selected (Partner only sees directly assigned tasks)`
+                            : `${selectedCountInCountry} of ${partnerAuditors.length} ${formMemberCountry} Auditor(s) Selected for View Access`}
+                        </span>
+                        {selectedCountInCountry > 0 && (
+                          <span style={{ fontSize: '10.5px', color: '#16a34a', fontWeight: 700 }}>
+                            ✓ Active
+                          </span>
+                        )}
                       </div>
+                    );
+                  })()}
 
-                      {/* Search box if there are multiple auditors */}
-                      {allAuditors.length > 3 && (
-                        <div style={{ position: 'relative', width: '150px' }}>
-                          <Search size={11} color="#94a3b8" style={{ position: 'absolute', left: '7px', top: '50%', transform: 'translateY(-50%)' }} />
-                          <input
-                            type="text"
-                            placeholder="Search..."
-                            value={auditorSearch}
-                            onChange={e => setAuditorSearch(e.target.value)}
-                            style={{
-                              width: '100%',
-                              padding: '3px 6px 3px 22px',
-                              borderRadius: '6px',
-                              border: '1px solid #cbd5e1',
-                              fontSize: '11px',
-                              outline: 'none',
-                              color: '#0f172a',
-                              boxSizing: 'border-box'
-                            }}
-                          />
-                        </div>
-                      )}
+                  {/* Search box if there are more than 3 auditors in this country */}
+                  {(partnerAuditors.length > 3 || auditorSearch.trim()) && (
+                    <div style={{ position: 'relative', width: '100%', marginBottom: '8px' }}>
+                      <Search size={12} color="#94a3b8" style={{ position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)' }} />
+                      <input
+                        type="text"
+                        placeholder={`Search ${formMemberCountry} auditors...`}
+                        value={auditorSearch}
+                        onChange={e => setAuditorSearch(e.target.value)}
+                        style={{
+                          width: '100%',
+                          padding: '5px 8px 5px 26px',
+                          borderRadius: '6px',
+                          border: '1px solid #cbd5e1',
+                          fontSize: '11.5px',
+                          outline: 'none',
+                          color: '#0f172a',
+                          boxSizing: 'border-box'
+                        }}
+                      />
                     </div>
                   )}
 
@@ -1962,12 +1959,14 @@ export default function StaffPage() {
                     flexDirection: 'column',
                     gap: '4px'
                   }}>
-                    {modalAuditors.length === 0 ? (
+                    {partnerAuditors.length === 0 ? (
                       <div style={{ padding: '14px', fontSize: '12px', color: '#94a3b8', textAlign: 'center' }}>
-                        No auditors match your filter
+                        {auditorSearch.trim()
+                          ? `No ${formMemberCountry} auditors match "${auditorSearch}"`
+                          : `No auditors registered for ${formMemberCountry} in the workspace.`}
                       </div>
                     ) : (
-                      modalAuditors.map(auditor => {
+                      partnerAuditors.map(auditor => {
                         const isSelected = auditorAccess.includes(auditor.id);
                         return (
                           <label

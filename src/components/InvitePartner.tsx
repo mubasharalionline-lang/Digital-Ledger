@@ -10,7 +10,7 @@ import {
   Trash2, AlertCircle, UserPlus, ExternalLink,
 } from 'lucide-react';
 
-interface Auditor { id: string; name: string; }
+interface Auditor { id: string; name: string; country?: string; }
 interface Invite {
   id: string; token: string; role: string; country: string;
   permissions: any; status: string; created_by: string;
@@ -388,25 +388,32 @@ export function InvitePartnerModal({
                       padding: '8px', borderRadius: '8px', border: '1px solid #cbd5e1', marginTop: '8px'
                     }}>
                       {auditors.length === 0 ? (
-                        <div style={{ fontSize: '12px', color: '#94a3b8', textAlign: 'center', padding: '6px' }}>No auditors found</div>
+                        <div style={{ fontSize: '12px', color: '#94a3b8', textAlign: 'center', padding: '6px' }}>No auditors registered for this country</div>
                       ) : auditors.map(a => {
                         const isChecked = auditorAccess.includes(a.id);
                         return (
                           <label key={a.id} style={{
-                            display: 'flex', alignItems: 'center', gap: '8px',
-                            padding: '5px 6px', cursor: 'pointer', borderRadius: '5px',
+                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                            padding: '5px 8px', cursor: 'pointer', borderRadius: '5px',
                             background: isChecked ? '#eff6ff' : 'transparent', fontSize: '12.5px',
-                            marginBottom: '2px'
+                            marginBottom: '2px', border: isChecked ? '1px solid #bfdbfe' : '1px solid transparent'
                           }}>
-                            <input
-                              type="checkbox"
-                              checked={isChecked}
-                              onChange={e => {
-                                if (e.target.checked) setAuditorAccess(prev => [...prev, a.id]);
-                                else setAuditorAccess(prev => prev.filter(id => id !== a.id));
-                              }}
-                            />
-                            <span style={{ fontWeight: isChecked ? 650 : 500, color: isChecked ? '#1d4ed8' : '#334155' }}>{a.name}</span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={e => {
+                                  if (e.target.checked) setAuditorAccess(prev => [...prev, a.id]);
+                                  else setAuditorAccess(prev => prev.filter(id => id !== a.id));
+                                }}
+                              />
+                              <span style={{ fontWeight: isChecked ? 650 : 500, color: isChecked ? '#1d4ed8' : '#334155' }}>{a.name}</span>
+                            </div>
+                            {a.country && (
+                              <span style={{ fontSize: '10px', color: '#64748b', background: '#f1f5f9', padding: '1px 6px', borderRadius: '4px' }}>
+                                {a.country}
+                              </span>
+                            )}
                           </label>
                         );
                       })}
