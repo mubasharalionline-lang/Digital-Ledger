@@ -103,8 +103,8 @@ export default function BahrainDashboard() {
   }, []);
 
   const loadDashboard = useCallback(async () => {
-    const cacheKey = 'dashboard_data_cache_v7';
-    const cacheTimeKey = 'dashboard_data_time_v7';
+    const cacheKey = 'dashboard_data_cache_v8';
+    const cacheTimeKey = 'dashboard_data_time_v8';
     const cachedData = sessionStorage.getItem(cacheKey);
     const cacheTime = sessionStorage.getItem(cacheTimeKey);
     
@@ -137,7 +137,7 @@ export default function BahrainDashboard() {
       // Fire ALL independent queries in parallel — zero waterfalls
       const [companiesRes, usersRes, taskTypesRes, tasksRes, recentLogsRes] = await Promise.all([
         supabase.from('companies').select('id, company_name, notes, country, created_at').eq('country', taskCountry),
-        supabase.from('users').select('id, username, role, country, created_at'),
+        supabase.from('users').select('id, username, role, country, created_at').eq('country', taskCountry),
         supabase.from('task_types').select('id, name, category, jurisdiction, active, country, created_at').eq('country', taskCountry),
         supabase.from('tasks').select('id, title, company_id, assigned_to, assigned_partners, status, priority, deadline, task_type_id, task_type_ids, auditor_id, description, is_daily, country, created_at').eq('country', taskCountry).neq('is_daily', true),
         supabase.from('status_log').select('id, task_id, status, updated_by, remarks, created_at').order('created_at', { ascending: false }).limit(50)
@@ -149,8 +149,8 @@ export default function BahrainDashboard() {
       let allTasks = tasksRes.data || [];
       const generalLogs = recentLogsRes.data || [];
 
-      const countryUsers = country ? usersList.filter(usr => !usr.country || usr.country === country) : usersList;
-      setActivePartners(countryUsers.filter(usr => usr.role !== 'admin').length);
+      const countryUsers = usersList;
+      setActivePartners(countryUsers.filter(usr => usr.role !== 'admin' && usr.role !== 'Admin').length);
 
       // Permission filtering for non-admin users
       const userAuditorAccess: string[] = u?.permissions?.auditor_access || [];
@@ -234,18 +234,6 @@ export default function BahrainDashboard() {
 
       const workloadMap = new Map<string, { id: string; name: string; activeCount: number; role?: string }>();
 
-      // Pre-seed with all country users who are partners or non-admin staff
-      countryUsers.forEach(usr => {
-        workloadMap.set(usr.id, {
-          id: usr.id,
-          name: usr.username || 'Partner',
-          activeCount: 0,
-          role: usr.role
-        });
-      });
-
-      let unassignedActive = 0;
-
       activeTasksList.forEach(t => {
         const pIds: string[] = [];
         if (Array.isArray(t.assigned_partners)) {
@@ -257,51 +245,30 @@ export default function BahrainDashboard() {
           pIds.push(t.assigned_to);
         }
 
-        if (pIds.length === 0) {
-          unassignedActive++;
-        } else {
-          pIds.forEach(pId => {
-            const userObj = countryUsers.find(u => u.id === pId || u.username === pId) || usersList.find(u => u.id === pId || u.username === pId);
-            if (userObj) {
-              if (!workloadMap.has(userObj.id)) {
-                workloadMap.set(userObj.id, {
-                  id: userObj.id,
-                  name: userObj.username || pId,
-                  activeCount: 0,
-                  role: userObj.role
-                });
-              }
-              workloadMap.get(userObj.id)!.activeCount++;
-            } else {
-              if (!workloadMap.has(pId)) {
-                workloadMap.set(pId, {
-                  id: pId,
-                  name: pId,
-                  activeCount: 0
-                });
-              }
-              workloadMap.get(pId)!.activeCount++;
+        pIds.forEach(pId => {
+          // Strictly match only against actual registered users belonging to this country
+          const userObj = countryUsers.find(u => u.id === pId || u.username === pId);
+          if (userObj) {
+            if (!workloadMap.has(userObj.id)) {
+              workloadMap.set(userObj.id, {
+                id: userObj.id,
+                name: userObj.username || 'Partner',
+                activeCount: 0,
+                role: userObj.role
+              });
             }
-          });
-        }
+            workloadMap.get(userObj.id)!.activeCount++;
+          }
+        });
       });
 
       const processedWorkloads: PartnerWorkloadItem[] = Array.from(workloadMap.values())
+        .filter(pw => pw.activeCount > 0)
         .map(pw => ({
           ...pw,
           percentage: totalActiveTasksCount > 0 ? Math.round((pw.activeCount / totalActiveTasksCount) * 100) : 0
         }))
         .sort((a, b) => b.activeCount - a.activeCount);
-
-      if (unassignedActive > 0) {
-        processedWorkloads.push({
-          id: '__unassigned__',
-          name: 'Unassigned Tasks',
-          activeCount: unassignedActive,
-          percentage: totalActiveTasksCount > 0 ? Math.round((unassignedActive / totalActiveTasksCount) * 100) : 0,
-          role: 'unassigned'
-        });
-      }
 
       setPartnerWorkloads(processedWorkloads);
 
@@ -694,19 +661,19 @@ export default function BahrainDashboard() {
         )}
       </div>
 
-      {/* ─── Main Operations Grid (Two-Column Asymmetric Layout) ─── */}
+      {/* ─── Main Operations Grid (Two-Column Balanced Layout) ─── */}
       <div style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))',
         gap: '22px',
-        alignItems: 'start'
+        alignItems: 'stretch'
       }}>
         
-        {/* ─── Left Side: Status Lifecycle & Category Breakdown ─── */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '22px' }}>
+        {/* ─── Left Side: Status Lifecycle & Partner Workload ─── */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '22px', height: '100%' }}>
           
           {/* Panel 1: Tasks by Status Pipeline */}
-          <div style={panelCardStyle}>
+          <div style={{ ...panelCardStyle, flex: 1, display: 'flex', flexDirection: 'column' }}>
             <div style={panelHeaderStyle}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <div style={{
@@ -768,7 +735,7 @@ export default function BahrainDashboard() {
             )}
 
             {/* Status Item Cards */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '9px', maxHeight: '440px', overflowY: 'auto', paddingRight: '4px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '9px', flex: 1, minHeight: 0, maxHeight: '350px', overflowY: 'auto', paddingRight: '4px' }}>
               {Object.keys(statusCounts).length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '36px 20px', color: 'var(--text-tertiary)', background: 'var(--bg-tertiary)', borderRadius: '14px', border: '1px dashed var(--border)' }}>
                   <Activity size={32} color="var(--text-tertiary)" style={{ margin: '0 auto 8px', opacity: 0.5 }} />
@@ -834,7 +801,7 @@ export default function BahrainDashboard() {
           </div>
 
           {/* Panel 2: Partner Workload (Active Tasks Distribution) */}
-          <div style={panelCardStyle}>
+          <div style={{ ...panelCardStyle, flex: 1, display: 'flex', flexDirection: 'column' }}>
             <div style={panelHeaderStyle}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <div style={{
@@ -861,34 +828,25 @@ export default function BahrainDashboard() {
                 </div>
               </div>
               <span style={badgeStyle}>
-                {inProgressTasks} active tasks
+                {partnerWorkloads.length} partners
               </span>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '9px', maxHeight: '440px', overflowY: 'auto', paddingRight: '4px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '9px', flex: 1, minHeight: 0, maxHeight: '350px', overflowY: 'auto', paddingRight: '4px' }}>
               {partnerWorkloads.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '36px 20px', color: 'var(--text-tertiary)', background: 'var(--bg-tertiary)', borderRadius: '14px', border: '1px dashed var(--border)' }}>
                   <UsersIcon size={32} color="var(--text-tertiary)" style={{ margin: '0 auto 8px', opacity: 0.5 }} />
-                  <div style={{ fontSize: '13.5px', fontWeight: 650 }}>No partner workload data</div>
-                  <p style={{ fontSize: '12px', margin: '4px 0 0' }}>Active partner assignments will appear here.</p>
+                  <div style={{ fontSize: '13.5px', fontWeight: 650 }}>No active partner tasks</div>
+                  <p style={{ fontSize: '12px', margin: '4px 0 0' }}>All tasks are either completed or unassigned.</p>
                 </div>
               ) : (
                 partnerWorkloads.map(pw => {
-                  const isUnassigned = pw.id === '__unassigned__';
-                  const avatarColor = isUnassigned
-                    ? { bg: 'rgba(239, 68, 68, 0.1)', text: '#ef4444' }
-                    : getAvatarColors(pw.name);
+                  const avatarColor = getAvatarColors(pw.name);
                   
                   return (
                     <div
                       key={pw.id}
-                      onClick={() => {
-                        if (isUnassigned) {
-                          router.push('/dashboard/tasks');
-                        } else {
-                          router.push(`/dashboard/tasks?partner=${encodeURIComponent(pw.id || pw.name)}`);
-                        }
-                      }}
+                      onClick={() => router.push(`/dashboard/tasks?partner=${encodeURIComponent(pw.id || pw.name)}`)}
                       style={{
                         padding: '12px 14px',
                         background: 'var(--bg-tertiary)',
@@ -928,20 +886,20 @@ export default function BahrainDashboard() {
                             flexShrink: 0,
                             border: `1px solid ${avatarColor.text}30`
                           }}>
-                            {isUnassigned ? '?' : getInitials(pw.name)}
+                            {getInitials(pw.name)}
                           </span>
                           <div style={{ minWidth: 0 }}>
                             <div style={{
                               fontSize: '13px',
                               fontWeight: 750,
-                              color: isUnassigned ? '#ef4444' : 'var(--text-primary)',
+                              color: 'var(--text-primary)',
                               whiteSpace: 'nowrap',
                               overflow: 'hidden',
                               textOverflow: 'ellipsis'
                             }}>
                               {pw.name}
                             </div>
-                            {pw.role && !isUnassigned && (
+                            {pw.role && (
                               <div style={{ fontSize: '10.5px', color: 'var(--text-tertiary)', textTransform: 'capitalize' }}>
                                 {pw.role}
                               </div>
@@ -954,11 +912,11 @@ export default function BahrainDashboard() {
                           <span style={{
                             fontSize: '12px',
                             fontWeight: 750,
-                            color: pw.activeCount > 0 ? avatarColor.text : 'var(--text-tertiary)',
-                            background: pw.activeCount > 0 ? `${avatarColor.text}14` : 'var(--bg-secondary)',
+                            color: avatarColor.text,
+                            background: `${avatarColor.text}14`,
                             padding: '2px 8px',
                             borderRadius: '6px',
-                            border: `1px solid ${pw.activeCount > 0 ? `${avatarColor.text}30` : 'var(--border)'}`
+                            border: `1px solid ${avatarColor.text}30`
                           }}>
                             {pw.activeCount} active
                           </span>
@@ -980,7 +938,7 @@ export default function BahrainDashboard() {
                         <div style={{
                           width: `${Math.min(100, pw.percentage)}%`,
                           height: '100%',
-                          background: pw.activeCount > 0 ? avatarColor.text : 'transparent',
+                          background: avatarColor.text,
                           borderRadius: '3px',
                           transition: 'width 0.3s ease'
                         }} />
@@ -994,10 +952,10 @@ export default function BahrainDashboard() {
         </div>
 
         {/* ─── Right Side: Quick Tools & Recently Modified Activity Feed ─── */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '22px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '22px', height: '100%' }}>
           
           {/* Panel 3: Quick Navigation Tools */}
-          <div style={panelCardStyle}>
+          <div style={{ ...panelCardStyle, flexShrink: 0 }}>
             <div style={panelHeaderStyle}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <div style={{
@@ -1106,7 +1064,7 @@ export default function BahrainDashboard() {
           </div>
 
           {/* Panel 4: Recently Modified Description Updates */}
-          <div style={panelCardStyle}>
+          <div style={{ ...panelCardStyle, flex: 1, display: 'flex', flexDirection: 'column' }}>
             <div style={panelHeaderStyle}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <div style={{
@@ -1135,7 +1093,7 @@ export default function BahrainDashboard() {
               <span style={badgeStyle}>{recentModifications.length} updates</span>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '520px', overflowY: 'auto', paddingRight: '4px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', flex: 1, minHeight: 0, maxHeight: '580px', overflowY: 'auto', paddingRight: '4px' }}>
               {recentModifications.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '36px 20px', color: 'var(--text-tertiary)', background: 'var(--bg-tertiary)', borderRadius: '14px', border: '1px dashed var(--border)' }}>
                   <Clock size={32} color="var(--text-tertiary)" style={{ margin: '0 auto 8px', opacity: 0.5 }} />
