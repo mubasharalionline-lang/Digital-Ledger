@@ -50,6 +50,14 @@ interface RecentTaskItem {
   timestamp: string;
 }
 
+interface PartnerWorkloadItem {
+  id: string;
+  name: string;
+  activeCount: number;
+  percentage: number;
+  role?: string;
+}
+
 function isTaskCompleted(status?: string | null): boolean {
   if (!status) return false;
   const s = status.trim().toLowerCase();
@@ -74,6 +82,7 @@ export default function BahrainDashboard() {
   const [totalCompanies, setTotalCompanies] = useState(0);
   const [taskTypeStats, setTaskTypeStats] = useState<TaskTypeStats[]>([]);
   const [statusCounts, setStatusCounts] = useState<Record<string, number>>({});
+  const [partnerWorkloads, setPartnerWorkloads] = useState<PartnerWorkloadItem[]>([]);
   const [recentModifications, setRecentModifications] = useState<RecentTaskItem[]>([]);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
@@ -94,8 +103,8 @@ export default function BahrainDashboard() {
   }, []);
 
   const loadDashboard = useCallback(async () => {
-    const cacheKey = 'dashboard_data_cache_v5';
-    const cacheTimeKey = 'dashboard_data_time_v5';
+    const cacheKey = 'dashboard_data_cache_v7';
+    const cacheTimeKey = 'dashboard_data_time_v7';
     const cachedData = sessionStorage.getItem(cacheKey);
     const cacheTime = sessionStorage.getItem(cacheTimeKey);
     
@@ -109,6 +118,7 @@ export default function BahrainDashboard() {
         setActivePartners(parsed.activePartners || 0);
         setTaskTypeStats(parsed.taskTypeStats || []);
         setStatusCounts(parsed.statusCounts || {});
+        setPartnerWorkloads(parsed.partnerWorkloads || []);
         setRecentModifications(parsed.recentModifications || []);
         setLoading(false);
         // If cache is fresh (< 60s), skip network entirely
@@ -217,6 +227,83 @@ export default function BahrainDashboard() {
         newStatusCounts[canonicalKey] = (newStatusCounts[canonicalKey] || 0) + 1;
       });
       setStatusCounts(newStatusCounts);
+
+      // ── Process Partner Workload (Active tasks only, excluding completed) ──
+      const activeTasksList = taskList.filter(t => !isTaskCompleted(t.status));
+      const totalActiveTasksCount = activeTasksList.length;
+
+      const workloadMap = new Map<string, { id: string; name: string; activeCount: number; role?: string }>();
+
+      // Pre-seed with all country users who are partners or non-admin staff
+      countryUsers.forEach(usr => {
+        workloadMap.set(usr.id, {
+          id: usr.id,
+          name: usr.username || 'Partner',
+          activeCount: 0,
+          role: usr.role
+        });
+      });
+
+      let unassignedActive = 0;
+
+      activeTasksList.forEach(t => {
+        const pIds: string[] = [];
+        if (Array.isArray(t.assigned_partners)) {
+          t.assigned_partners.forEach((id: string) => {
+            if (id && !pIds.includes(id)) pIds.push(id);
+          });
+        }
+        if (t.assigned_to && !pIds.includes(t.assigned_to)) {
+          pIds.push(t.assigned_to);
+        }
+
+        if (pIds.length === 0) {
+          unassignedActive++;
+        } else {
+          pIds.forEach(pId => {
+            const userObj = countryUsers.find(u => u.id === pId || u.username === pId) || usersList.find(u => u.id === pId || u.username === pId);
+            if (userObj) {
+              if (!workloadMap.has(userObj.id)) {
+                workloadMap.set(userObj.id, {
+                  id: userObj.id,
+                  name: userObj.username || pId,
+                  activeCount: 0,
+                  role: userObj.role
+                });
+              }
+              workloadMap.get(userObj.id)!.activeCount++;
+            } else {
+              if (!workloadMap.has(pId)) {
+                workloadMap.set(pId, {
+                  id: pId,
+                  name: pId,
+                  activeCount: 0
+                });
+              }
+              workloadMap.get(pId)!.activeCount++;
+            }
+          });
+        }
+      });
+
+      const processedWorkloads: PartnerWorkloadItem[] = Array.from(workloadMap.values())
+        .map(pw => ({
+          ...pw,
+          percentage: totalActiveTasksCount > 0 ? Math.round((pw.activeCount / totalActiveTasksCount) * 100) : 0
+        }))
+        .sort((a, b) => b.activeCount - a.activeCount);
+
+      if (unassignedActive > 0) {
+        processedWorkloads.push({
+          id: '__unassigned__',
+          name: 'Unassigned Tasks',
+          activeCount: unassignedActive,
+          percentage: totalActiveTasksCount > 0 ? Math.round((unassignedActive / totalActiveTasksCount) * 100) : 0,
+          role: 'unassigned'
+        });
+      }
+
+      setPartnerWorkloads(processedWorkloads);
 
       // ── Process Recently Modified Description Updates ──
       const genLogMap = new Map<string, any>();
@@ -328,6 +415,7 @@ export default function BahrainDashboard() {
         activePartners: countryUsers.filter(usr => usr.role !== 'admin').length,
         taskTypeStats: serializableTaskTypeStats,
         statusCounts: newStatusCounts,
+        partnerWorkloads: processedWorkloads,
         recentModifications: processedRecentList.slice(0, 20),
       }));
       sessionStorage.setItem(cacheTimeKey, Date.now().toString());
@@ -744,6 +832,165 @@ export default function BahrainDashboard() {
               )}
             </div>
           </div>
+
+          {/* Panel 2: Partner Workload (Active Tasks Distribution) */}
+          <div style={panelCardStyle}>
+            <div style={panelHeaderStyle}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{
+                  background: 'rgba(139, 92, 246, 0.1)',
+                  color: '#8b5cf6',
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '12px',
+                  border: '1px solid rgba(139, 92, 246, 0.2)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0
+                }}>
+                  <UsersIcon size={19} />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: '16.5px', fontWeight: 800, color: 'var(--text-primary)', margin: 0, letterSpacing: '-0.02em' }}>
+                    Partner Workload
+                  </h3>
+                  <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: 0, marginTop: '2px' }}>
+                    Active task distribution (excluding completed)
+                  </p>
+                </div>
+              </div>
+              <span style={badgeStyle}>
+                {inProgressTasks} active tasks
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '9px', maxHeight: '440px', overflowY: 'auto', paddingRight: '4px' }}>
+              {partnerWorkloads.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '36px 20px', color: 'var(--text-tertiary)', background: 'var(--bg-tertiary)', borderRadius: '14px', border: '1px dashed var(--border)' }}>
+                  <UsersIcon size={32} color="var(--text-tertiary)" style={{ margin: '0 auto 8px', opacity: 0.5 }} />
+                  <div style={{ fontSize: '13.5px', fontWeight: 650 }}>No partner workload data</div>
+                  <p style={{ fontSize: '12px', margin: '4px 0 0' }}>Active partner assignments will appear here.</p>
+                </div>
+              ) : (
+                partnerWorkloads.map(pw => {
+                  const isUnassigned = pw.id === '__unassigned__';
+                  const avatarColor = isUnassigned
+                    ? { bg: 'rgba(239, 68, 68, 0.1)', text: '#ef4444' }
+                    : getAvatarColors(pw.name);
+                  
+                  return (
+                    <div
+                      key={pw.id}
+                      onClick={() => {
+                        if (isUnassigned) {
+                          router.push('/dashboard/tasks');
+                        } else {
+                          router.push(`/dashboard/tasks?partner=${encodeURIComponent(pw.id || pw.name)}`);
+                        }
+                      }}
+                      style={{
+                        padding: '12px 14px',
+                        background: 'var(--bg-tertiary)',
+                        borderRadius: '12px',
+                        border: '1px solid var(--border)',
+                        cursor: 'pointer',
+                        transition: 'all 0.18s ease',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '8px'
+                      }}
+                      onMouseEnter={e => {
+                        e.currentTarget.style.transform = 'translateY(-1px)';
+                        e.currentTarget.style.boxShadow = `0 6px 14px -3px ${avatarColor.text}22`;
+                        e.currentTarget.style.borderColor = avatarColor.text;
+                      }}
+                      onMouseLeave={e => {
+                        e.currentTarget.style.transform = 'none';
+                        e.currentTarget.style.boxShadow = 'none';
+                        e.currentTarget.style.borderColor = 'var(--border)';
+                      }}
+                    >
+                      {/* Top Row: Partner Avatar + Name + Workload Counts */}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '9px', minWidth: 0 }}>
+                          <span style={{
+                            width: '28px',
+                            height: '28px',
+                            borderRadius: '50%',
+                            background: avatarColor.bg,
+                            color: avatarColor.text,
+                            fontSize: '11px',
+                            fontWeight: 750,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            flexShrink: 0,
+                            border: `1px solid ${avatarColor.text}30`
+                          }}>
+                            {isUnassigned ? '?' : getInitials(pw.name)}
+                          </span>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{
+                              fontSize: '13px',
+                              fontWeight: 750,
+                              color: isUnassigned ? '#ef4444' : 'var(--text-primary)',
+                              whiteSpace: 'nowrap',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis'
+                            }}>
+                              {pw.name}
+                            </div>
+                            {pw.role && !isUnassigned && (
+                              <div style={{ fontSize: '10.5px', color: 'var(--text-tertiary)', textTransform: 'capitalize' }}>
+                                {pw.role}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Counts & Progress Indicator */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+                          <span style={{
+                            fontSize: '12px',
+                            fontWeight: 750,
+                            color: pw.activeCount > 0 ? avatarColor.text : 'var(--text-tertiary)',
+                            background: pw.activeCount > 0 ? `${avatarColor.text}14` : 'var(--bg-secondary)',
+                            padding: '2px 8px',
+                            borderRadius: '6px',
+                            border: `1px solid ${pw.activeCount > 0 ? `${avatarColor.text}30` : 'var(--border)'}`
+                          }}>
+                            {pw.activeCount} active
+                          </span>
+                          <span style={{ fontSize: '11px', color: 'var(--text-tertiary)', fontWeight: 650, minWidth: '32px', textAlign: 'right' }}>
+                            {pw.percentage}%
+                          </span>
+                          <ChevronRight size={14} color="var(--text-tertiary)" />
+                        </div>
+                      </div>
+
+                      {/* Workload Distribution Mini-Bar */}
+                      <div style={{
+                        width: '100%',
+                        height: '5px',
+                        borderRadius: '3px',
+                        background: 'var(--bg-secondary)',
+                        overflow: 'hidden'
+                      }}>
+                        <div style={{
+                          width: `${Math.min(100, pw.percentage)}%`,
+                          height: '100%',
+                          background: pw.activeCount > 0 ? avatarColor.text : 'transparent',
+                          borderRadius: '3px',
+                          transition: 'width 0.3s ease'
+                        }} />
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
         </div>
 
         {/* ─── Right Side: Quick Tools & Recently Modified Activity Feed ─── */}
@@ -913,15 +1160,15 @@ export default function BahrainDashboard() {
                         if (item.companyId) router.push(`/dashboard/companies/${item.companyId}`);
                       }}
                       style={{
-                        padding: '12px 14px',
+                        padding: '13px 15px',
                         background: 'var(--bg-tertiary)',
-                        borderRadius: '12px',
+                        borderRadius: '13px',
                         border: '1px solid var(--border)',
                         cursor: item.companyId ? 'pointer' : 'default',
                         transition: 'all 0.18s ease',
                         display: 'flex',
                         flexDirection: 'column',
-                        gap: '9px',
+                        gap: '10px',
                         boxShadow: '0 1px 2px rgba(0,0,0,0.02)'
                       }}
                       onMouseEnter={e => {
@@ -935,14 +1182,14 @@ export default function BahrainDashboard() {
                         e.currentTarget.style.borderColor = 'var(--border)';
                       }}
                     >
-                      {/* Top Row: Company / Client Name + Status Badge */}
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
+                      {/* Top Context Row: Company / Client Name + Status & Time */}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '7px', minWidth: 0, overflow: 'hidden' }}>
                           <Building2 size={13.5} style={{ color: 'var(--accent)', flexShrink: 0 }} />
                           <span
                             title={item.companyName}
                             style={{
-                              fontSize: '13.5px',
+                              fontSize: '13px',
                               fontWeight: 750,
                               color: 'var(--text-primary)',
                               whiteSpace: 'nowrap',
@@ -958,124 +1205,144 @@ export default function BahrainDashboard() {
                           )}
                         </div>
 
-                        <div style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '5px',
-                          fontSize: '10.5px',
-                          fontWeight: 700,
-                          padding: '2.5px 8px',
-                          borderRadius: '20px',
-                          background: `${statusCol}14`,
-                          color: statusCol,
-                          border: `1px solid ${statusCol}28`,
-                          flexShrink: 0,
-                          whiteSpace: 'nowrap'
-                        }}>
-                          <span style={{ width: '5.5px', height: '5.5px', borderRadius: '50%', background: statusCol }} />
-                          {item.status}
-                        </div>
-                      </div>
-
-                      {/* Middle Row: Task Type Pill + Assigned Partner + Relative Timestamp */}
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', minWidth: 0 }}>
-                          {/* Task Badge */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '7px', flexShrink: 0 }}>
                           <span style={{
                             display: 'inline-flex',
                             alignItems: 'center',
                             gap: '4.5px',
-                            padding: '2px 7.5px',
-                            borderRadius: '6px',
-                            background: 'var(--bg-secondary)',
-                            border: '1px solid var(--border)',
-                            color: 'var(--text-secondary)',
-                            fontSize: '11px',
-                            fontWeight: 650,
-                            maxWidth: '220px',
-                            overflow: 'hidden',
-                            whiteSpace: 'nowrap',
-                            textOverflow: 'ellipsis'
+                            fontSize: '10.5px',
+                            fontWeight: 700,
+                            padding: '2px 8px',
+                            borderRadius: '20px',
+                            background: `${statusCol}14`,
+                            color: statusCol,
+                            border: `1px solid ${statusCol}28`,
+                            whiteSpace: 'nowrap'
                           }}>
-                            <Layers size={11} style={{ opacity: 0.7, flexShrink: 0 }} />
-                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{taskLabel}</span>
+                            <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: statusCol }} />
+                            {item.status}
                           </span>
 
-                          {/* Assigned Partner Avatar & Name */}
-                          {primaryPartner && primaryPartner !== 'Unassigned' ? (
-                            <span style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '5px',
-                              fontSize: '11.5px',
-                              color: 'var(--text-secondary)',
-                              fontWeight: 600,
-                            }}>
-                              <span style={{
-                                width: '18px',
-                                height: '18px',
-                                borderRadius: '50%',
-                                background: avatarColor.bg,
-                                color: avatarColor.text,
-                                fontSize: '9px',
-                                fontWeight: 750,
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                flexShrink: 0,
-                                border: `1px solid ${avatarColor.text}22`
-                              }}>
-                                {getInitials(primaryPartner)}
-                              </span>
-                              <span>{primaryPartner}{extraPartners > 0 ? ` +${extraPartners}` : ''}</span>
-                            </span>
-                          ) : (
-                            <span style={{ fontSize: '11px', color: 'var(--text-tertiary)', fontStyle: 'italic' }}>
-                              Unassigned
+                          <span style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            fontSize: '11px',
+                            color: 'var(--text-tertiary)',
+                            fontWeight: 550,
+                          }}>
+                            <Clock size={11} />
+                            {formatRelativeTime(item.timestamp)}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* ─── Hero Spotlight: Task Description / Remark Update ─── */}
+                      <div style={{
+                        background: 'var(--bg-secondary)',
+                        border: '1px solid rgba(37, 99, 235, 0.18)',
+                        borderLeft: '4.5px solid var(--accent, #2563eb)',
+                        borderRadius: '9px',
+                        padding: '10px 13px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '6px',
+                        boxShadow: '0 2px 6px rgba(0, 0, 0, 0.02)'
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                          <span style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '5px',
+                            fontSize: '10.5px',
+                            fontWeight: 800,
+                            color: 'var(--accent, #2563eb)',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.04em'
+                          }}>
+                            <MessageSquareText size={12.5} />
+                            Task Remark & Description
+                          </span>
+                          {item.updatedBy && item.updatedBy !== 'Partner' && (
+                            <span style={{ fontSize: '10.5px', color: 'var(--text-secondary)', fontWeight: 600 }}>
+                              Updated by <strong style={{ color: 'var(--text-primary)' }}>{item.updatedBy}</strong>
                             </span>
                           )}
                         </div>
 
-                        {/* Timestamp */}
+                        <div style={{
+                          fontSize: '13.5px',
+                          fontWeight: 650,
+                          color: 'var(--text-primary)',
+                          lineHeight: 1.5,
+                          wordBreak: 'break-word',
+                          whiteSpace: 'pre-wrap'
+                        }}>
+                          {item.description && item.description.trim().length > 0 ? (
+                            <>&ldquo;{item.description}&rdquo;</>
+                          ) : (
+                            <span style={{ color: 'var(--text-tertiary)', fontStyle: 'italic', fontWeight: 500, fontSize: '12px' }}>
+                              No update description provided
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Bottom Metadata: Task Type Pill & Assigned Partner */}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
                         <span style={{
                           display: 'inline-flex',
                           alignItems: 'center',
-                          gap: '4px',
-                          fontSize: '11px',
-                          color: 'var(--text-tertiary)',
-                          fontWeight: 550,
-                          marginLeft: 'auto',
-                          flexShrink: 0
-                        }}>
-                          <Clock size={11} />
-                          {formatRelativeTime(item.timestamp)}
-                        </span>
-                      </div>
-
-                      {/* Bottom Row: Note / Remark (Only if present) */}
-                      {item.description && item.description.trim().length > 0 && (
-                        <div style={{
-                          padding: '6px 10px',
+                          gap: '4.5px',
+                          padding: '2px 7.5px',
+                          borderRadius: '6px',
                           background: 'var(--bg-secondary)',
                           border: '1px solid var(--border)',
-                          borderRadius: '8px',
-                          display: 'flex',
-                          alignItems: 'flex-start',
-                          gap: '6.5px',
-                          fontSize: '11.5px',
-                          lineHeight: 1.45,
+                          color: 'var(--text-secondary)',
+                          fontSize: '11px',
+                          fontWeight: 650,
+                          maxWidth: '260px',
+                          overflow: 'hidden',
+                          whiteSpace: 'nowrap',
+                          textOverflow: 'ellipsis'
                         }}>
-                          <MessageSquareText size={12.5} style={{ color: 'var(--accent)', marginTop: '2px', flexShrink: 0, opacity: 0.85 }} />
+                          <Layers size={11} style={{ opacity: 0.7, flexShrink: 0 }} />
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{taskLabel}</span>
+                        </span>
+
+                        {primaryPartner && primaryPartner !== 'Unassigned' ? (
                           <span style={{
-                            color: 'var(--text-primary)',
-                            fontWeight: 500,
-                            wordBreak: 'break-word',
-                            whiteSpace: 'pre-wrap'
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '5px',
+                            fontSize: '11.5px',
+                            color: 'var(--text-secondary)',
+                            fontWeight: 600,
                           }}>
-                            {item.description}
+                            <span style={{
+                              width: '18px',
+                              height: '18px',
+                              borderRadius: '50%',
+                              background: avatarColor.bg,
+                              color: avatarColor.text,
+                              fontSize: '9px',
+                              fontWeight: 750,
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              flexShrink: 0,
+                              border: `1px solid ${avatarColor.text}22`
+                            }}>
+                              {getInitials(primaryPartner)}
+                            </span>
+                            <span>{primaryPartner}{extraPartners > 0 ? ` +${extraPartners}` : ''}</span>
                           </span>
-                        </div>
-                      )}
+                        ) : (
+                          <span style={{ fontSize: '11px', color: 'var(--text-tertiary)', fontStyle: 'italic' }}>
+                            Unassigned
+                          </span>
+                        )}
+                      </div>
                     </div>
                   );
                 })
