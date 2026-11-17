@@ -26,7 +26,8 @@ import {
   BarChart3,
   TrendingUp,
   ShieldCheck,
-  Compass
+  Compass,
+  MessageSquareText
 } from 'lucide-react';
 
 interface TaskTypeStats {
@@ -897,6 +898,14 @@ export default function BahrainDashboard() {
               ) : (
                 recentModifications.map(item => {
                   const statusCol = getStatusColor(item.status);
+                  const taskLabel = resolveTaskLabel(item.title, item.taskTypeName);
+                  const partnerList = item.assignedTo
+                    ? item.assignedTo.split(',').map(s => s.trim()).filter(Boolean)
+                    : [];
+                  const primaryPartner = partnerList[0] || 'Unassigned';
+                  const extraPartners = partnerList.length > 1 ? partnerList.length - 1 : 0;
+                  const avatarColor = getAvatarColors(primaryPartner);
+
                   return (
                     <div
                       key={item.id}
@@ -912,112 +921,161 @@ export default function BahrainDashboard() {
                         transition: 'all 0.18s ease',
                         display: 'flex',
                         flexDirection: 'column',
-                        gap: '8px'
+                        gap: '9px',
+                        boxShadow: '0 1px 2px rgba(0,0,0,0.02)'
                       }}
                       onMouseEnter={e => {
                         e.currentTarget.style.transform = 'translateY(-1px)';
-                        e.currentTarget.style.boxShadow = '0 6px 14px -3px rgba(0,0,0,0.04)';
+                        e.currentTarget.style.boxShadow = '0 6px 14px -3px rgba(0,0,0,0.05)';
                         e.currentTarget.style.borderColor = 'var(--accent)';
                       }}
                       onMouseLeave={e => {
                         e.currentTarget.style.transform = 'none';
-                        e.currentTarget.style.boxShadow = 'none';
+                        e.currentTarget.style.boxShadow = '0 1px 2px rgba(0,0,0,0.02)';
                         e.currentTarget.style.borderColor = 'var(--border)';
                       }}
                     >
-                      {/* Header Row: Task Title + Status Badge */}
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '7px', overflow: 'hidden' }}>
-                          <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: statusCol, flexShrink: 0 }} />
-                          <span style={{ fontSize: '13px', fontWeight: 750, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                            {item.title}
+                      {/* Top Row: Company / Client Name + Status Badge */}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '7px', minWidth: 0, overflow: 'hidden' }}>
+                          <Building2 size={13.5} style={{ color: 'var(--accent)', flexShrink: 0 }} />
+                          <span
+                            title={item.companyName}
+                            style={{
+                              fontSize: '13.5px',
+                              fontWeight: 750,
+                              color: 'var(--text-primary)',
+                              whiteSpace: 'nowrap',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              letterSpacing: '-0.01em'
+                            }}
+                          >
+                            {item.companyName}
                           </span>
+                          {item.companyId && (
+                            <ArrowUpRight size={12} style={{ color: 'var(--text-tertiary)', flexShrink: 0, opacity: 0.6 }} />
+                          )}
                         </div>
-                        <span style={{
+
+                        <div style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '5px',
                           fontSize: '10.5px',
                           fontWeight: 700,
-                          padding: '2px 7px',
-                          borderRadius: '5px',
+                          padding: '2.5px 8px',
+                          borderRadius: '20px',
                           background: `${statusCol}14`,
                           color: statusCol,
                           border: `1px solid ${statusCol}28`,
+                          flexShrink: 0,
+                          whiteSpace: 'nowrap'
+                        }}>
+                          <span style={{ width: '5.5px', height: '5.5px', borderRadius: '50%', background: statusCol }} />
+                          {item.status}
+                        </div>
+                      </div>
+
+                      {/* Middle Row: Task Type Pill + Assigned Partner + Relative Timestamp */}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', minWidth: 0 }}>
+                          {/* Task Badge */}
+                          <span style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4.5px',
+                            padding: '2px 7.5px',
+                            borderRadius: '6px',
+                            background: 'var(--bg-secondary)',
+                            border: '1px solid var(--border)',
+                            color: 'var(--text-secondary)',
+                            fontSize: '11px',
+                            fontWeight: 650,
+                            maxWidth: '220px',
+                            overflow: 'hidden',
+                            whiteSpace: 'nowrap',
+                            textOverflow: 'ellipsis'
+                          }}>
+                            <Layers size={11} style={{ opacity: 0.7, flexShrink: 0 }} />
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{taskLabel}</span>
+                          </span>
+
+                          {/* Assigned Partner Avatar & Name */}
+                          {primaryPartner && primaryPartner !== 'Unassigned' ? (
+                            <span style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '5px',
+                              fontSize: '11.5px',
+                              color: 'var(--text-secondary)',
+                              fontWeight: 600,
+                            }}>
+                              <span style={{
+                                width: '18px',
+                                height: '18px',
+                                borderRadius: '50%',
+                                background: avatarColor.bg,
+                                color: avatarColor.text,
+                                fontSize: '9px',
+                                fontWeight: 750,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                flexShrink: 0,
+                                border: `1px solid ${avatarColor.text}22`
+                              }}>
+                                {getInitials(primaryPartner)}
+                              </span>
+                              <span>{primaryPartner}{extraPartners > 0 ? ` +${extraPartners}` : ''}</span>
+                            </span>
+                          ) : (
+                            <span style={{ fontSize: '11px', color: 'var(--text-tertiary)', fontStyle: 'italic' }}>
+                              Unassigned
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Timestamp */}
+                        <span style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          fontSize: '11px',
+                          color: 'var(--text-tertiary)',
+                          fontWeight: 550,
+                          marginLeft: 'auto',
                           flexShrink: 0
                         }}>
-                          {item.status}
+                          <Clock size={11} />
+                          {formatRelativeTime(item.timestamp)}
                         </span>
                       </div>
 
-                      {/* Metadata Chips: Company Name, Task Type, Assigned To */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', fontSize: '11px' }}>
-                        <span style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '4px',
-                          padding: '2px 7px',
-                          borderRadius: '5px',
-                          background: 'var(--bg-secondary)',
-                          color: 'var(--text-primary)',
-                          fontWeight: 650,
-                          border: '1px solid var(--border)'
-                        }}>
-                          <Building2 size={11} color="var(--accent)" />
-                          {item.companyName}
-                        </span>
-
-                        <span style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '4px',
-                          padding: '2px 7px',
-                          borderRadius: '5px',
-                          background: 'rgba(139, 92, 246, 0.1)',
-                          color: '#8b5cf6',
-                          fontWeight: 650,
-                          border: '1px solid rgba(139, 92, 246, 0.2)'
-                        }}>
-                          <Layers size={11} />
-                          {item.taskTypeName}
-                        </span>
-
-                        <span style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '4px',
-                          padding: '2px 7px',
-                          borderRadius: '5px',
-                          background: 'rgba(16, 185, 129, 0.1)',
-                          color: '#10b981',
-                          fontWeight: 650,
-                          border: '1px solid rgba(16, 185, 129, 0.2)'
-                        }}>
-                          <UserIcon size={11} />
-                          {item.assignedTo}
-                        </span>
-                      </div>
-
-                      {/* Description Box */}
+                      {/* Bottom Row: Note / Remark (Only if present) */}
                       {item.description && item.description.trim().length > 0 && (
                         <div style={{
+                          padding: '6px 10px',
                           background: 'var(--bg-secondary)',
+                          border: '1px solid var(--border)',
                           borderRadius: '8px',
-                          padding: '8px 12px',
-                          borderLeft: '3px solid var(--accent)',
-                          fontSize: '12px',
-                          color: 'var(--text-primary)',
-                          lineHeight: 1.5,
-                          whiteSpace: 'pre-wrap',
-                          wordBreak: 'break-word',
+                          display: 'flex',
+                          alignItems: 'flex-start',
+                          gap: '6.5px',
+                          fontSize: '11.5px',
+                          lineHeight: 1.45,
                         }}>
-                          &ldquo;{item.description}&rdquo;
+                          <MessageSquareText size={12.5} style={{ color: 'var(--accent)', marginTop: '2px', flexShrink: 0, opacity: 0.85 }} />
+                          <span style={{
+                            color: 'var(--text-primary)',
+                            fontWeight: 500,
+                            wordBreak: 'break-word',
+                            whiteSpace: 'pre-wrap'
+                          }}>
+                            {item.description}
+                          </span>
                         </div>
                       )}
-
-                      {/* Footer Row: Timestamp only */}
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '2px' }}>
-                        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <Clock size={11} /> {formatRelativeTime(item.timestamp)}
-                        </span>
-                      </div>
                     </div>
                   );
                 })
@@ -1029,6 +1087,45 @@ export default function BahrainDashboard() {
       </div>
     </div>
   );
+}
+
+// ─── Helpers for Recent Activity ───
+function resolveTaskLabel(title?: string, taskTypeName?: string): string {
+  const t = (title || '').trim();
+  const tt = (taskTypeName || '').trim();
+  if (!t && !tt) return 'General Task';
+  if (!t) return tt;
+  if (!tt) return t;
+  if (t.toLowerCase() === tt.toLowerCase()) return t;
+  if (t.toLowerCase().includes(tt.toLowerCase())) return t;
+  if (tt.toLowerCase().includes(t.toLowerCase())) return tt;
+  return `${tt} • ${t}`;
+}
+
+function getInitials(name?: string): string {
+  if (!name || name === 'Unassigned') return '?';
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) {
+    return (parts[0][0] + parts[1][0]).toUpperCase();
+  }
+  return name.slice(0, 2).toUpperCase();
+}
+
+const AVATAR_PALETTE = [
+  { bg: 'rgba(37, 99, 235, 0.1)', text: '#2563eb' },
+  { bg: 'rgba(16, 185, 129, 0.1)', text: '#10b981' },
+  { bg: 'rgba(139, 92, 246, 0.1)', text: '#8b5cf6' },
+  { bg: 'rgba(245, 158, 11, 0.1)', text: '#d97706' },
+  { bg: 'rgba(14, 165, 233, 0.1)', text: '#0ea5e9' },
+  { bg: 'rgba(236, 72, 153, 0.1)', text: '#db2777' },
+];
+
+function getAvatarColors(name: string) {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return AVATAR_PALETTE[Math.abs(hash) % AVATAR_PALETTE.length];
 }
 
 // ─── Clean Updater Formatter ───
