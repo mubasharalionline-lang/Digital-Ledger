@@ -389,7 +389,7 @@ export default function InviteSignupPage({ params }: { params: Promise<{ token: 
                 {invite.permissions?.can_view_all_tasks && <span style={permBadge}>✓ All Tasks</span>}
                 {invite.permissions?.can_view_reports && <span style={permBadge}>✓ Reports</span>}
                 {invite.permissions?.can_export_data && <span style={permBadge}>✓ Export Excel</span>}
-                {invite.permissions?.can_manage_daily_tasks && <span style={permBadge}>✓ Daily Tasks</span>}
+                {(invite.permissions?.can_view_daily_tasks || invite.permissions?.can_manage_daily_tasks) && <span style={permBadge}>✓ Daily Tasks</span>}
                 {invite.permissions?.can_edit_companies && <span style={permBadge}>✓ Edit Companies</span>}
                 {invite.permissions?.can_view_task_types && <span style={permBadge}>✓ Task Types</span>}
                 {invite.permissions?.can_view_edits && <span style={permBadge}>✓ Audit Edits</span>}

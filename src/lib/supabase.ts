@@ -17,11 +17,13 @@ export interface UserPermissions {
   can_view_all_tasks?: boolean;
   can_view_reports?: boolean;
   can_export_data?: boolean;
+  can_view_daily_tasks?: boolean;
   can_manage_daily_tasks?: boolean;
   can_edit_companies?: boolean;
   can_view_task_types?: boolean;
   can_view_edits?: boolean;
   can_message?: boolean;
+  theme?: 'light' | 'dark' | 'system';
   auditor_access?: string[];
 }
 

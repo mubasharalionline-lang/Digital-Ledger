@@ -33,6 +33,7 @@ export function InvitePartnerModal({
   const [canViewAllTasks, setCanViewAllTasks] = useState(false);
   const [canViewReports, setCanViewReports] = useState(false);
   const [canExportData, setCanExportData] = useState(true);
+  const [canViewDailyTasks, setCanViewDailyTasks] = useState(false);
   const [canManageDailyTasks, setCanManageDailyTasks] = useState(false);
   const [canEditCompanies, setCanEditCompanies] = useState(false);
   const [canViewTaskTypes, setCanViewTaskTypes] = useState(false);
@@ -54,6 +55,7 @@ export function InvitePartnerModal({
       setCanViewAllTasks(false);
       setCanViewReports(false);
       setCanExportData(true);
+      setCanViewDailyTasks(false);
       setCanManageDailyTasks(false);
       setCanEditCompanies(false);
       setCanViewTaskTypes(false);
@@ -83,6 +85,7 @@ export function InvitePartnerModal({
         can_view_all_tasks: canViewAllTasks,
         can_view_reports: canViewReports,
         can_export_data: canExportData,
+        can_view_daily_tasks: canViewDailyTasks,
         can_manage_daily_tasks: canManageDailyTasks,
         can_edit_companies: canEditCompanies,
         can_view_task_types: canViewTaskTypes,
@@ -349,8 +352,31 @@ export function InvitePartnerModal({
                   </label>
 
                   <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', background: '#ffffff', borderRadius: '6px', border: '1px solid #e2e8f0', cursor: 'pointer' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 550, color: '#0f172a' }}>View daily tasks section</span>
+                    <input
+                      type="checkbox"
+                      checked={canViewDailyTasks}
+                      onChange={e => {
+                        const val = e.target.checked;
+                        setCanViewDailyTasks(val);
+                        if (!val) setCanManageDailyTasks(false);
+                      }}
+                      style={{ width: '15px', height: '15px', cursor: 'pointer' }}
+                    />
+                  </label>
+
+                  <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', background: '#ffffff', borderRadius: '6px', border: '1px solid #e2e8f0', cursor: 'pointer' }}>
                     <span style={{ fontSize: '12px', fontWeight: 550, color: '#0f172a' }}>Manage daily tasks</span>
-                    <input type="checkbox" checked={canManageDailyTasks} onChange={e => setCanManageDailyTasks(e.target.checked)} style={{ width: '15px', height: '15px', cursor: 'pointer' }} />
+                    <input
+                      type="checkbox"
+                      checked={canManageDailyTasks}
+                      onChange={e => {
+                        const val = e.target.checked;
+                        setCanManageDailyTasks(val);
+                        if (val) setCanViewDailyTasks(true);
+                      }}
+                      style={{ width: '15px', height: '15px', cursor: 'pointer' }}
+                    />
                   </label>
 
                   <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', background: '#ffffff', borderRadius: '6px', border: '1px solid #e2e8f0', cursor: 'pointer' }}>

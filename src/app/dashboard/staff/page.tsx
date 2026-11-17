@@ -76,6 +76,7 @@ export default function StaffPage() {
   const [canViewAllTasks, setCanViewAllTasks] = useState(false);
   const [canViewReports, setCanViewReports] = useState(false);
   const [canExportData, setCanExportData] = useState(true);
+  const [canViewDailyTasks, setCanViewDailyTasks] = useState(false);
   const [canManageDailyTasks, setCanManageDailyTasks] = useState(false);
   const [canEditCompanies, setCanEditCompanies] = useState(false);
   const [canViewTaskTypes, setCanViewTaskTypes] = useState(false);
@@ -196,6 +197,7 @@ export default function StaffPage() {
       setCanViewAllTasks(false);
       setCanViewReports(false);
       setCanExportData(true);
+      setCanViewDailyTasks(false);
       setCanManageDailyTasks(false);
       setCanEditCompanies(false);
       setCanViewTaskTypes(false);
@@ -208,6 +210,7 @@ export default function StaffPage() {
       setCanViewAllTasks(true);
       setCanViewReports(true);
       setCanExportData(true);
+      setCanViewDailyTasks(true);
       setCanManageDailyTasks(true);
       setCanEditCompanies(true);
       setCanViewTaskTypes(false);
@@ -220,6 +223,7 @@ export default function StaffPage() {
       setCanViewAllTasks(true);
       setCanViewReports(true);
       setCanExportData(true);
+      setCanViewDailyTasks(true);
       setCanManageDailyTasks(true);
       setCanEditCompanies(true);
       setCanViewTaskTypes(true);
@@ -232,6 +236,7 @@ export default function StaffPage() {
       setCanViewAllTasks(true);
       setCanViewReports(false);
       setCanExportData(false);
+      setCanViewDailyTasks(false);
       setCanManageDailyTasks(false);
       setCanEditCompanies(false);
       setCanViewTaskTypes(false);
@@ -278,6 +283,7 @@ export default function StaffPage() {
       can_view_all_tasks: canViewAllTasks,
       can_view_reports: canViewReports,
       can_export_data: canExportData,
+      can_view_daily_tasks: canViewDailyTasks,
       can_manage_daily_tasks: canManageDailyTasks,
       can_edit_companies: canEditCompanies,
       can_view_task_types: canViewTaskTypes,
@@ -341,6 +347,7 @@ export default function StaffPage() {
     const curCountry = getDataCountry() || 'Bahrain';
     setFormMemberCountry(curCountry);
     applyPreset('standard');
+    setCanViewDailyTasks(false);
     setAuditorAccess([]);
     setShowAuditorList(true);
     setAuditorSearch('');
@@ -361,6 +368,7 @@ export default function StaffPage() {
     setCanViewAllTasks(member.permissions?.can_view_all_tasks ?? false);
     setCanViewReports(member.permissions?.can_view_reports ?? false);
     setCanExportData(member.permissions?.can_export_data ?? true);
+    setCanViewDailyTasks(member.permissions?.can_view_daily_tasks ?? false);
     setCanManageDailyTasks(member.permissions?.can_manage_daily_tasks ?? false);
     setCanEditCompanies(member.permissions?.can_edit_companies ?? false);
     setCanViewTaskTypes(member.permissions?.can_view_task_types ?? false);
@@ -465,8 +473,8 @@ export default function StaffPage() {
     if (perms.can_export_data !== false) {
       items.push({ label: 'Export', icon: <FileSpreadsheet size={10} />, color: '#0284c7', bg: '#f0f9ff', border: '#bae6fd', desc: 'Can export Excel spreadsheets' });
     }
-    if (perms.can_manage_daily_tasks) {
-      items.push({ label: 'Daily Tasks', icon: <CalendarCheck2 size={10} />, color: '#d97706', bg: '#fffbeb', border: '#fde68a', desc: 'Can manage daily checklist' });
+    if (perms.can_view_daily_tasks || perms.can_manage_daily_tasks) {
+      items.push({ label: 'Daily Tasks', icon: <CalendarCheck2 size={10} />, color: '#d97706', bg: '#fffbeb', border: '#fde68a', desc: perms.can_manage_daily_tasks ? 'Can manage daily checklist' : 'Can view daily tasks' });
     }
     if (perms.can_edit_companies) {
       items.push({ label: 'Edit Co.', icon: <Building2 size={10} />, color: '#db2777', bg: '#fdf2f8', border: '#fbcfe8', desc: 'Can add & edit company data' });
@@ -1729,10 +1737,36 @@ export default function StaffPage() {
 
                       <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', background: '#ffffff', borderRadius: '8px', border: '1px solid #e2e8f0', cursor: 'pointer' }}>
                         <div>
+                          <div style={{ fontSize: '12px', fontWeight: 600, color: '#0f172a' }}>View Daily Tasks Section</div>
+                          <div style={{ fontSize: '10.5px', color: '#64748b' }}>Show Daily Tasks checklist in navigation (hidden by default)</div>
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={canViewDailyTasks}
+                          onChange={e => {
+                            const val = e.target.checked;
+                            setCanViewDailyTasks(val);
+                            if (!val) setCanManageDailyTasks(false);
+                          }}
+                          style={{ width: '15px', height: '15px', cursor: 'pointer' }}
+                        />
+                      </label>
+
+                      <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', background: '#ffffff', borderRadius: '8px', border: '1px solid #e2e8f0', cursor: 'pointer' }}>
+                        <div>
                           <div style={{ fontSize: '12px', fontWeight: 600, color: '#0f172a' }}>Manage Daily Tasks</div>
                           <div style={{ fontSize: '10.5px', color: '#64748b' }}>Create, edit, and assign daily checklist items</div>
                         </div>
-                        <input type="checkbox" checked={canManageDailyTasks} onChange={e => setCanManageDailyTasks(e.target.checked)} style={{ width: '15px', height: '15px', cursor: 'pointer' }} />
+                        <input
+                          type="checkbox"
+                          checked={canManageDailyTasks}
+                          onChange={e => {
+                            const val = e.target.checked;
+                            setCanManageDailyTasks(val);
+                            if (val) setCanViewDailyTasks(true);
+                          }}
+                          style={{ width: '15px', height: '15px', cursor: 'pointer' }}
+                        />
                       </label>
                     </div>
                   </div>

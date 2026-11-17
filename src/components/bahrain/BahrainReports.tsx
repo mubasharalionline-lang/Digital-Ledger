@@ -4,7 +4,7 @@ import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase } from '@/lib/supabase';
 import type { Task, Company, User, TaskType, Auditor } from '@/lib/supabase';
-import { getDataCountry, getSession } from '@/lib/auth';
+import { getDataCountry, getSession, isAdmin } from '@/lib/auth';
 import { formatDate, formatDateTime } from '@/lib/dateUtils';
 import {
   exportComprehensiveReportExcel,
@@ -158,6 +158,10 @@ export const DEFAULT_PRINT_COLUMNS: Record<PrintColumnId, boolean> = {
 };
 
 export default function BahrainReports({ countryOverride }: { countryOverride?: string } = {}) {
+  const { user: currentUser } = getSession();
+  const isAdminUser = isAdmin(currentUser);
+  const userAuditorAccess: string[] = currentUser?.permissions?.auditor_access || [];
+
   const dataCountry = getDataCountry();
   const activeCountry = countryOverride || dataCountry || 'Bahrain';
   const isNz =
@@ -391,11 +395,28 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
           : (localTimeMap[t.id] || null)
       }));
 
-      setTasks(tasksWithTime);
-      setCompanies(compData || []);
+      // Filter data strictly by partner's granted auditor access
+      let finalAuditors = audData || [];
+      let finalTasks = tasksWithTime;
+      let finalCompanies = compData || [];
+
+      if (!isAdminUser) {
+        // Show only the auditors that the partner has been granted access to
+        finalAuditors = (audData || []).filter(a => userAuditorAccess.includes(a.id));
+        
+        // Show only tasks belonging to those granted auditors
+        finalTasks = tasksWithTime.filter(t => t.auditor_id && userAuditorAccess.includes(t.auditor_id));
+        
+        // Show only companies associated with those tasks
+        const allowedCompIds = new Set(finalTasks.map(t => t.company_id).filter(Boolean));
+        finalCompanies = (compData || []).filter(c => allowedCompIds.has(c.id));
+      }
+
+      setTasks(finalTasks);
+      setCompanies(finalCompanies);
       setPartners(userData || []);
       setTaskTypes(ttData || []);
-      setAuditors(audData || []);
+      setAuditors(finalAuditors);
     } catch (err) {
       console.error('Failed to load Bahrain report data', err);
     } finally {
@@ -1651,6 +1672,48 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
         )}
       </div>
 
+      {/* Non-admin Auditor View Access Notice */}
+      {!isAdminUser && userAuditorAccess.length === 0 && (
+        <div style={{
+          padding: '16px 20px',
+          borderRadius: '12px',
+          background: '#fffbeb',
+          border: '1.5px solid #fde68a',
+          color: '#92400e',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px',
+          marginBottom: '20px'
+        }}>
+          <AlertCircle size={22} color="#d97706" style={{ flexShrink: 0 }} />
+          <div>
+            <div style={{ fontSize: '14px', fontWeight: 700 }}>No Auditor View Access Assigned</div>
+            <div style={{ fontSize: '12.5px', marginTop: '2px', color: '#b45309' }}>
+              Your partner account does not currently have access to view any auditors in Reports. Please contact an administrator to configure your auditor access permissions under Staff Management.
+            </div>
+          </div>
+        </div>
+      )}
+
+      {!isAdminUser && userAuditorAccess.length > 0 && (
+        <div style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '8px',
+          padding: '6px 14px',
+          borderRadius: '20px',
+          background: 'rgba(37, 99, 235, 0.08)',
+          border: '1px solid rgba(37, 99, 235, 0.25)',
+          color: 'var(--accent, #2563eb)',
+          fontSize: '12px',
+          fontWeight: 650,
+          marginBottom: '16px'
+        }}>
+          <ShieldCheck size={14} />
+          <span>Showing reports strictly for your {auditors.length} granted auditor(s): {auditors.map(a => a.name).join(', ')}</span>
+        </div>
+      )}
+
       {/* ─── Executive Metrics Row ─── */}
       <div style={{
         display: 'grid',
@@ -2236,8 +2299,8 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
                     borderColor: filterAuditor !== 'all' ? '#8b5cf6' : undefined
                   }}
                 >
-                  <option value="all">All Auditors</option>
-                  <option value="direct">Direct Clients (No Auditor)</option>
+                  <option value="all">{isAdminUser ? 'All Auditors' : `All Accessible Auditors (${auditors.length})`}</option>
+                  {isAdminUser && <option value="direct">Direct Clients (No Auditor)</option>}
                   {auditors.map(a => (
                     <option key={a.id} value={a.id}>{a.name}</option>
                   ))}
@@ -3043,8 +3106,8 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
                     className="input"
                     style={{ height: '34px', fontSize: '12.5px', borderRadius: '8px', minWidth: '150px' }}
                   >
-                    <option value="all">All Auditors</option>
-                    <option value="direct">Direct Clients (No Auditor)</option>
+                    <option value="all">{isAdminUser ? 'All Auditors' : `All Accessible Auditors (${auditors.length})`}</option>
+                    {isAdminUser && <option value="direct">Direct Clients (No Auditor)</option>}
                     {auditors.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                   </select>
                 </div>

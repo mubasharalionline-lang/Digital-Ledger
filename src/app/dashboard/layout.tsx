@@ -10,10 +10,10 @@ import {
   LayoutGrid, Landmark, CheckCircle2, CalendarCheck2, Boxes,
   Contact2, History, SlidersHorizontal, LogOut,
   ChevronLeft, ChevronRight, Menu, ChevronDown,
-  Plus, X, Loader2, Globe, BarChart3
+  Plus, X, Loader2, Globe, BarChart3, User as UserIcon
 } from 'lucide-react';
 import CountryFlag from '@/components/CountryFlag';
-import { initTheme } from '@/lib/theme';
+import { initTheme, applyTheme } from '@/lib/theme';
 
 interface NavItem { label: string; href: string; icon: ReactNode; adminOnly?: boolean; isSectionHeader?: boolean; }
 interface CountryRecord { id: string; code: string; name: string; flag: string; }
@@ -77,6 +77,9 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           const updatedUser: User = { ...u, permissions: data.permissions, role: data.role || u.role };
           setUser(updatedUser);
           setSession(updatedUser, c || updatedUser.country || 'Bahrain');
+          if (data.permissions.theme) {
+            applyTheme(data.permissions.theme as any);
+          }
         }
       });
 
@@ -183,19 +186,21 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     const canViewReports = isAdminUser || user?.permissions?.can_view_reports === true;
     const canViewTaskTypes = isAdminUser || user?.permissions?.can_view_task_types === true;
     const canViewEdits = isAdminUser || user?.permissions?.can_view_edits === true;
+    const canViewDailyTasks = isAdminUser || user?.permissions?.can_view_daily_tasks === true || user?.permissions?.can_manage_daily_tasks === true;
 
     const items: NavItem[] = [
       { label: 'Dashboard', href: '/dashboard', icon: <LayoutGrid size={20} /> },
       { label: 'Companies', href: '/dashboard/companies', icon: <Landmark size={20} />, adminOnly: !canViewCompanies },
       { label: 'Tasks', href: '/dashboard/tasks', icon: <CheckCircle2 size={20} /> },
       { label: 'Task Types', href: '/dashboard/task-types', icon: <Boxes size={20} />, adminOnly: !canViewTaskTypes, isSectionHeader: true },
-      { label: 'Daily Tasks', href: '/dashboard/daily-tasks', icon: <CalendarCheck2 size={20} /> },
+      { label: 'Daily Tasks', href: '/dashboard/daily-tasks', icon: <CalendarCheck2 size={20} />, adminOnly: !canViewDailyTasks },
       { label: 'Reports', href: '/dashboard/reports', icon: <BarChart3 size={20} />, adminOnly: !canViewReports },
     ];
 
     items.push(
       { label: terms.staffSingular + 's', href: '/dashboard/staff', icon: <Contact2 size={20} />, adminOnly: true },
       { label: 'Edits', href: '/dashboard/edits', icon: <History size={20} />, adminOnly: !canViewEdits },
+      { label: 'My Profile', href: '/dashboard/profile', icon: <UserIcon size={20} /> },
       { label: 'Settings', href: '/dashboard/settings', icon: <SlidersHorizontal size={20} />, adminOnly: true },
     );
 
@@ -459,13 +464,20 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           </button>
 
           {/* User Profile Card */}
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: '9px',
-            padding: collapsed ? '8px 4px' : '8px 10px', borderRadius: '12px',
-            background: 'var(--bg-secondary)', border: '1px solid var(--border)',
-            justifyContent: collapsed ? 'center' : 'flex-start',
-            boxShadow: 'var(--card-shadow)'
-          }}>
+          <div
+            onClick={() => router.push('/dashboard/profile')}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '9px',
+              padding: collapsed ? '8px 4px' : '8px 10px', borderRadius: '12px',
+              background: pathname === '/dashboard/profile' ? 'var(--accent-light)' : 'var(--bg-secondary)',
+              border: pathname === '/dashboard/profile' ? '1px solid var(--accent)' : '1px solid var(--border)',
+              justifyContent: collapsed ? 'center' : 'flex-start',
+              boxShadow: 'var(--card-shadow)',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease'
+            }}
+            title={collapsed ? `${user.username} (View Profile)` : 'View Profile'}
+          >
             <div style={{
               width: '30px', height: '30px', borderRadius: '50%',
               background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)',
@@ -498,7 +510,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             )}
             {!collapsed && (
               <button
-                onClick={handleLogout}
+                onClick={(e) => { e.stopPropagation(); handleLogout(); }}
                 style={{
                   background: 'transparent', border: 'none', color: 'var(--text-tertiary)',
                   cursor: 'pointer', padding: '6px', borderRadius: '8px', display: 'flex',
