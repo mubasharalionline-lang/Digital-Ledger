@@ -27,13 +27,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     }
     return null;
   });
-  const [collapsed, setCollapsed] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('dl_sidebar_collapsed');
-      if (saved !== null) return saved === 'true';
-    }
-    return true; // Default to closed (collapsed)
-  });
+  const [collapsed, setCollapsed] = useState(true); // Default to closed (collapsed)
   const [mobileOpen, setMobileOpen] = useState(false);
   const [showCountryPicker, setShowCountryPicker] = useState(false);
   const [countries, setCountries] = useState<CountryRecord[]>([]);
@@ -60,6 +54,9 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     initTheme();
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('dl_sidebar_collapsed');
+    }
     const { user: u, country: c } = getSession();
     if (!u) { router.push('/'); return; }
     setUser(u);
@@ -425,15 +422,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         <div style={{ padding: '10px', borderTop: '1px solid var(--border-light)', background: 'var(--bg-tertiary)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
           {/* Collapse Button */}
           <button
-            onClick={() => {
-              setCollapsed(prev => {
-                const next = !prev;
-                if (typeof window !== 'undefined') {
-                  localStorage.setItem('dl_sidebar_collapsed', String(next));
-                }
-                return next;
-              });
-            }}
+            onClick={() => setCollapsed(prev => !prev)}
             title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             style={{
               display: 'flex', alignItems: 'center', justifyContent: collapsed ? 'center' : 'space-between',

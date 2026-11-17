@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
@@ -561,14 +561,23 @@ export default function BahrainTasks() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showColumnPicker]);
 
+  const completedCount = useMemo(() => {
+    return tasks.filter(t => {
+      const sl = (t.status || '').toLowerCase();
+      return sl === 'complete' || sl === 'completed' || sl === 'closed' || sl === 'filed' || sl === 'done';
+    }).length;
+  }, [tasks]);
+
+  const activeCount = tasks.length - completedCount;
+
   // Determine if the user is actively looking for completed tasks via filter or search
-  const isCompletedFilterActive = filterStatus && (() => {
+  const isCompletedFilterActive = filterStatus === '__all__' || (filterStatus && (() => {
     const fl = filterStatus.toLowerCase();
     return fl === 'complete' || fl === 'completed' || fl === 'closed' || fl === 'filed' || fl === 'done' || fl.includes('complete') || fl.includes('closed') || fl.includes('filed') || fl.includes('done');
-  })();
+  })());
   const isSearchActive = search.trim().length > 0;
   const isManualFilterActive = Boolean(
-    filterStatus ||
+    (filterStatus && filterStatus !== '__all__') ||
     filterPriority ||
     filterCompany ||
     filterPartner ||
@@ -581,7 +590,7 @@ export default function BahrainTasks() {
   const filtered = tasks.filter(t => {
     const sl = (t.status || '').toLowerCase();
     // Hide completed tasks by default, but show them when the user
-    // explicitly filters by a completed status or uses the search bar
+    // selects "__all__", explicitly filters by a completed status, or uses the search bar
     if ((sl === 'complete' || sl === 'completed' || sl === 'closed' || sl === 'filed' || sl === 'done') && !isCompletedFilterActive && !isSearchActive) {
       return false;
     }
@@ -592,7 +601,7 @@ export default function BahrainTasks() {
     const hasAuditorAccess = (currentUser?.permissions?.auditor_access || []).includes(t.auditor_id || '');
     if (!isAdminUser && !isAssigned && !hasAuditorAccess) return false;
 
-    if (filterStatus && t.status !== filterStatus) return false;
+    if (filterStatus && filterStatus !== '__all__' && t.status !== filterStatus) return false;
     if (filterPriority && t.priority !== filterPriority) return false;
     if (filterCompany && t.company_id !== filterCompany) return false;
     if (filterPartner) {
@@ -2119,7 +2128,8 @@ export default function BahrainTasks() {
         boxShadow: 'var(--card-shadow)', alignItems: 'center'
       }}>
         <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={filterStyle}>
-          <option value="">All Status</option>
+          <option value="">Active Tasks ({activeCount})</option>
+          <option value="__all__">All Tasks — Active + Completed ({tasks.length})</option>
           {(() => {
             const allStatuses = new Set<string>(dynamicStatuses);
             if (!dataCountry || dataCountry === 'Bahrain') {
@@ -5267,7 +5277,49 @@ export default function BahrainTasks() {
           {/* Left Side: Showing Range & Total Results */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
             <div style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 600 }}>
-              Showing <strong style={{ color: 'var(--text-primary)' }}>{startIndex + 1}</strong>–<strong style={{ color: 'var(--text-primary)' }}>{endIndex}</strong> of <strong style={{ color: 'var(--accent)' }}>{totalCount}</strong> tasks
+              Showing <strong style={{ color: 'var(--text-primary)' }}>{startIndex + 1}</strong>–<strong style={{ color: 'var(--text-primary)' }}>{endIndex}</strong> of <strong style={{ color: 'var(--accent)' }}>{totalCount}</strong> {filterStatus === '' && completedCount > 0 ? 'active tasks' : 'tasks'}
+              {filterStatus === '' && completedCount > 0 && !isSearchActive && (
+                <span style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginLeft: '8px' }}>
+                  ({completedCount} completed tasks hidden ·{' '}
+                  <button
+                    type="button"
+                    onClick={() => setFilterStatus('__all__')}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      padding: 0,
+                      color: 'var(--accent, #2563eb)',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      textDecoration: 'underline'
+                    }}
+                  >
+                    Show All {tasks.length}
+                  </button>
+                  )
+                </span>
+              )}
+              {filterStatus === '__all__' && (
+                <span style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginLeft: '8px' }}>
+                  (showing all active & completed ·{' '}
+                  <button
+                    type="button"
+                    onClick={() => setFilterStatus('')}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      padding: 0,
+                      color: 'var(--accent, #2563eb)',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      textDecoration: 'underline'
+                    }}
+                  >
+                    Show Active Only ({activeCount})
+                  </button>
+                  )
+                </span>
+              )}
               {isManualFilterActive && totalCount !== tasks.length && (
                 <span style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginLeft: '6px' }}>
                   (filtered from {tasks.length} total)

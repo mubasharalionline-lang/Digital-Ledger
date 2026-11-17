@@ -354,20 +354,20 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        {/* Assigned Permissions & Access Summary */}
-        <div style={{ padding: '20px 24px' }}>
-          <div style={{
-            fontSize: '11.5px',
-            fontWeight: 750,
-            color: 'var(--text-secondary)',
-            textTransform: 'uppercase',
-            letterSpacing: '0.05em',
-            marginBottom: '10px'
-          }}>
-            Assigned Permissions & Workspace Scope
-          </div>
+        {/* Assigned Permissions & Access Summary (Admin Only - Hidden from partners as requested) */}
+        {isAdminUser && (
+          <div style={{ padding: '20px 24px', borderTop: '1px solid var(--border)' }}>
+            <div style={{
+              fontSize: '11.5px',
+              fontWeight: 750,
+              color: 'var(--text-secondary)',
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em',
+              marginBottom: '10px'
+            }}>
+              Assigned Permissions & Workspace Scope
+            </div>
 
-          {isAdminUser ? (
             <div style={{
               padding: '12px 16px',
               borderRadius: '10px',
@@ -383,84 +383,8 @@ export default function ProfilePage() {
               <ShieldCheck size={16} />
               Full Administrator Controller Access — You have full rights to manage staff, tasks, companies, and reports.
             </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
-                gap: '8px'
-              }}>
-                <div style={{ fontSize: '12px', color: perms.can_update_status !== false ? '#10b981' : 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <CheckCheck size={14} color={perms.can_update_status !== false ? '#10b981' : '#94a3b8'} />
-                  Status Updates: {perms.can_update_status !== false ? 'Enabled' : 'Disabled'}
-                </div>
-                <div style={{ fontSize: '12px', color: perms.can_view_companies ? '#2563eb' : 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <Building2 size={14} color={perms.can_view_companies ? '#2563eb' : '#94a3b8'} />
-                  Company Directory: {perms.can_view_companies ? 'Enabled' : 'Disabled'}
-                </div>
-                <div style={{ fontSize: '12px', color: perms.can_create_tasks ? '#10b981' : 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <CheckCircle2 size={14} color={perms.can_create_tasks ? '#10b981' : '#94a3b8'} />
-                  Create Tasks: {perms.can_create_tasks ? 'Enabled' : 'Disabled'}
-                </div>
-                <div style={{ fontSize: '12px', color: (perms.can_view_daily_tasks || perms.can_manage_daily_tasks) ? '#d97706' : 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <CalendarCheck2 size={14} color={(perms.can_view_daily_tasks || perms.can_manage_daily_tasks) ? '#d97706' : '#94a3b8'} />
-                  Daily Tasks: {(perms.can_view_daily_tasks || perms.can_manage_daily_tasks) ? 'Enabled' : 'Disabled'}
-                </div>
-                <div style={{ fontSize: '12px', color: perms.can_view_reports ? '#7c3aed' : 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <BarChart3 size={14} color={perms.can_view_reports ? '#7c3aed' : '#94a3b8'} />
-                  Reports Dashboard: {perms.can_view_reports ? 'Enabled' : 'Disabled'}
-                </div>
-                <div style={{ fontSize: '12px', color: perms.can_export_data !== false ? '#0284c7' : 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <Layers size={14} color={perms.can_export_data !== false ? '#0284c7' : '#94a3b8'} />
-                  Excel Data Export: {perms.can_export_data !== false ? 'Enabled' : 'Disabled'}
-                </div>
-              </div>
-
-              {/* Auditor Access Highlight */}
-              <div style={{
-                marginTop: '4px',
-                padding: '10px 14px',
-                borderRadius: '10px',
-                background: hasAuditorAccess ? 'rgba(37,99,235,0.06)' : 'var(--bg-tertiary)',
-                border: hasAuditorAccess ? '1px solid rgba(37,99,235,0.2)' : '1px solid var(--border)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                flexWrap: 'wrap',
-                gap: '8px'
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <ShieldCheck size={16} color={hasAuditorAccess ? '#2563eb' : '#64748b'} />
-                  <span style={{ fontSize: '12.5px', fontWeight: 650, color: hasAuditorAccess ? 'var(--text-primary)' : 'var(--text-secondary)' }}>
-                    Auditor View Access:
-                  </span>
-                  <span style={{ fontSize: '12.5px', color: hasAuditorAccess ? 'var(--accent)' : 'var(--text-tertiary)', fontWeight: hasAuditorAccess ? 700 : 500 }}>
-                    {hasAuditorAccess
-                      ? `${perms.auditor_access?.length} Auditor(s) Granted`
-                      : 'None assigned (direct tasks only)'}
-                  </span>
-                </div>
-                {accessibleAuditorNames.length > 0 && (
-                  <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-                    {accessibleAuditorNames.map(name => (
-                      <span key={name} style={{
-                        fontSize: '11px',
-                        fontWeight: 650,
-                        padding: '2px 7px',
-                        borderRadius: '5px',
-                        background: '#dbeafe',
-                        color: '#1d4ed8',
-                        border: '1px solid #bfdbfe'
-                      }}>
-                        {name}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       {/* ─── Two-Column Layout: Theme Settings & Password Change ─── */}

@@ -561,7 +561,7 @@ export async function exportComprehensiveReportExcel(
   options?: {
     auditorSummary?: AuditorSummaryRow[];
     partnerSummary?: NzPartnerSummaryRow[];
-    timeframeType?: 'monthly' | 'yearly' | 'range';
+    timeframeType?: 'all' | 'monthly' | 'yearly' | 'range';
     fileNamePrefix?: string;
   }
 ) {

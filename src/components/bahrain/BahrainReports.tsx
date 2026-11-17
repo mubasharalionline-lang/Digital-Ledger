@@ -181,8 +181,8 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
   const [refreshing, setRefreshing] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
 
-  // Timeframe modes: 'monthly' | 'yearly' | 'range' (Default: Monthly)
-  const [timeframeMode, setTimeframeMode] = useState<'monthly' | 'yearly' | 'range'>('monthly');
+  // Timeframe modes: 'all' | 'monthly' | 'yearly' | 'range' (Default: 'monthly' as requested)
+  const [timeframeMode, setTimeframeMode] = useState<'all' | 'monthly' | 'yearly' | 'range'>('monthly');
 
   // Timeframe values
   const now = new Date();
@@ -326,14 +326,23 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
 
       if (ttErr) console.error('Error fetching task types:', ttErr);
 
-      // 5. Fetch Auditors
-      const { data: audData, error: audErr } = await supabase
+      // 5. Fetch Auditors (fetch all and filter in JS to be 100% resilient to case/naming variants)
+      const { data: rawAudData, error: audErr } = await supabase
         .from('auditors')
         .select('*')
-        .or(`country.eq.${activeCountry},country.is.null`)
         .order('name', { ascending: true });
 
       if (audErr) console.error('Error fetching auditors:', audErr);
+
+      const normCountry = (activeCountry || '').trim().toLowerCase();
+      const audData = (rawAudData || []).filter(a => {
+        if (!a.country) return true;
+        const ac = a.country.trim().toLowerCase();
+        if (normCountry === 'new zealand' || normCountry === 'nz') {
+          return ac === 'new zealand' || ac === 'nz';
+        }
+        return ac === normCountry;
+      });
 
       // 6. Fetch Status definitions (deduplicated across DB and active tasks for this country)
       const { data: stData } = await supabase
@@ -437,6 +446,9 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
   }, [selectedYear, selectedMonth]);
 
   const currentPeriodLabel = useMemo(() => {
+    if (timeframeMode === 'all') {
+      return 'All Time (Complete History)';
+    }
     if (timeframeMode === 'monthly') {
       return `${MONTH_NAMES[selectedMonth]} ${selectedYear}`;
     }
@@ -516,6 +528,8 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
   // Filter tasks based on Timeframe
   const timeframeTasks = useMemo(() => {
     return tasks.filter(task => {
+      if (timeframeMode === 'all') return true;
+
       const dDeadline = task.deadline?.slice(0, 10);
       const dCreated = task.created_at?.slice(0, 10);
       const dCompleted = getTaskCompletedDate(task)?.slice(0, 10);
@@ -588,10 +602,10 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
       completed,
       pending,
       completionRate,
-      activeAuditorsCount: activeAuditorSet.size,
+      activeAuditorsCount: isAdminUser ? auditors.length : Math.max(auditors.length, activeAuditorSet.size),
       activePartnersCount: activePartnerSet.size
     };
-  }, [timeframeTasks, partnerMap]);
+  }, [timeframeTasks, partnerMap, isAdminUser, auditors.length]);
 
   // Auditor-wise Breakdown calculation
   // "Whenever a task is assigned to an auditor, it means we are doing the auditor's work/task.
@@ -605,6 +619,18 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
       pendingTasks: number;
       tasks: Task[];
     }> = {};
+
+    // Pre-populate with all accessible auditors for this country so that none are omitted
+    auditors.forEach(aud => {
+      map[aud.id] = {
+        auditorId: aud.id,
+        name: aud.name,
+        totalTasks: 0,
+        completedTasks: 0,
+        pendingTasks: 0,
+        tasks: []
+      };
+    });
 
     timeframeTasks.forEach(task => {
       const key = task.auditor_id || 'direct';
@@ -638,10 +664,10 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
         : '0%'
     }));
 
-    // Sort by total delegated tasks descending, then completed
-    list.sort((a, b) => b.totalTasks - a.totalTasks || b.completedTasks - a.completedTasks);
+    // Sort by total delegated tasks descending, then auditor name
+    list.sort((a, b) => b.totalTasks - a.totalTasks || a.name.localeCompare(b.name));
     return list;
-  }, [timeframeTasks, auditorMap]);
+  }, [timeframeTasks, auditorMap, auditors]);
 
   // Partner-wise Breakdown calculation
   const partnerBreakdown = useMemo(() => {
@@ -854,7 +880,7 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
   };
 
   // ─── Print Modal & Report Generator State & Logic ───
-  const [printTimeframeMode, setPrintTimeframeMode] = useState<'monthly' | 'yearly' | 'range'>('monthly');
+  const [printTimeframeMode, setPrintTimeframeMode] = useState<'all' | 'monthly' | 'yearly' | 'range'>('monthly');
   const [printYear, setPrintYear] = useState<number>(now.getFullYear());
   const [printMonth, setPrintMonth] = useState<number>(now.getMonth());
   const [printRangeStart, setPrintRangeStart] = useState<string>(currentMonthStart);
@@ -973,6 +999,8 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
 
   const printTimeframeTasks = useMemo(() => {
     return tasks.filter(task => {
+      if (printTimeframeMode === 'all') return true;
+
       const dDeadline = task.deadline?.slice(0, 10);
       const dCreated = task.created_at?.slice(0, 10);
       const dCompleted = getTaskCompletedDate(task)?.slice(0, 10);
@@ -1106,6 +1134,9 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
   }, [printSortedTasks, hiddenTaskIds]);
 
   const printPeriodLabel = useMemo(() => {
+    if (printTimeframeMode === 'all') {
+      return 'All Time (Complete History)';
+    }
     if (printTimeframeMode === 'monthly') {
       return `${MONTH_NAMES[printMonth]} ${printYear}`;
     }
@@ -1422,6 +1453,28 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
             borderRadius: '10px',
             border: '1px solid var(--border)'
           }}>
+            <button
+              onClick={() => setTimeframeMode('all')}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '7px 14px',
+                borderRadius: '8px',
+                border: 'none',
+                fontSize: '13px',
+                fontWeight: 650,
+                background: timeframeMode === 'all' ? 'var(--bg-secondary)' : 'transparent',
+                color: timeframeMode === 'all' ? 'var(--accent, #2563eb)' : 'var(--text-secondary)',
+                boxShadow: timeframeMode === 'all' ? '0 1px 4px rgba(0,0,0,0.08)' : 'none',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              <Layers size={15} />
+              <span>All Time</span>
+            </button>
+
             <button
               onClick={() => setTimeframeMode('monthly')}
               style={{
@@ -1860,40 +1913,42 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
           </div>
         </div>
 
-        {/* Card 5: Active Partners */}
-        <div
-          className="card glass"
-          onClick={() => setActiveTab('partner-breakdown')}
-          style={{
-            padding: '20px 22px',
-            borderRadius: '16px',
-            background: 'linear-gradient(135deg, var(--bg-secondary) 0%, rgba(14, 165, 233, 0.05) 100%)',
-            border: '1px solid rgba(14, 165, 233, 0.25)',
-            boxShadow: 'var(--card-shadow)',
-            cursor: 'pointer'
-          }}
-          title="Click to view partner breakdown"
-        >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-            <span style={{ fontSize: '12.5px', fontWeight: 650, color: '#0284c7', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-              Active Partners
-            </span>
-            <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(14, 165, 233, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Users size={18} color="#0ea5e9" />
+        {/* Card 5: Active Partners (Visible to Admin Only) */}
+        {isAdminUser && (
+          <div
+            className="card glass"
+            onClick={() => setActiveTab('partner-breakdown')}
+            style={{
+              padding: '20px 22px',
+              borderRadius: '16px',
+              background: 'linear-gradient(135deg, var(--bg-secondary) 0%, rgba(14, 165, 233, 0.05) 100%)',
+              border: '1px solid rgba(14, 165, 233, 0.25)',
+              boxShadow: 'var(--card-shadow)',
+              cursor: 'pointer'
+            }}
+            title="Click to view partner breakdown"
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+              <span style={{ fontSize: '12.5px', fontWeight: 650, color: '#0284c7', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                Active Partners
+              </span>
+              <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(14, 165, 233, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Users size={18} color="#0ea5e9" />
+              </div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+              <span style={{ fontSize: '34px', fontWeight: 800, color: '#0ea5e9', lineHeight: 1 }}>
+                {metrics.activePartnersCount}
+              </span>
+              <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                members
+              </span>
+            </div>
+            <div style={{ marginTop: '10px', fontSize: '12px', color: 'var(--text-secondary)' }}>
+              Executing delegated work
             </div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
-            <span style={{ fontSize: '34px', fontWeight: 800, color: '#0ea5e9', lineHeight: 1 }}>
-              {metrics.activePartnersCount}
-            </span>
-            <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)' }}>
-              members
-            </span>
-          </div>
-          <div style={{ marginTop: '10px', fontSize: '12px', color: 'var(--text-secondary)' }}>
-            Executing delegated work
-          </div>
-        </div>
+        )}
       </div>
 
       {/* ─── Breakdown Tabs Navigation ─── */}
@@ -1946,26 +2001,28 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
           <span>Auditor Delegated Workload ({auditorBreakdown.length})</span>
         </button>
 
-        <button
-          onClick={() => setActiveTab('partner-breakdown')}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            padding: '9px 18px',
-            borderRadius: '10px 10px 0 0',
-            border: 'none',
-            fontSize: '13.5px',
-            fontWeight: 700,
-            background: activeTab === 'partner-breakdown' ? 'var(--bg-secondary)' : 'transparent',
-            color: activeTab === 'partner-breakdown' ? '#0ea5e9' : 'var(--text-secondary)',
-            borderBottom: activeTab === 'partner-breakdown' ? '2px solid #0ea5e9' : '2px solid transparent',
-            cursor: 'pointer'
-          }}
-        >
-          <Users size={16} />
-          <span>Partner Team Workload ({partnerBreakdown.length})</span>
-        </button>
+        {isAdminUser && (
+          <button
+            onClick={() => setActiveTab('partner-breakdown')}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '9px 18px',
+              borderRadius: '10px 10px 0 0',
+              border: 'none',
+              fontSize: '13.5px',
+              fontWeight: 700,
+              background: activeTab === 'partner-breakdown' ? 'var(--bg-secondary)' : 'transparent',
+              color: activeTab === 'partner-breakdown' ? '#0ea5e9' : 'var(--text-secondary)',
+              borderBottom: activeTab === 'partner-breakdown' ? '2px solid #0ea5e9' : '2px solid transparent',
+              cursor: 'pointer'
+            }}
+          >
+            <Users size={16} />
+            <span>Partner Team Workload ({partnerBreakdown.length})</span>
+          </button>
+        )}
       </div>
 
       {/* ─── TAB 2: AUDITOR WORKLOAD BREAKDOWN ─── */}
@@ -2102,8 +2159,8 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
         </div>
       )}
 
-      {/* ─── TAB 3: PARTNER TEAM WORKLOAD BREAKDOWN ─── */}
-      {activeTab === 'partner-breakdown' && (
+      {/* ─── TAB 3: PARTNER TEAM WORKLOAD BREAKDOWN (Admin Only) ─── */}
+      {activeTab === 'partner-breakdown' && isAdminUser && (
         <div className="card glass animate-fadeIn" style={{
           padding: '24px',
           borderRadius: '18px',
@@ -2307,29 +2364,31 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
                 </select>
               </div>
 
-              {/* 2. Partner Filter */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                <span style={{ fontSize: '12px', fontWeight: 650, color: 'var(--text-secondary)' }}>Partner:</span>
-                <select
-                  value={filterPartner}
-                  onChange={e => setFilterPartner(e.target.value)}
-                  className="input"
-                  style={{
-                    height: '38px',
-                    fontSize: '12.5px',
-                    padding: '4px 10px',
-                    borderRadius: '8px',
-                    minWidth: '140px',
-                    borderColor: filterPartner !== 'all' ? '#0ea5e9' : undefined
-                  }}
-                >
-                  <option value="all">All Partners</option>
-                  <option value="unassigned">Unassigned</option>
-                  {partners.map(p => (
-                    <option key={p.id} value={p.id}>{p.username} ({p.role})</option>
-                  ))}
-                </select>
-              </div>
+              {/* 2. Partner Filter (Visible to Admin Only) */}
+              {isAdminUser && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  <span style={{ fontSize: '12px', fontWeight: 650, color: 'var(--text-secondary)' }}>Partner:</span>
+                  <select
+                    value={filterPartner}
+                    onChange={e => setFilterPartner(e.target.value)}
+                    className="input"
+                    style={{
+                      height: '38px',
+                      fontSize: '12.5px',
+                      padding: '4px 10px',
+                      borderRadius: '8px',
+                      minWidth: '140px',
+                      borderColor: filterPartner !== 'all' ? '#0ea5e9' : undefined
+                    }}
+                  >
+                    <option value="all">All Partners</option>
+                    <option value="unassigned">Unassigned</option>
+                    {partners.map(p => (
+                      <option key={p.id} value={p.id}>{p.username} ({p.role})</option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               {/* 3. Task Type Filter */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
@@ -2960,6 +3019,21 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
               <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '14px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'var(--bg-secondary)', padding: '3px', borderRadius: '10px', border: '1px solid var(--border)' }}>
                   <button
+                    onClick={() => setPrintTimeframeMode('all')}
+                    style={{
+                      padding: '6px 12px',
+                      borderRadius: '8px',
+                      border: 'none',
+                      fontSize: '12.5px',
+                      fontWeight: 650,
+                      background: printTimeframeMode === 'all' ? 'var(--accent, #2563eb)' : 'transparent',
+                      color: printTimeframeMode === 'all' ? '#ffffff' : 'var(--text-secondary)',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    All Time
+                  </button>
+                  <button
                     onClick={() => setPrintTimeframeMode('monthly')}
                     style={{
                       padding: '6px 12px',
@@ -3112,20 +3186,22 @@ export default function BahrainReports({ countryOverride }: { countryOverride?: 
                   </select>
                 </div>
 
-                {/* 3. Partner */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span style={{ fontSize: '12px', fontWeight: 650, color: 'var(--text-secondary)' }}>Partner:</span>
-                  <select
-                    value={printPartner}
-                    onChange={e => setPrintPartner(e.target.value)}
-                    className="input"
-                    style={{ height: '34px', fontSize: '12.5px', borderRadius: '8px', minWidth: '140px' }}
-                  >
-                    <option value="all">All Partners</option>
-                    <option value="unassigned">Unassigned</option>
-                    {partners.map(p => <option key={p.id} value={p.id}>{p.username}</option>)}
-                  </select>
-                </div>
+                {/* 3. Partner (Visible to Admin Only) */}
+                {isAdminUser && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 650, color: 'var(--text-secondary)' }}>Partner:</span>
+                    <select
+                      value={printPartner}
+                      onChange={e => setPrintPartner(e.target.value)}
+                      className="input"
+                      style={{ height: '34px', fontSize: '12.5px', borderRadius: '8px', minWidth: '140px' }}
+                    >
+                      <option value="all">All Partners</option>
+                      <option value="unassigned">Unassigned</option>
+                      {partners.map(p => <option key={p.id} value={p.id}>{p.username}</option>)}
+                    </select>
+                  </div>
+                )}
 
                 {/* 4. Task Type */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
