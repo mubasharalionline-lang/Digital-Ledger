@@ -103,8 +103,8 @@ export default function BahrainDashboard() {
   }, []);
 
   const loadDashboard = useCallback(async () => {
-    const cacheKey = 'dashboard_data_cache_v8';
-    const cacheTimeKey = 'dashboard_data_time_v8';
+    const cacheKey = 'dashboard_data_cache_v9';
+    const cacheTimeKey = 'dashboard_data_time_v9';
     const cachedData = sessionStorage.getItem(cacheKey);
     const cacheTime = sessionStorage.getItem(cacheTimeKey);
     
@@ -234,6 +234,16 @@ export default function BahrainDashboard() {
 
       const workloadMap = new Map<string, { id: string; name: string; activeCount: number; role?: string }>();
 
+      // Pre-seed with all registered partners belonging to this country
+      countryUsers.forEach(usr => {
+        workloadMap.set(usr.id, {
+          id: usr.id,
+          name: usr.username || 'Partner',
+          activeCount: 0,
+          role: usr.role
+        });
+      });
+
       activeTasksList.forEach(t => {
         const pIds: string[] = [];
         if (Array.isArray(t.assigned_partners)) {
@@ -248,22 +258,13 @@ export default function BahrainDashboard() {
         pIds.forEach(pId => {
           // Strictly match only against actual registered users belonging to this country
           const userObj = countryUsers.find(u => u.id === pId || u.username === pId);
-          if (userObj) {
-            if (!workloadMap.has(userObj.id)) {
-              workloadMap.set(userObj.id, {
-                id: userObj.id,
-                name: userObj.username || 'Partner',
-                activeCount: 0,
-                role: userObj.role
-              });
-            }
+          if (userObj && workloadMap.has(userObj.id)) {
             workloadMap.get(userObj.id)!.activeCount++;
           }
         });
       });
 
       const processedWorkloads: PartnerWorkloadItem[] = Array.from(workloadMap.values())
-        .filter(pw => pw.activeCount > 0)
         .map(pw => ({
           ...pw,
           percentage: totalActiveTasksCount > 0 ? Math.round((pw.activeCount / totalActiveTasksCount) * 100) : 0
